@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "generator": "blog-webcli",
+  "posts": [
+    {
+      "slug": "static-hls-in-git",
+      "title": "Static HLS in git",
+      "date": "2026-11-05",
+      "tags": [
+        "video",
+        "git"
+      ],
+      "excerpt": "HLS is a playlist and a pile of segments. Both are static files, which means git can hold them and a static host can serve them — no streaming server, no…",
+      "cover": "asset:images/hls-cover.png",
+      "words": 160,
+      "status": "published"
+    },
+    {
+      "slug": "markdown-is-the-format",
+      "title": "Markdown is the format of record",
+      "date": "2026-11-01",
+      "tags": [
+        "writing"
+      ],
+      "excerpt": "A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.",
+      "cover": null,
+      "words": 92,
+      "status": "published"
+    }
+  ]
+}

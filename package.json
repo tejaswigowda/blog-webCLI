@@ -1,0 +1,20 @@
+{
+  "name": "blog-webcli",
+  "version": "0.1.0",
+  "description": "blog.webcli.app — a blog is a GitHub repo; this static app renders and edits it.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "bin": {
+    "blog-webcli": "cli/blog.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "build:example": "node cli/blog.js build examples/blog",
+    "check:example": "node cli/blog.js check examples/blog",
+    "serve": "node cli/serve.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,24 @@
+# Copy to .github/workflows/blog-check.yml in your blog repository.
+# Regenerates the index, pages and feed from posts/ and fails if they differ from
+# what is committed (gate B8). The generator is checked out at a pinned ref so a
+# generator change never silently changes your site: bump `ref` deliberately.
+name: generated output is current
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tejaswigowda/blog-webCLI
+          ref: main # pin to a commit sha
+          path: .blog-webcli
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node .blog-webcli/cli/blog.js check .

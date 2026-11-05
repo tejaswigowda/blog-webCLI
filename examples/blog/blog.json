@@ -1,0 +1,30 @@
+{
+  "title": "Example Blog",
+  "description": "A blog that is a GitHub repository, rendered by blog.webcli.app.",
+  "author": "Ada Example",
+  "domain": "https://example.github.io/blog",
+  "repo": "example/blog",
+  "theme": "default",
+  "cover": "asset:images/default-cover.png",
+  "assets": {
+    "base": "https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}",
+    "repos": {
+      "images": "example/images",
+      "audio": "example/audio"
+    }
+  },
+  "customize": {
+    "colors": { "accent": "#0b7a5f", "dark": { "accent": "#5fd3a8" } },
+    "width": "42rem",
+    "header": { "links": [{ "label": "About", "url": "https://example.com/about" }] },
+    "footer": { "text": "© 2026 Ada Example", "links": [{ "label": "Source", "url": "https://github.com/example/blog" }] },
+    "list": { "layout": "list", "excerpts": true, "dates": true, "tags": true }
+  },
+  "video": {
+    "player": "https://strataeditor.dev/player/",
+    "base": "https://cdn.jsdelivr.net/gh/{owner}/{repo}@{tag}/{slug}/",
+    "repos": {
+      "videos": "example/renders"
+    }
+  }
+}

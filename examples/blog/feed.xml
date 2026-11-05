@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>https://example.github.io/blog/</id>
+  <title>Example Blog</title>
+  <subtitle>A blog that is a GitHub repository, rendered by blog.webcli.app.</subtitle>
+  <updated>2026-11-05T00:00:00Z</updated>
+  <link rel="alternate" type="text/html" href="https://example.github.io/blog/"/>
+  <link rel="self" type="application/atom+xml" href="https://example.github.io/blog/feed.xml"/>
+  <author><name>Ada Example</name></author>
+  <generator>blog-webcli</generator>
+  <entry>
+    <id>https://example.github.io/blog/static-hls-in-git/</id>
+    <title>Static HLS in git</title>
+    <link rel="alternate" type="text/html" href="https://example.github.io/blog/static-hls-in-git/"/>
+    <published>2026-11-05T00:00:00Z</published>
+    <updated>2026-11-05T00:00:00Z</updated>
+    <author><name>Ada Example</name></author>
+    <category term="video"/>
+    <category term="git"/>
+    <summary>HLS is a playlist and a pile of segments. Both are static files, which means git can hold them and a static host can serve them — no streaming server, no…</summary>
+    <content type="html">&lt;p&gt;HLS is a playlist and a pile of segments. Both are static files, which means &lt;strong&gt;git can hold them&lt;/strong&gt; and a static host can serve them — no streaming server, no account.&lt;/p&gt;
+&lt;h2&gt;Why it works&lt;/h2&gt;
+&lt;p&gt;A playlist is &lt;em&gt;text&lt;/em&gt;. Segments are small, immutable binaries. Together they fit three ideas:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;Segments never change once written, so they cache forever.&lt;/li&gt;&lt;li&gt;A playlist is a &lt;del&gt;database&lt;/del&gt; list of names, and lists diff well.&lt;/li&gt;&lt;li&gt;Hosting is a &lt;code&gt;git push&lt;/code&gt; away.&lt;/li&gt;&lt;/ul&gt;
+&lt;h3&gt;The catch&lt;/h3&gt;
+&lt;p&gt;Binaries belong in their own repository, because about 46 MB per minute of video would otherwise sit in every contributor&amp;#39;s clone forever.&lt;/p&gt;
+&lt;ol&gt;&lt;li&gt;Keep text in the blog repository.&lt;/li&gt;&lt;li&gt;Keep binaries in an assets repository.&lt;ul&gt;&lt;li&gt;Images in one repository.&lt;/li&gt;&lt;li&gt;Audio in another.&lt;/li&gt;&lt;/ul&gt;&lt;/li&gt;&lt;li&gt;Reference both with a logical &lt;code&gt;asset:&lt;/code&gt; name.&lt;/li&gt;&lt;/ol&gt;
+&lt;blockquote&gt;&lt;p&gt;A reference that names no provider is a reference you can move.&lt;/p&gt;&lt;/blockquote&gt;
+&lt;p&gt;Here is the shape of a playlist:&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;#EXTM3U
+#EXT-X-VERSION:3
+#EXTINF:6.0,
+seg-000.ts
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;img src=&quot;https://cdn.jsdelivr.net/gh/example/images@2222222222222222222222222222222222222222/diagram.png&quot; alt=&quot;A diagram of playlist and segments&quot; loading=&quot;lazy&quot;&gt;&lt;/p&gt;
+&lt;figure class=&quot;video&quot;&gt;&lt;iframe src=&quot;https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/example/renders@hls-demo/v1/hls-demo/&amp;amp;present=true&quot; title=&quot;Video: hls-demo v1&quot; loading=&quot;lazy&quot; allow=&quot;fullscreen&quot; sandbox=&quot;allow-scripts allow-same-origin&quot; referrerpolicy=&quot;no-referrer&quot;&gt;&lt;/iframe&gt;&lt;figcaption&gt;&lt;a href=&quot;https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/example/renders@hls-demo/v1/hls-demo/&amp;amp;present=true&quot; rel=&quot;noopener noreferrer&quot;&gt;Watch: hls-demo v1&lt;/a&gt;&lt;/figcaption&gt;&lt;/figure&gt;
+&lt;p&gt;Read more at &lt;a href=&quot;https://datatracker.ietf.org/doc/html/rfc8216&quot; rel=&quot;noopener noreferrer&quot;&gt;the HLS specification&lt;/a&gt; and see the &lt;a href=&quot;../&quot;&gt;home page&lt;/a&gt;.&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <id>https://example.github.io/blog/markdown-is-the-format/</id>
+    <title>Markdown is the format of record</title>
+    <link rel="alternate" type="text/html" href="https://example.github.io/blog/markdown-is-the-format/"/>
+    <published>2026-11-01T00:00:00Z</published>
+    <updated>2026-11-01T00:00:00Z</updated>
+    <author><name>Ada Example</name></author>
+    <category term="writing"/>
+    <summary>A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.</summary>
+    <content type="html">&lt;p&gt;A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.&lt;/p&gt;
+&lt;h2&gt;What the editor may offer&lt;/h2&gt;
+&lt;p&gt;The toolbar offers only what markdown can say: headings, &lt;strong&gt;bold&lt;/strong&gt;, &lt;em&gt;italic&lt;/em&gt;, &lt;code&gt;code&lt;/code&gt;, links, quotes, lists and images. Coloured text would be silently lost on save, so it is not offered.&lt;/p&gt;
+&lt;h2&gt;The test&lt;/h2&gt;
+&lt;p&gt;&lt;code&gt;md → Delta → md&lt;/code&gt; must produce identical bytes. If it cannot, the editor refuses to open the file instead of rewriting it.&lt;/p&gt;</content>
+  </entry>
+</feed>

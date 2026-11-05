@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markdown is the format of record · Example Blog</title>
+<meta name="description" content="A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.">
+<meta name="generator" content="blog-webcli">
+<link rel="canonical" href="https://example.github.io/blog/markdown-is-the-format/">
+<link rel="alternate" type="application/atom+xml" title="Example Blog" href="../feed.xml">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Example Blog">
+<meta property="og:title" content="Markdown is the format of record">
+<meta property="og:description" content="A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.">
+<meta property="og:url" content="https://example.github.io/blog/markdown-is-the-format/">
+<meta property="og:image" content="https://cdn.jsdelivr.net/gh/example/images@1111111111111111111111111111111111111111/default-cover.png">
+<meta property="article:published_time" content="2026-11-01">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Markdown is the format of record">
+<meta name="twitter:description" content="A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.">
+<meta name="twitter:image" content="https://cdn.jsdelivr.net/gh/example/images@1111111111111111111111111111111111111111/default-cover.png">
+<style>:root{color-scheme:light dark;--fg:#1d1d1f;--muted:#6b6b72;--bg:#fff;--rule:#e4e4e8;--link:#0b5fff;--code:#f3f3f6;--font:Georgia,"Iowan Old Style","Times New Roman",serif;--heading-font:var(--font);--width:40rem;--size:18px}
+@media (prefers-color-scheme:dark){:root{--fg:#e8e8ec;--muted:#9a9aa3;--bg:#141416;--rule:#2c2c31;--link:#7aa7ff;--code:#202024}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:var(--size)/1.65 var(--font)}
+.wrap{max-width:var(--width);margin:0 auto;padding:2rem 1.25rem 4rem}
+header.site{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;border-bottom:1px solid var(--rule);padding-bottom:.75rem;margin-bottom:2rem;font:600 .95rem/1.4 system-ui,sans-serif}
+header.site a{color:var(--fg);text-decoration:none}
+header.site nav a{color:var(--muted);font-weight:400;margin-left:1rem}
+header.site .brand{display:inline-flex;align-items:center;gap:.5rem}
+img.logo{height:1.75rem;width:auto;border-radius:0}
+h1,h2,h3{font-family:var(--heading-font)}
+h1{font-size:2.1rem;line-height:1.2;margin:.2em 0 .3em}
+h2{font-size:1.5rem;line-height:1.3;margin:2em 0 .5em}
+h3{font-size:1.2rem;margin:1.6em 0 .4em}
+a{color:var(--link)}
+img{max-width:100%;height:auto;border-radius:4px}
+.meta{color:var(--muted);font:.9rem/1.5 system-ui,sans-serif;margin-bottom:1.5rem}
+.meta .tag{display:inline-block;margin-left:.5rem}
+blockquote{margin:1.2em 0;padding:.1em 1.1em;border-left:3px solid var(--rule);color:var(--muted)}
+pre{background:var(--code);padding:1rem;overflow:auto;border-radius:6px;font-size:.85rem;line-height:1.5}
+code{background:var(--code);padding:.1em .3em;border-radius:3px;font-size:.9em}
+pre code{background:none;padding:0}
+.cover{margin:0 0 1.5rem}
+figure.video{margin:1.5rem 0}
+figure.video iframe{width:100%;aspect-ratio:16/9;border:0;border-radius:6px;background:var(--code)}
+figure.video figcaption{font:.85rem/1.5 system-ui,sans-serif;color:var(--muted);margin-top:.4rem}
+ul.posts{list-style:none;padding:0}
+ul.posts li{margin:0 0 2rem}
+ul.posts.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:1.25rem}
+ul.posts.cards li{margin:0;padding:1rem 1.1rem;border:1px solid var(--rule);border-radius:8px}
+ul.posts h2{margin:.1em 0}
+ul.posts h2 a{color:var(--fg);text-decoration:none}
+ul.posts p{margin:.3em 0}
+footer.site{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule);color:var(--muted);font:.85rem/1.5 system-ui,sans-serif}
+.unresolved{color:var(--muted);font-style:italic}
+:root{--width:42rem}
+@media not (prefers-color-scheme:dark){:root{--link:#0b7a5f}}
+@media (prefers-color-scheme:dark){:root{--link:#5fd3a8}}</style>
+</head>
+<body>
+<div class="wrap">
+<header class="site"><a class="brand" href="../">Example Blog</a><nav><a href="https://example.com/about" rel="noopener noreferrer">About</a><a href="../feed.xml">Feed</a></nav></header>
+<article>
+<h1>Markdown is the format of record</h1>
+<div class="meta"><time datetime="2026-11-01">2026-11-01</time> · Ada Example<span class="tag">#writing</span></div>
+<p>A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.</p>
+<h2>What the editor may offer</h2>
+<p>The toolbar offers only what markdown can say: headings, <strong>bold</strong>, <em>italic</em>, <code>code</code>, links, quotes, lists and images. Coloured text would be silently lost on save, so it is not offered.</p>
+<h2>The test</h2>
+<p><code>md → Delta → md</code> must produce identical bytes. If it cannot, the editor refuses to open the file instead of rewriting it.</p>
+</article>
+<footer class="site"><a href="https://blog.webcli.app/#repo=example/blog&amp;post=markdown-is-the-format" rel="nofollow">Suggest a correction</a> · © 2026 Ada Example · <a href="https://github.com/example/blog" rel="noopener noreferrer">Source</a></footer>
+</div>
+</body>
+</html>

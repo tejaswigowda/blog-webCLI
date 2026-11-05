@@ -1,0 +1,113 @@
+// An in-memory GitHub: just enough REST + raw hosting for the app core.
+// Trees are Map<path, { bytes, sha }> with real git blob shas.
+import { gitBlobSha } from '../app/github.js';
+
+const enc = new TextEncoder();
+const bytesOf = (c) => (typeof c === 'string' ? enc.encode(c) : c);
+
+export function fakeGitHub(repos, { tags = {} } = {}) {
+  const state = {};
+  let n = 0;
+  const fakeSha = (label) => gitBlobSha(enc.encode(`${label}${++n}`));
+  const entry = async (c) => {
+    const bytes = bytesOf(c);
+    return { bytes, sha: await gitBlobSha(bytes) };
+  };
+
+  async function init(name, files) {
+    const tree = new Map();
+    for (const [p, c] of Object.entries(files)) tree.set(p, await entry(c));
+    const treeSha = await fakeSha('tree');
+    const c0 = await fakeSha('commit');
+    state[name] = { trees: { [treeSha]: tree }, commits: { [c0]: { tree: treeSha, msg: 'init' } }, branches: { main: c0 }, blobs: {}, pulls: [], log: [] };
+  }
+  const ready = Promise.all(Object.entries(repos).map(([k, v]) => init(k, v)));
+
+  const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { 'content-type': 'application/json' } });
+  const text = (t, status = 200) => new Response(t, { status });
+  const notFound = () => json({ message: 'Not Found' }, 404);
+  const resolveRef = (S, ref) => (ref === 'HEAD' ? S.branches.main : S.branches[ref] || (S.commits[ref] ? ref : null));
+  const treeAt = (S, ref) => S.trees[S.commits[resolveRef(S, ref)].tree];
+
+  async function fetch(url, { method = 'GET', headers = {}, body } = {}) {
+    await ready;
+    const u = new URL(url);
+    const parts = u.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+    if (u.hostname === 'raw.githubusercontent.com') {
+      const [o, r, ref, ...path] = parts;
+      const S = state[`${o}/${r}`];
+      if (!S || headers.Authorization || !resolveRef(S, ref)) return notFound();
+      const f = treeAt(S, ref).get(path.join('/'));
+      return f ? new Response(f.bytes) : notFound();
+    }
+    if (u.hostname !== 'api.github.com') return text('unexpected host ' + u.hostname, 500);
+    if (parts[0] === 'user') return json({ login: 'tester' });
+    const [, o, r, ...rest] = parts;
+    const S = state[`${o}/${r}`];
+    if (!S) return notFound();
+    S.log.push(`${method} ${rest.join('/')}`);
+    const b = body ? JSON.parse(body) : null;
+
+    if (!rest.length) return json({ default_branch: 'main', permissions: { push: true } });
+    if (rest[0] === 'commits' && rest.length === 2) {
+      const sha = resolveRef(S, rest[1]);
+      return sha ? json({ sha, commit: { tree: { sha: S.commits[sha].tree } } }) : notFound();
+    }
+    if (rest[0] === 'commits') return json(treeAt(S, 'main').has(u.searchParams.get('path')) ? [{ sha: S.branches.main }] : []);
+    if (rest[0] === 'contents') {
+      const path = rest.slice(1).join('/');
+      const tree = treeAt(S, u.searchParams.get('ref') || 'main');
+      if (tree.has(path)) return new Response(tree.get(path).bytes);
+      const names = [...new Set([...tree.keys()].filter((k) => k.startsWith(path + '/')).map((k) => k.slice(path.length + 1).split('/')[0]))];
+      return names.length ? json(names.map((name) => ({ name }))) : notFound();
+    }
+    if (rest[0] === 'git') {
+      const tagList = tags[`${o}/${r}`] || [];
+      if (rest[1] === 'ref' && rest[2] === 'tags') return tagList.includes(rest.slice(3).join('/')) ? json({ ref: `refs/tags/${rest.slice(3).join('/')}` }) : notFound();
+      if (rest[1] === 'matching-refs') return json(tagList.map((t) => ({ ref: `refs/tags/${t}` })));
+      if (rest[1] === 'trees' && method === 'GET') {
+        const t = S.trees[rest[2]];
+        return json({ truncated: false, tree: [...t].map(([path, e]) => ({ path, type: 'blob', sha: e.sha })) });
+      }
+      if (rest[1] === 'blobs') {
+        const e = await entry(Uint8Array.from(atob(b.content), (c) => c.charCodeAt(0)));
+        S.blobs[e.sha] = e;
+        return json({ sha: e.sha }, 201);
+      }
+      if (rest[1] === 'trees') {
+        const next = new Map(S.trees[b.base_tree]);
+        for (const t of b.tree) {
+          if (t.sha === null) next.delete(t.path);
+          else if (t.content !== undefined) next.set(t.path, await entry(t.content));
+          else next.set(t.path, S.blobs[t.sha]);
+        }
+        const sha = await fakeSha('tree');
+        S.trees[sha] = next;
+        return json({ sha }, 201);
+      }
+      if (rest[1] === 'commits') {
+        const sha = await fakeSha('commit');
+        S.commits[sha] = { tree: b.tree, msg: b.message, parents: b.parents };
+        return json({ sha }, 201);
+      }
+      if (rest[1] === 'refs' && method === 'POST') {
+        S.branches[b.ref.replace('refs/heads/', '')] = b.sha;
+        return json({}, 201);
+      }
+      if (rest[1] === 'refs' && method === 'PATCH') {
+        const br = rest[3];
+        if (S.commits[b.sha].parents[0] !== S.branches[br]) return json({ message: 'Update is not a fast forward' }, 422);
+        S.branches[br] = b.sha;
+        return json({});
+      }
+    }
+    if (rest[0] === 'pulls') {
+      S.pulls.push(b);
+      return json({ number: S.pulls.length, html_url: `https://github.com/${o}/${r}/pull/${S.pulls.length}` }, 201);
+    }
+    return text(`unhandled ${method} ${rest.join('/')}`, 500);
+  }
+
+  const files = (repo, branch = 'main') => Object.fromEntries([...treeAt(state[repo], branch)].map(([p, e]) => [p, new TextDecoder().decode(e.bytes)]));
+  return { fetch, state, ready, files };
+}

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Blog content is untrusted and shares an origin with the token: no inline script, no foreign scripts. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https: data: blob:; font-src 'self' data:; frame-src https:; connect-src https://api.github.com https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<title>blog.webcli.app</title>
+<meta name="description" content="A blog is a GitHub repository. Open one with #repo=owner/blog.">
+<link rel="stylesheet" href="vendor/quill/quill.snow.css">
+<link rel="stylesheet" href="app/app.css">
+</head>
+<body>
+<header id="top"></header>
+<main id="view"><p class="muted">Loading…</p></main>
+<footer id="ledger"></footer>
+<dialog id="dlg"></dialog>
+<noscript><p>This reader needs JavaScript. Published blogs also have static pages that do not — look for the blog's own site.</p></noscript>
+<script type="module" src="app/app.js"></script>
+</body>
+</html>
