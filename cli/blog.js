@@ -16,7 +16,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Refusal } from '../lib/errors.js';
-import { buildSite, GENERATED_MARK, validateBlog, parsePost } from '../lib/blog.js';
+import { buildSite, GENERATED_MARK, GENERATED_TREES, OPTIONAL_GENERATED, validateBlog, parsePost } from '../lib/blog.js';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
 import { loadPacks, readExtensionToPin, readThemeToPin } from '../app/packs.js';
@@ -39,10 +39,11 @@ async function load(dir) {
   if (!(await exists(bj))) throw new Refusal('no-blog-json', `no blog.json in ${path.resolve(dir)}`);
   const blog = await fs.readFile(bj, 'utf8');
   const posts = [];
-  const pdir = path.join(dir, 'posts');
-  if (await exists(pdir)) {
+  for (const folder of ['posts', 'pages']) {
+    const pdir = path.join(dir, folder);
+    if (!(await exists(pdir))) continue;
     for (const f of (await fs.readdir(pdir)).sort()) {
-      if (f.endsWith('.md')) posts.push({ path: `posts/${f}`, text: await fs.readFile(path.join(pdir, f), 'utf8') });
+      if (f.endsWith('.md')) posts.push({ path: `${folder}/${f}`, text: await fs.readFile(path.join(pdir, f), 'utf8') });
     }
   }
   const lp = path.join(dir, 'assets.lock.json');
@@ -75,18 +76,44 @@ async function generate(dir) {
   return buildSite({ blog, posts, lock, ...packs, outputs, orderList });
 }
 
-// Generated files that exist only while a theme or extensions are in use.
-const OPTIONAL = ['theme.css', 'extension-outputs.json', '404.html', 'webcli-live.js'];
+// Generated files that exist only while a theme, extensions or a feature are in use.
+const OPTIONAL = OPTIONAL_GENERATED;
 
+// A post's page is a folder with an index.html that carries the generator's mark. The folders the generator owns
+// outright (tags/, archive/, …) are swept by staleTrees instead.
 async function staleDirs(dir, expected) {
   const out = [];
   for (const ent of await fs.readdir(dir, { withFileTypes: true })) {
-    if (!ent.isDirectory() || ent.name.startsWith('.') || ent.name === 'posts' || ent.name === 'index') continue;
+    if (!ent.isDirectory() || ent.name.startsWith('.') || ['posts', 'pages', 'index', ...GENERATED_TREES].includes(ent.name)) continue;
     const f = path.join(dir, ent.name, 'index.html');
     if (!(await exists(f))) continue;
     if (!expected.has(`${ent.name}/index.html`) && (await fs.readFile(f, 'utf8')).includes(GENERATED_MARK)) out.push(`${ent.name}/index.html`);
   }
   return out;
+}
+
+// Every file under a folder the generator owns that the build did not produce.
+async function staleTrees(dir, expected) {
+  const out = [];
+  const walk = async (rel) => {
+    if (!(await exists(path.join(dir, rel)))) return;
+    for (const ent of await fs.readdir(path.join(dir, rel), { withFileTypes: true })) {
+      const r = `${rel}/${ent.name}`;
+      if (ent.isDirectory()) await walk(r);
+      else if (!expected.has(r)) out.push(r);
+    }
+  };
+  for (const t of GENERATED_TREES) await walk(t);
+  return out;
+}
+
+// Removes a file and then any folder it leaves empty, up to the site's own folder.
+async function removeWithEmptyParents(dir, rel) {
+  await fs.rm(path.join(dir, rel));
+  for (let d = path.dirname(rel); d && d !== '.'; d = path.dirname(d)) {
+    if ((await fs.readdir(path.join(dir, d))).length) break;
+    await fs.rmdir(path.join(dir, d));
+  }
 }
 
 function report(result) {
@@ -106,6 +133,10 @@ async function build(dir) {
   }
   for (const rel of await staleDirs(dir, expected)) {
     await fs.rm(path.dirname(path.join(dir, rel)), { recursive: true });
+    console.log(`removed stale ${rel}`);
+  }
+  for (const rel of await staleTrees(dir, expected)) {
+    await removeWithEmptyParents(dir, rel);
     console.log(`removed stale ${rel}`);
   }
   for (const f of OPTIONAL) if (!expected.has(f) && (await exists(path.join(dir, f)))) {
@@ -129,6 +160,7 @@ async function check(dir) {
     else if (have !== content) diffs.push(`differs  ${rel}`);
   }
   for (const rel of await staleDirs(dir, expected)) diffs.push(`stale    ${rel}`);
+  for (const rel of await staleTrees(dir, expected)) diffs.push(`stale    ${rel}`);
   for (const f of OPTIONAL) if (!expected.has(f) && (await exists(path.join(dir, f)))) diffs.push(`stale    ${f}`);
   if (diffs.length) {
     console.error('generated output is out of date — run `blog-webcli build` and commit:\n  ' + diffs.join('\n  '));

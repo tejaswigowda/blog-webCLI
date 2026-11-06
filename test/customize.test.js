@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { buildSite, validateBlog } from '../lib/blog.js';
 import { FONTS, MAX_CSS, checkCss, themeCss, validateCustomize } from '../lib/customize.js';
 import { THEMES } from '../lib/theme.js';
+import { stripData } from './helpers.js';
 
 const EXAMPLE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'examples', 'blog');
 const base = async () => JSON.parse(await fs.readFile(path.join(EXAMPLE, 'blog.json'), 'utf8'));
@@ -129,7 +130,7 @@ test('static pages: header, footer and list follow blog.json on every page', asy
     assert.ok(h.includes('© 2026 Ada Example'), `${f}: footer text`);
     assert.ok(h.includes('<a href="https://github.com/example/blog" rel="noopener noreferrer">Source</a>'), `${f}: footer link`);
     assert.ok(h.includes('--width:42rem') && h.includes('--link:#0b7a5f') && h.includes('--link:#5fd3a8'), `${f}: styles inlined`);
-    assert.ok(!/<script/i.test(h));
+    assert.ok(!/<script/i.test(stripData(h)));
   }
 });
 
@@ -146,7 +147,7 @@ test('static pages: list options', async () => {
   assert.ok(!ul.includes('<p>') && !ul.includes('<time') && !ul.includes('class="tag"'));
   assert.ok(ul.includes('<h2><a href="static-hls-in-git/">Static HLS in git</a></h2>'));
   const full = await run({});
-  assert.ok(full.includes('<time datetime="2026-11-05">') && full.includes('class="tag">#video') && /<li>[\s\S]*<p>HLS is a playlist/.test(full));
+  assert.ok(full.includes('<time datetime="2026-11-05">') && /class="tag" href="\.\/tags\/video\/">#video/.test(full) && /<li>[\s\S]*<p>HLS is a playlist/.test(full));
 });
 
 test('static pages: a logo is pinned like any asset, and an unpinned one is refused', async () => {

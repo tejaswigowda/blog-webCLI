@@ -71,14 +71,21 @@ export async function listPostFiles(gh, where, ref) {
   return (await gh.listDir(repo, at(folder, 'posts'), ref)).filter((n) => n.endsWith('.md'));
 }
 
-export async function loadPost(gh, where, slug, ref, { blog, lock }, { allowDraft = false } = {}) {
+// The standalone pages (pages/<slug>.md): about, contact, …
+export async function listPageFiles(gh, where, ref) {
+  const { repo, folder } = parseRepoRef(where);
+  return (await gh.listDir(repo, at(folder, 'pages'), ref)).filter((n) => n.endsWith('.md'));
+}
+
+export async function loadPost(gh, where, slug, ref, { blog, lock }, { allowDraft = false, kind = 'post' } = {}) {
   if (!SLUG_RE.test(slug)) throw new NotFound('No such post.');
   const { repo, folder } = parseRepoRef(where);
-  const text = await gh.readText(repo, at(folder, `posts/${slug}.md`), ref);
-  if (text === null) throw new NotFound('No such post.');
-  const post = parsePost({ path: `posts/${slug}.md`, text });
+  const path = `${kind === 'page' ? 'pages' : 'posts'}/${slug}.md`;
+  const text = await gh.readText(repo, at(folder, path), ref);
+  if (text === null) throw new NotFound(kind === 'page' ? 'No such page.' : 'No such post.');
+  const post = parsePost({ path, text });
   if (post.lossy) throw post.lossy.at(post.path);
-  if (post.status !== 'published' && !allowDraft) throw new NotFound('No such post.');
+  if (post.status !== 'published' && !allowDraft) throw new NotFound(kind === 'page' ? 'No such page.' : 'No such post.');
   const resolve = (r) => resolveAsset(r, blog, lock);
   const contract = blog.theme && typeof blog.theme === 'object' ? blog.theme.contract : undefined;
   return { post, text, html: deltaToHtml(post.delta, { resolve, resolveVideo: (r) => videoEmbedUrl(r, blog), strict: false, contract }) };

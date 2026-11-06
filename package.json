@@ -1,6 +1,6 @@
 {
   "name": "blog-webcli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "blog.webcli.app — a blog is a GitHub repo; this static app renders and edits it.",
   "type": "module",
   "private": true,

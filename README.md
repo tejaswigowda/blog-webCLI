@@ -11,7 +11,7 @@ pages the app generates carry its built-in default theme, which is part of the a
 their licence comment and in `licences.json`; a blog that wants no GPL text in its pages pins a theme.
 
 ```
-blog repo     posts/*.md · blog.json · [order.json] · assets.lock.json · index/posts.json · generated HTML · feed.xml
+blog repo     posts/*.md · pages/*.md · blog.json · [order.json] · assets.lock.json · index/posts.json · generated HTML · feed.xml · sitemap.xml
 images repo   binaries
 audio repo    binaries
 video repo    a renders repository published by hls.webcli.app (HLS releases, tagged <name>/vN)
@@ -171,11 +171,11 @@ setting lives in exactly one place:
 | Where | What it configures | Written by |
 |---|---|---|
 | [`blog.json`](#blogjson) | the blog: identity, address, media, theme, extensions, live copy, styling | you, or **Settings** in the editor |
-| [post frontmatter](#post-frontmatter) (`posts/<slug>.md`) | one post | you, or the editor |
+| [post frontmatter](#post-frontmatter) (`posts/<slug>.md`, `pages/<slug>.md`) | one post or standalone page | you, or the editor |
 | `order.json` (or the file `order.list` names) | the sequence of posts, when the blog is [ordered by hand](#order) | you (the one authored file beside `blog.json`) |
 | `assets.lock.json` | the commit each `asset:` reference is pinned to | the editor / `blog-webcli pin` (never by hand) |
 | `extension-outputs.json` | what each extension returned at publish | the editor's sandbox (never by hand) |
-| `index/posts.json`, `feed.xml`, `theme.css`, `licences.json`, `404.html`, `webcli-live.js`, every page | generated from the above | the generator; CI diffs them |
+| `index/posts.json`, `feed.xml`, `sitemap.xml`, `robots.txt`, `search.json`, `theme.css`, `licences.json`, `404.html`, `webcli-live.js`, `webcli-search.js`, every page, and the folders `tags/`, `authors/`, `archive/`, `page/`, `search/` | generated from the above | the generator; CI diffs them |
 | the reader's URL hash | one view of a blog (`/blog/#repo=…&ref=…&images=…`, see [the reader](#the-blog-reader)) | the link |
 | GitHub Pages settings | where the blog is served (branch, custom domain, HTTPS) | GitHub; the app reads it, it does not store it |
 | [`themes.json`](themes.json), [`extensions.json`](extensions.json) in *this* repository | the "Built in" lists in the theme and extension pickers (a convenience: any repository works by address) | pull request |
@@ -241,6 +241,11 @@ four keys are required, and the real file is plain JSON (no comments):
 | `video` | no | video releases: [below](#video) | a `videos/` folder of `repo` |
 | `content` | no | the live copy that makes publishing feel instant: [below](#content) | off: pages carry no script and there is no `404.html` |
 | `order` | no | how posts are sequenced: [below](#order) | newest first (`date`, `desc`) |
+| `search` | no | `true` adds a [search page](#site-features) | off |
+| `pagination` | no | `{ "size": N }`: [pages of the index](#pagination) | one list |
+| `seo` | no | `twitter`, `sitemap`, `robots`: [below](#seo) | a sitemap, and a robots.txt at the root of a host |
+| `comments`, `analytics` | no | a script from an address you name, [below](#comments-and-analytics) | none |
+| `subscribe` | no | an email form that posts to an address you name, [below](#subscribe) | none |
 | `customize` | no | colours, fonts, width, header, footer, list layout, CSS: see [Customization](#customization) | the default look |
 
 Unknown top-level keys are carried through untouched by the editor and ignored by the generator. Anything
@@ -371,6 +376,62 @@ fifty. A list value is refused (`bad-order-field`).
 
 In Settings, *Post order* edits `by`, `dir`, the field and the list file; only what differs from the default is written.
 
+#### `search`, `pagination`, `seo`
+
+```json
+"search": true,
+"pagination": { "size": 10 },
+"seo": { "twitter": "@ada", "sitemap": true, "robots": true }
+```
+
+| Key | Value | If left out |
+|---|---|---|
+| `search` | `true` adds `search/` and `search.json` (see [Site features](#site-features)) | no search page, no script on any page for it |
+| `pagination.size` | a whole number from 1 to 100: posts per page of the index, and of each tag and author page | one list. A list that fits on one page is not split |
+| `seo.twitter` | a handle like `@ada`, written as `twitter:site` in link previews | none |
+| `seo.sitemap` | `false` stops writing `sitemap.xml` | written |
+| `seo.robots` | `false` stops writing `robots.txt` | written, but only when `domain` has no path: a robots file is read only at the root of a host |
+
+Switching `sitemap` or `robots` off stops them being updated; the generator never deletes a `sitemap.xml` or
+`robots.txt`, because a blog that turns them off may have written one by hand. A `robots.txt` you wrote yourself
+is replaced while `robots` is on: set it to `false` to keep yours.
+
+#### `comments`, `analytics`
+
+```json
+"comments":  { "src": "https://comments.example/client.js", "attrs": { "data-repo": "me/blog" }, "title": "Discussion" },
+"analytics": { "src": "https://stats.example/count.js", "attrs": { "data-domain": "blog.example" } }
+```
+
+| Key | Value |
+|---|---|
+| `src` | an `https` address of a script. Required |
+| `attrs` | up to 16 attributes: `data-*`, `crossorigin`, `integrity`, `referrerpolicy`, `nonce`; each value is text of at most 300 characters. Nothing else is allowed: no `onload`, no inline code |
+| `title` | `comments` only: the label of the comments region (default "Comments") |
+
+`comments` places `<section class="comments"><script src=… async …></script></section>` under every post, where a
+comments widget inserts itself (a GitHub-Discussions widget fits; the generator names no provider). `analytics`
+places `<script src=… defer …></script>` at the end of every page. Both are off unless you set them.
+
+**These are the one place a page runs someone else's code.** The script has the page's full powers on your
+readers' browsers, and the reader's browser contacts that service. Name only a service you trust, and give an
+`integrity` value to pin the exact bytes. Nothing in the editor, the generator or the `/blog/` reader loads them:
+only the generated pages do.
+
+#### `subscribe`
+
+```json
+"subscribe": { "action": "https://news.example/subscribe", "field": "email", "hidden": { "list": "abc" },
+               "title": "Subscribe by email", "button": "Subscribe", "placeholder": "you@example.com" }
+```
+
+A plain HTML form (`method="post"`) at the end of every post and of the home page. It works with scripting off, and the
+address a reader types goes from their browser straight to `action`, never through this site. `action` (an `https`
+address) is required; `field` is the name of the email field (default `email`); `hidden` holds up to eight extra
+fields your provider asks for. The feed (`feed.xml`) is always there as the other way to subscribe.
+
+In Settings these are the *Readers*, *Search engines* and *Comments and analytics* sections.
+
 #### Pinned themes and extensions
 
 A theme or extension is `{ repo, ref, sha256, name, version, licence }` where `ref` is a release tag or a
@@ -421,14 +482,25 @@ description: Optional; defaults to the first paragraph.
 
 | Key | Required | Value |
 |---|---|---|
-| `slug` | yes | lowercase letters, digits and single hyphens; must equal the file name; set once and never changed (it is the URL). `posts`, `index`, `feed`, `assets`, `static`, `node_modules` and `p` are reserved, as is the first folder of any media folder inside the blog |
+| `slug` | yes | lowercase letters, digits and single hyphens; must equal the file name; set once and never changed (it is the URL). `posts`, `pages`, `index`, `feed`, `assets`, `static`, `node_modules`, `p`, `tags`, `authors`, `archive`, `search` and `page` are reserved, as is the first folder of any media folder inside the blog |
 | `title` | yes | text; change it freely |
 | `date` | yes | a real `YYYY-MM-DD`; posts are ordered by it, not by commit time |
-| `status` | yes | `draft` (in no index, page or feed) or `published` |
-| `author` | no | text; the blog's `author` if left out |
-| `tags` | no | a list of non-empty text, `[a, b]` or one `- item` per line |
+| `status` | yes | `draft` (in no index, page, feed, sitemap or search) or `published` |
+| `author` | no | text; the blog's `author` if left out. With more than one distinct author the byline links to an author page |
+| `tags` | no | a list of non-empty text, `[a, b]` or one `- item` per line. Each tag of a published post has a page |
 | `cover` | no | an `asset:` reference, or `auto` (first image, else first video's poster, else the blog `cover`) |
-| `description` | no | text; the first paragraph if left out |
+| `description` | no | text; the first paragraph if left out. Also the `<meta name="description">` and `og:description` |
+| `seo_title` | no | text; the page `<title>` and `og:title`, instead of `Title · Blog` |
+| `image` | no | an `asset:` reference: the share image (`og:image`), when it should differ from the cover |
+| `canonical` | no | an absolute address: for a post first published elsewhere. It becomes `<link rel="canonical">` and `og:url`, and the post is left out of the sitemap |
+| `noindex` | no | `true` adds `<meta name="robots" content="noindex">` and leaves the post out of the sitemap; it stays in the index and the feed |
+
+A **standalone page** is `pages/<slug>.md`, for an About or Contact page. It has the same frontmatter except that
+`date` is optional and ignored, and it takes no `tags`; it also takes `menu: <0-99>`, which lists it in every
+page's header (lowest first; no value, no menu entry). A page is not a post: it is in no index, feed, archive,
+tag page or search, and has no previous/next, no comments and no subscribe form. It is in the sitemap. Posts and
+pages share one address space (`slug-collision` for a repeat). Pages are not drawn early by the live script
+(see [Known limits](#known-limits)).
 
 Frontmatter is a small YAML subset (scalars, inline and block lists, comments). Edits touch one key at a time,
 so a round trip never rewrites what you wrote.
@@ -447,7 +519,8 @@ token needs.
 Signed in, open your blog and press **Settings** (`#repo=owner/repo[/folder]&settings`). It edits
 `blog.json` without hand-editing JSON: general info, media repositories (and the CDN/player URL
 templates), colours with light and dark values, fonts, width and text size, post list layout,
-header logo and links, footer text and links, and custom CSS. A **live preview** restyles as you
+header logo and links, footer text and links, and custom CSS; and the reader features: search, posts per page,
+the email subscribe form, the Twitter handle, `sitemap.xml` and `robots.txt`, and the comments and analytics scripts. A **live preview** restyles as you
 type (in an isolated shadow root, following your system light/dark setting); a value the validator
 refuses shows why and leaves the last good preview in place.
 
@@ -827,6 +900,61 @@ serve a new tag, so the player may not load a just-published video straight away
 browser, [test/e2e/release.e2e.mjs](test/e2e/release.e2e.mjs) and
 [test/e2e/upload-video.e2e.mjs](test/e2e/upload-video.e2e.mjs).
 
+## Site features
+
+Everything below is generated at publish, from the posts, as plain files. Nothing needs a server, and a page
+needs no script unless a feature below says so.
+
+**Tags.** Each tag of a published post has `tags/<tag>/` listing its posts in the blog's own order, and `tags/` lists
+the tags with their counts. Tags are shown as links wherever a post is listed or shown. A tag's address is its
+lowercase letters and digits with hyphens (`Static HLS` → `static-hls`); two tags that share one (`C++` and `c`)
+share a page. A tag that only drafts use has no page.
+
+**Archive.** `archive/` lists every published post by year, newest first, by authored date, whatever order the blog
+itself is in.
+
+**Authors.** With more than one distinct author across the posts, each has `authors/<name>/` and the byline links
+to it. A blog with one author has none, since it would repeat the index.
+
+**Pagination.** With `pagination.size`, the index is `index.html` plus `page/2/`, `page/3/`, …, and each tag and
+author page pages the same way under its own folder (`tags/video/page/2/`). Pages carry `<link rel="prev">` and
+`<link rel="next">` and a "Previous page / Page 2 of 5 / Next page" row; the ends have no link, not a disabled one.
+`index/posts.json`, the feed and the `/blog/` reader are never paginated: they are the whole blog.
+
+**Search.** With `"search": true`, `search/` has a box, and `search.json` has the title, date, tags, excerpt and the
+first 20 000 characters of text of every published post. The one script on that page (`webcli-search.js`, built by
+`node cli/build-live.js` from [lib/search-client.js](lib/search-client.js)) fetches that file from the same origin and
+matches in the reader's browser: nothing is sent anywhere, and results are drawn as text, never markup. Every term must match;
+a term in the title counts most, then tags, excerpt, body; ties keep the blog's order. `search/?q=…` works as a link.
+Without scripting the page says so and points at the archive. The search page is `noindex` and not in the sitemap. The
+index is as of the last build, not the live copy.
+
+**Sitemap and robots.** `sitemap.xml` lists the home page, posts (with their authored dates), pages, the archive and
+the tag and author pages, in a fixed order. A post with `noindex`, or with a `canonical` address that is not its own, is
+left out. `robots.txt` (`Allow: /` and the sitemap) is written only where the blog is at the root of a host.
+
+**Structured data and previews.** Every post has JSON-LD (`BlogPosting`), every standalone page `WebPage`, the home
+page `WebSite` (with a `SearchAction` when search is on): a `<script type="application/ld+json">`, which is data and
+runs nothing. Every page has the Open Graph and Twitter tags; the [frontmatter](#post-frontmatter) can set the search title,
+share image, canonical address and `noindex` per post.
+
+**Header menu.** Every page's header lists, after your own `customize.header.links`: pages with a `menu` position,
+*Archive*, *Tags* (when any post has a tag), *Search* (when on), and *Feed*.
+
+**Comments, analytics, subscribe.** [Opt-in](#comments-and-analytics) embeds you point at an address; see above.
+
+**Standalone pages.** `pages/<slug>.md`: see [Post frontmatter](#post-frontmatter). The editor lists them under
+*Pages* on the blog's start screen, and *New page* opens the same editor without date, tags or author.
+
+**Removed with the feature.** When you turn search or pagination off, or a tag loses its last post, the files that
+feature wrote are deleted in the same commit (the editor's pre-flight lists them) and `blog-webcli build` removes
+them (`check` reports them as stale). The folders `tags/`, `authors/`, `archive/`, `page/` and `search/` belong to the
+generator: do not keep your own files in them.
+
+Because the generator is one pure module, the browser's live renderer (see [Publish latency](#publish-latency-not-waiting-for-github-pages))
+builds a post with the same header, tag links, comments and subscribe form as the build will: it reads the tags, authors and
+pages from `index/posts.json`, which records them, and a test holds the two byte-identical.
+
 ## Publish latency: not waiting for GitHub Pages
 
 A GitHub Pages deploy takes from about twenty seconds to several minutes after a push, and there is no way
@@ -881,7 +1009,7 @@ so the commit that holds it cannot be named inside it.
 ## CLI
 
 ```
-node cli/blog.js build [dir]   regenerate index, pages, feed (writes nothing if anything is refused)
+node cli/blog.js build [dir]   regenerate index, pages, tags, archive, search, sitemap, feed (writes nothing if anything is refused)
 node cli/blog.js check [dir]   regenerate in memory; non-zero on any difference — for CI
 node cli/blog.js fmt   [dir]   rewrite posts into canonical markdown
 node cli/blog.js pin   [dir]   pin unpinned asset: references, verify video: release tags (GitHub API, $GITHUB_TOKEN optional)
@@ -895,8 +1023,10 @@ node cli/serve.js [dir] [port] static server for local preview
 ```
 
 `build` and `check` read `order.json` (the file `blog.json`'s `order.list` names) when the blog is ordered by hand, and print
-the build's warnings, including the posts that are in no list. They fetch a pinned theme (as data) to regenerate; they **never execute extension
-code**, they use the recorded `extension-outputs.json`.
+the build's warnings, including the posts that are in no list. They read `posts/` and `pages/`, and `build` removes what a feature
+that is now off left behind (`check` lists it as `stale`). They fetch a pinned theme (as data) to regenerate; they **never execute extension
+code**, they use the recorded `extension-outputs.json`. `node cli/build-live.js` rebuilds the two scripts a page can load
+(`lib/live-source.js`, `lib/search-source.js`) after any change under `lib/`; CI runs it with `--check`.
 
 CI: copy [templates/blog-check.yml](templates/blog-check.yml) into the blog repo.
 Serve generated pages by enabling GitHub Pages on the blog repo (root of the default
@@ -992,7 +1122,7 @@ upload, and nothing is uploaded until you confirm.
 | B9 drafts in no index, page or feed | `test/gates.test.js`, `test/app.test.js` |
 | B10 renaming a title does not change the URL | `test/gates.test.js` |
 | B11 ledger reads zero uploaded after render-and-browse | `test/app.test.js` |
-| X1 no third-party code executes when reading a published blog | `test/x1.test.js`, `test/live.test.js` (a page has no script/handler/foreign stylesheet, or, for a blog that ships the live script, exactly one same-origin module and no inline script; import-graph scan of the reader and generator for evaluators, Workers and dynamic import; CSPs), `test/e2e/themes.e2e.mjs` (the reader contacts neither the theme nor the extension repository) |
+| X1 no third-party code executes when reading a published blog | `test/x1.test.js`, `test/live.test.js` (a page has no executable script, event handler or foreign stylesheet; JSON-LD is data and is the one script type allowed besides the one same-origin module the live script and the search page add; import-graph scan of the reader and generator for evaluators, Workers and dynamic import; CSPs), `test/e2e/themes.e2e.mjs` (the reader contacts neither the theme nor the extension repository). The opt-in comments and analytics scripts are the stated exception, off by default |
 | X2 build extensions run in a Worker with no DOM, no network, no credentials | `test/e2e/sandbox.e2e.mjs` (real Chrome: hostile extensions, an attacker server that must see nothing, the frame CSP alone, a runaway loop killed) |
 | X3 embeds are `sandbox="allow-scripts"` without `allow-same-origin` | `test/packs.test.js` (sanitizer), `test/packs-app.test.js`, `test/x1.test.js` |
 | X4 themes and extensions pinned by ref and hash; a branch is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/cli-packs.test.js` |
@@ -1021,6 +1151,15 @@ upload, and nothing is uploaded until you confirm.
 | L9 no provider hostname built into the generator or script; the content base is `blog.json`'s | `test/live.test.js` |
 | L10 the build-rate warning fires before the limit | `test/deploy.test.js`, `test/e2e/deploy.e2e.mjs` |
 | X9 a theme repository with no entry in any list works by address | `test/packs-app.test.js`, `test/cli-packs.test.js` |
+| S1 tag, author and archive pages exist for published posts only, in the blog's order, with links that resolve | `test/features.test.js`, `test/e2e/features.e2e.mjs` |
+| S2 `sitemap.xml` lists published, indexable pages in a fixed order; `robots.txt` only at the root of a host; both switchable | `test/features.test.js` |
+| S3 pagination: absent, unchanged; present, previous/next that exist, canonical per page, the index and feed whole | `test/features.test.js`, `test/e2e/features.e2e.mjs` |
+| S4 search runs in the browser against `search.json`, writes results as text, loads one same-origin script on one page | `test/features.test.js` (ranking, files), `test/e2e/features.e2e.mjs` (real Chrome: a hostile post, the request log) |
+| S5 JSON-LD cannot end its `<script>`; `seo_title`, `image`, `canonical`, `noindex` each do exactly what they say | `test/features.test.js` |
+| S6 comments, analytics and the subscribe form are off by default and, when named, are exactly the address and attributes `blog.json` gives | `test/features.test.js` |
+| S7 standalone pages: no date or tags, in the menu by position, in no index, feed or search; drafts invisible; one address space | `test/features.test.js`, `test/features-app.test.js`, `test/e2e/features.e2e.mjs` |
+| S8 every feature on, the live renderer's post is byte-identical to the generator's; regenerating in any input order is byte-identical | `test/features.test.js` |
+| S9 turning a feature off deletes what it wrote, in the editor's pre-flight and in the CLI; `check` finds a stale file | `test/features-app.test.js` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves
@@ -1028,6 +1167,15 @@ every named import, so a renamed export cannot silently break the browser-only m
 
 ## Known limits
 
+* A **new standalone page** is not drawn before the Pages build the way a new post is: the live script's 404 path reads
+  `posts/<slug>.md`, so `/about/` is a 404 until the build finishes. An edited page, like any page, shows what was built.
+* The search index, tag pages, archive and sitemap are as of the last build; only post pages are refreshed from the live copy.
+* The `/blog/` reader (the no-Pages view) does not show tag, author, archive or search pages, comments, the subscribe form or
+  standalone pages: those are the generated site's.
+* Comments and analytics are third-party scripts on your readers' pages (see [above](#comments-and-analytics)); the generator
+  cannot vouch for them, only pin them with `integrity`.
+* Two tags that share an address (`C++`, `c`) share a page, and the first alphabetically names it; nothing refuses it.
+* `index/posts.json` now records each post's `author`, and the standalone `pages`; readers that ignore unknown fields are unaffected.
 * Draft *source* is visible in a public repo; `draft` hides it from the site, not from GitHub.
 * A video has no alt text or caption of its own (Quill's video blot cannot hold one); the title
   is the release name and version. `![alt](video:…)` is refused, not dropped.

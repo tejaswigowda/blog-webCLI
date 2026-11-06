@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.github.io/blog/</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://example.github.io/blog/static-hls-in-git/</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://example.github.io/blog/markdown-is-the-format/</loc><lastmod>2026-11-01</lastmod></url>
+  <url><loc>https://example.github.io/blog/archive/</loc></url>
+  <url><loc>https://example.github.io/blog/tags/</loc></url>
+  <url><loc>https://example.github.io/blog/tags/git/</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://example.github.io/blog/tags/video/</loc><lastmod>2026-11-05</lastmod></url>
+  <url><loc>https://example.github.io/blog/tags/writing/</loc><lastmod>2026-11-01</lastmod></url>
+</urlset>

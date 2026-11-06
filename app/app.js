@@ -1,6 +1,6 @@
 import { createNet, fmtBytes } from './net.js';
 import { GitHub, assertToken } from './github.js';
-import { NotFound, describePlan, detectAddress, executePlan, listPostFiles, listVideoReleases, loadBlog, loadIndex, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planTheme } from './site.js';
+import { NotFound, describePlan, detectAddress, executePlan, listPageFiles, listPostFiles, listVideoReleases, loadBlog, loadIndex, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planTheme } from './site.js';
 import { createSandbox } from './sandbox.js';
 import { describeRelease, executeRelease, listReleaseFolders, planTagRelease, planUploadRelease, videoRepositories } from './release.js';
 import { LIMITS } from '../lib/release.js';
@@ -192,8 +192,10 @@ function errBox(e) {
 
 const parseHash = () => {
   const p = new URLSearchParams(location.hash.slice(1));
-  const mode = p.has('themes') ? 'themes' : p.has('extensions') ? 'extensions' : p.has('licences') ? 'licences' : p.has('settings') ? 'settings' : p.has('new') ? 'new' : p.has('correct') ? 'correct' : p.has('edit') ? 'edit' : null;
-  return { repo: p.get('repo'), post: p.get('post') || p.get('edit') || p.get('correct'), ref: p.get('ref') || undefined, mode };
+  const mode = p.has('themes') ? 'themes' : p.has('extensions') ? 'extensions' : p.has('licences') ? 'licences' : p.has('settings') ? 'settings' : p.has('new') || p.has('newpage') ? 'new' : p.has('correct') || p.has('correctpage') ? 'correct' : p.has('edit') || p.has('editpage') ? 'edit' : null;
+  // a standalone page (pages/<slug>.md) is edited, or corrected by pull request, with the same editor as a post
+  const kind = p.has('newpage') || p.has('editpage') || p.has('correctpage') ? 'page' : 'post';
+  return { repo: p.get('repo'), post: p.get('post') || p.get('edit') || p.get('editpage') || p.get('correct') || p.get('correctpage'), ref: p.get('ref') || undefined, mode, kind };
 };
 const link = (repo, extra = '') => `#repo=${repo}${extra}`;
 
@@ -493,6 +495,26 @@ async function settingsView(repo, r) {
       h('div', { class: 'hint' }, 'GitHub Pages takes from seconds to minutes to publish what you commit. With this on, each page checks the repository itself (one small file request, no account, no API) and shows the current text, and a post that has no page yet is drawn at its address. Search engines and link previews still wait for the build.'),
       h('details', {}, h('summary', {}, 'Where the live copy is read from'), h('div', { class: 'row' }, field('Content URL', input('contentBase', { placeholder: DEFAULT_CONTENT_BASE }), 'A template ending in /{path}, using {owner} and {repo}. Blank: the default.'))),
     ),
+    section(
+      'Readers',
+      check('search', 'Add a search page'),
+      h('div', { class: 'hint' }, 'Search runs in the reader\'s browser against a file written at publish (search.json). It adds one same-origin script, on the search page only; nothing is sent anywhere.'),
+      h('div', { class: 'row' }, field('Posts per page', input('pageSize', { type: 'number', min: 1, max: 100, placeholder: 'all on one page' }), 'Splits the index and the tag and author pages. The feed and the /blog/ reader still list everything.')),
+      h('div', { class: 'row' }, field('Email subscribe form posts to', input('subAction', { placeholder: 'https://… (your newsletter provider\'s form address)' }), 'A plain HTML form: the address a reader types goes straight to that service, never through this page. Blank: no form.'), field('Email field name', input('subField', { placeholder: 'email' }))),
+      h('details', {}, h('summary', {}, 'Subscribe form wording and hidden fields'), h('div', { class: 'row' }, field('Heading', input('subTitle', { placeholder: 'Subscribe by email' })), field('Button', input('subButton', { placeholder: 'Subscribe' }))), h('div', { class: 'row' }, field('Hidden fields', area('subHidden', 2, { placeholder: 'list=abc123', class: 'mono', spellcheck: 'false' }), 'One per line: name=value, as your provider asks.'))),
+    ),
+    section(
+      'Search engines',
+      h('div', { class: 'row' }, field('Twitter / X handle', input('seoTwitter', { placeholder: '@name' }), 'Added to link previews as twitter:site.')),
+      h('div', {}, check('seoSitemap', 'Write sitemap.xml'), check('seoRobots', 'Write robots.txt (only where the blog is at the root of its address)')),
+      h('div', { class: 'hint' }, 'Switching one off stops it being updated; delete a file you no longer want. A robots.txt you wrote yourself is replaced while this is on.'),
+    ),
+    section(
+      'Comments and analytics',
+      h('div', { class: 'hint' }, 'Both load a script from the address you name, on your readers\' pages, with that page\'s full powers: only name a service you trust, and prefer one that gives an integrity value to pin (put it in the attributes). Off unless you fill them in.'),
+      h('div', { class: 'row' }, field('Comments script', input('commentsSrc', { placeholder: 'https://… (e.g. a GitHub-Discussions comments widget)' })), field('Attributes', area('commentsAttrs', 3, { placeholder: 'data-repo=owner/blog', class: 'mono', spellcheck: 'false' }), 'name=value per line: data-…, crossorigin, integrity.')),
+      h('div', { class: 'row' }, field('Analytics script', input('analyticsSrc', { placeholder: 'https://… (a privacy-friendly counter)' })), field('Attributes', area('analyticsAttrs', 3, { placeholder: 'data-domain=example.com', class: 'mono', spellcheck: 'false' }), 'name=value per line.')),
+    ),
     previewCard,
     section(
       'Type and layout',
@@ -709,7 +731,7 @@ async function listView(repo, r) {
   const wrap = h('div', {}, h('h1', {}, blog.title), h('p', { class: 'muted' }, blog.description));
   // View blog opens the GitHub Pages site when GitHub is serving one, else the reader (which needs no Pages)
   const viewBlog = outbound('View blog', `blog/${link(repo, r.ref ? `&ref=${r.ref}` : '')}`, { icon: 'external-link', title: 'Opens the reader: GitHub Pages is not serving this blog' });
-  if (gh.token) wrap.append(h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'sliders', onclick: () => (location.hash = link(repo, '&settings')) }, 'Settings'), viewBlog, h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, wrap) }, 'Show drafts')));
+  if (gh.token) wrap.append(h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'sliders', onclick: () => (location.hash = link(repo, '&settings')) }, 'Settings'), viewBlog, h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, wrap) }, 'Show drafts'), h('button', { icon: 'file-text', onclick: (e) => showPages(e.currentTarget, repo, r.ref, wrap) }, 'Pages')));
   if (gh.token) {
     detectAddress(gh, repo).then((found) => {
       if (found.live && found.exact && found.built) {
@@ -747,6 +769,23 @@ async function showDrafts(btn, repo, ref, wrap) {
   wrap.append(h('h2', {}, 'Drafts'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts.'));
 }
 
+// The standalone pages (about, contact, …): not posts, so not in the list above. Listed on request, since reading them
+// costs a request each.
+async function showPages(btn, repo, ref, wrap) {
+  btn.disabled = true;
+  const out = h('ul', { class: 'posts' });
+  const { repo: slugRepo, folder } = parseRepoRef(repo);
+  for (const n of await listPageFiles(gh, repo, ref)) {
+    try {
+      const m = parseMeta(splitFile(await gh.readText(slugRepo, at(folder, `pages/${n}`), ref), n).front, n);
+      out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'draft' ? `${m.title} (draft)` : m.title, link(repo, `&editpage=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, m.menu ? `In the menu, position ${m.menu}` : 'Not in the menu')));
+    } catch {
+      /* skip unreadable */
+    }
+  }
+  wrap.append(h('h2', {}, 'Pages'), h('div', { class: 'actions' }, h('button', { icon: 'plus', onclick: () => (location.hash = link(repo, '&newpage')) }, 'New page')), out.children.length ? out : h('p', { class: 'muted' }, 'No pages yet.'));
+}
+
 async function postView(repo, r) {
   const { blog } = cache;
   const { post, html } = await loadPost(gh, repo, r.post, r.ref, cache);
@@ -778,8 +817,11 @@ async function editorView(repo, r) {
   const info = await gh.repoInfo(plainRepo);
   const branch = r.ref || info.default_branch;
   const correcting = r.mode === 'correct';
+  const kind = r.kind === 'page' ? 'page' : 'post';
+  const isPageKind = kind === 'page';
+  const word = isPageKind ? 'page' : 'post';
   let isNew = r.mode === 'new';
-  let existing = isNew ? null : await loadPost(gh, repo, r.post, branch, cache, { allowDraft: true });
+  let existing = isNew ? null : await loadPost(gh, repo, r.post, branch, cache, { allowDraft: true, kind });
   let { blog } = cache;
   const staged = new Map();
   const canPush = !!(info.permissions && info.permissions.push);
@@ -795,15 +837,21 @@ async function editorView(repo, r) {
     }
   });
 
-  const m = existing ? existing.post.meta : { status: 'draft', date: today() };
+  const m = existing ? existing.post.meta : { status: 'draft', date: isPageKind ? '' : today() };
   const f = {
     title: h('input', { value: m.title || '', placeholder: 'Title', disabled: correcting }),
     slug: h('input', { value: m.slug || '', placeholder: 'set once, never changes', disabled: !isNew }),
     date: h('input', { type: 'date', value: m.date, disabled: correcting }),
     tags: h('input', { value: (m.tags || []).join(', '), placeholder: 'video, git', disabled: correcting }),
+    author: h('input', { value: m.author || '', placeholder: blog.author || 'Defaults to the blog\'s author', disabled: correcting }),
+    menu: h('input', { type: 'number', min: 0, max: 99, value: m.menu || '', placeholder: 'not in the menu', disabled: correcting }),
     status: h('select', { disabled: correcting }, ['draft', 'published'].map((s) => h('option', { value: s, selected: s === m.status }, s))),
     cover: h('input', { value: m.cover || '', placeholder: 'asset:images/cover.png, or auto', disabled: correcting, style: 'flex:1' }),
     description: h('input', { value: m.description || '', placeholder: 'Optional; defaults to the first paragraph', disabled: correcting }),
+    seo_title: h('input', { value: m.seo_title || '', placeholder: 'Optional; defaults to the title', disabled: correcting }),
+    image: h('input', { value: m.image || '', placeholder: 'asset:images/share.png (optional)', disabled: correcting, style: 'flex:1' }),
+    canonical: h('input', { value: m.canonical || '', placeholder: 'https://… (only if first published elsewhere)', disabled: correcting }),
+    noindex: h('input', { type: 'checkbox', checked: m.noindex === 'true', disabled: correcting }),
   };
   const dateNote = h('div', { class: 'hint' });
   const showDate = () => { const d = describeDate(f.date.value); dateNote.textContent = d.relative ? `${d.full} · ${d.relative}` : d.full; };
@@ -812,6 +860,7 @@ async function editorView(repo, r) {
   showDate();
   const coverUpload = h('button', { type: 'button', icon: 'upload', disabled: correcting, onclick: () => chooseImage((ref) => { f.cover.value = ref; }) }, 'Upload…');
   const coverAuto = h('button', { type: 'button', icon: 'zap', disabled: correcting, onclick: () => { f.cover.value = 'auto'; } }, 'Auto');
+  const imageUpload = h('button', { type: 'button', icon: 'upload', disabled: correcting, onclick: () => chooseImage((ref) => { f.image.value = ref; }) }, 'Upload…');
   setVideoResolver((ref) => {
     try {
       return videoEmbedUrl(ref, blog);
@@ -835,21 +884,30 @@ async function editorView(repo, r) {
   refreshLabel();
 
   const editorEl = h('div', { id: 'editor' });
+  // what a search engine and a shared link show; all optional
+  const sharing = h('details', { class: 'more' },
+    h('summary', {}, 'Search and sharing'),
+    h('div', { class: 'row' }, field('Search title', f.seo_title, 'The title search engines and shared links show. Defaults to the title.'), field('Share image', h('div', { style: 'display:flex;gap:.4rem' }, f.image, imageUpload), 'Defaults to the cover.')),
+    h('div', { class: 'row' }, field('Canonical address', f.canonical, 'Only for a post first published elsewhere: search engines will treat that address as the original.'), field('Keep out of search', h('label', { class: 'check' }, f.noindex, ' noindex this page'), 'The page still exists and is in the feed; it asks search engines to skip it and stays out of the sitemap.')),
+  );
   const node = h(
     'div',
     {},
-    h('p', {}, nav('Back', existing ? link(repo, `&post=${existing.post.slug}`) : link(repo), { icon: 'arrow-left' })),
-    h('h1', {}, correcting ? `Correct: ${m.title}` : isNew ? 'New post' : `Edit: ${m.title}`),
+    h('p', {}, nav('Back', existing && !isPageKind ? link(repo, `&post=${existing.post.slug}`) : link(repo), { icon: 'arrow-left' })),
+    h('h1', {}, correcting ? `Correct: ${m.title}` : isNew ? `New ${word}` : `Edit: ${m.title}`),
     h('div', { class: 'cols' },
       h('div', {},
         h('div', { class: 'row' }, field('Title', f.title), field('Slug (the URL — never changes)', f.slug)),
         h('div', { class: 'row' }, field('Cover', h('div', { style: 'display:flex;gap:.4rem' }, f.cover, coverUpload, coverAuto), 'Upload an image, or auto: the post\'s first image, else the poster of its first video, else the blog\'s cover. It is the preview when the post is shared.'), field('Description', f.description)),
+        sharing,
         editorEl,
         h('p', { class: 'hint' }, 'The toolbar offers only what markdown can express. Images are uploaded to the assets repository at publish time, not before.'),
       ),
       h('div', { class: 'side' }, h('div', { class: 'card' }, h('div', { class: 'card-header' }, correcting ? 'Propose' : 'Publish'), h('div', { class: 'card-body' },
-        correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', outbound('Propose the change on GitHub instead', `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `posts/${r.post}.md`)}`, { class: 'link' }), ' — it forks and opens the pull request for you.')) : null,
-        h('div', { class: 'row' }, field('Date', f.date, dateNote), field('Tags', f.tags), field('Status', f.status)),
+        correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', outbound('Propose the change on GitHub instead', `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `${isPageKind ? 'pages' : 'posts'}/${r.post}.md`)}`, { class: 'link' }), ' — it forks and opens the pull request for you.')) : null,
+        isPageKind
+          ? h('div', { class: 'row' }, field('Menu position', f.menu, 'A number puts the page in the header menu, lowest first. Leave blank to keep it out of the menu.'), field('Status', f.status))
+          : [field('Author', f.author, 'Posts by more than one author get an author page each.'), h('div', { class: 'row' }, field('Date', f.date, dateNote), field('Tags', f.tags), field('Status', f.status))],
         h('div', { class: 'actions' }, go),
         deploy.el,
       ))),
@@ -935,14 +993,20 @@ async function editorView(repo, r) {
 
   function buildText() {
     const { md } = deltaToMarkdownChecked({ ops: quill.getContents().ops });
-    const vals = {
+    const common = {
       title: f.title.value.trim(),
-      date: f.date.value,
-      tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean),
       status: f.status.value,
       cover: f.cover.value.trim(),
       description: f.description.value.trim(),
+      seo_title: f.seo_title.value.trim(),
+      image: f.image.value.trim(),
+      canonical: f.canonical.value.trim(),
+      noindex: f.noindex.checked ? 'true' : '',
     };
+    // a page has a menu position and nothing dated; a post has a date, tags and an author
+    const vals = isPageKind
+      ? { ...common, menu: f.menu.value.trim() }
+      : { ...common, date: f.date.value, tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), author: f.author.value.trim() };
     const slug = existing ? existing.post.slug : f.slug.value.trim();
     if (!SLUG_RE.test(slug)) throw new Refusal('bad-frontmatter', `slug "${slug}" must be lowercase letters, digits and hyphens`);
     let front;
@@ -962,7 +1026,7 @@ async function editorView(repo, r) {
       const creating = isNew;
       const { slug, text, md } = buildText();
       const used = new Set([...text.matchAll(/asset:([^\s)\]]+)/g)].map((x) => x[1]));
-      const plan = await working('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, staged: [...staged.values()].filter((s) => used.has(`${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
+      const plan = await working('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, kind, staged: [...staged.values()].filter((s) => used.has(`${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
       if (!plan.changes.length && !plan.assetGroups.length) {
         noted('Nothing to publish: the repository already matches.');
         return;
@@ -973,9 +1037,9 @@ async function editorView(repo, r) {
       const pushed = [...receipt.commits].reverse().find((c) => c.repo === plainRepo);
       if (!correcting && pushed) {
         const now = cache && cache.blog ? cache.blog : blog;
-        deploy.track({ sha: pushed.sha, since: Date.now(), url: `${now.domain}/${slug}/`, published: f.status.value === 'published', isNew: creating, soft: liveEnabled(now) && (!creating || ownsNotFoundPage(now)) });
+        deploy.track({ sha: pushed.sha, since: Date.now(), url: `${now.domain}/${slug}/`, published: f.status.value === 'published', isNew: creating, soft: !isPageKind && liveEnabled(now) && (!creating || ownsNotFoundPage(now)) });
       }
-      const path = `posts/${slug}.md`;
+      const path = `${isPageKind ? 'pages' : 'posts'}/${slug}.md`;
       existing = { post: parsePost({ path, text }) };
       isNew = false;
       f.slug.disabled = true;
@@ -986,7 +1050,7 @@ async function editorView(repo, r) {
       }
       // What you see is what is stored.
       quill.setContents(mdToDelta(md).ops, 'silent');
-      if (!correcting) history.replaceState(null, '', link(repo, `&edit=${slug}`));
+      if (!correcting) history.replaceState(null, '', link(repo, `&${isPageKind ? 'editpage' : 'edit'}=${slug}`));
     } catch (e) {
       fail(e);
     } finally {

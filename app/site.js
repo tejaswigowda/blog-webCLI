@@ -1,6 +1,6 @@
 // Reader and publisher cores. No DOM: the UI calls these, and so do the tests.
 import { Refusal } from '../lib/errors.js';
-import { POST_PATH, parsePost, validateBlog } from '../lib/blog.js';
+import { PAGE_PATH, POST_PATH, GENERATED_TREES, OPTIONAL_GENERATED, parsePost, validateBlog } from '../lib/blog.js';
 import { buildSiteWith } from '../lib/build-async.js';
 import { parseOutputsFile } from '../lib/extensions.js';
 import { loadPacks, readExtensionToPin, readThemeToPin } from './packs.js';
@@ -20,7 +20,7 @@ const enc = new TextEncoder();
 const json = (o) => JSON.stringify(o, null, 2) + '\n';
 export const PLACEHOLDER_SHA = '0'.repeat(40);
 
-export { NotFound, listPostFiles, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo } from './read.js';
+export { NotFound, listPageFiles, listPostFiles, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo } from './read.js';
 
 // Releases published by hls.webcli.app into each configured video repository.
 export async function listVideoReleases(gh, blog) {
@@ -58,9 +58,14 @@ async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, r
   return site;
 }
 
-// Generated files that disappear when the feature that made them is switched off.
-const OPTIONAL_GENERATED = ['theme.css', 'extension-outputs.json', '404.html', 'webcli-live.js'];
-const staleOptional = (site, tree, prefix) => OPTIONAL_GENERATED.filter((f) => tree.has(f) && !(f in site.files)).map((f) => ({ path: prefix + f, delete: true, size: 0, action: 'delete' }));
+// Generated files that disappear when the feature that made them is switched off, and anything left in a folder the
+// generator owns (tags/, archive/, page/, …) that the build no longer writes.
+const isContent = (p) => POST_PATH.test(p) || PAGE_PATH.test(p);
+const staleOptional = (site, tree, prefix) =>
+  [...tree.keys()]
+    .filter((f) => !(f in site.files) && (OPTIONAL_GENERATED.includes(f) || GENERATED_TREES.some((t) => f.startsWith(`${t}/`))))
+    .sort()
+    .map((f) => ({ path: prefix + f, delete: true, size: 0, action: 'delete' }));
 
 // `tree` is relative to the blog's folder; `prefix` puts the changes back where they live in the repository.
 async function computeChanges(gh, { blogText, others, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head, runner }) {
@@ -75,8 +80,9 @@ async function computeChanges(gh, { blogText, others, newPost, lock, lockChanged
   }
   changes.push(...staleOptional(site, tree, prefix));
   if (prevIndex) {
-    const now = new Set(site.index.map((e) => e.slug));
-    for (const e of prevIndex.posts || []) {
+    // a post or page that is gone, or back to a draft, loses its generated page
+    const now = new Set([...site.index.map((e) => e.slug), ...(site.pages || []).map((p) => p.slug)]);
+    for (const e of [...(prevIndex.posts || []), ...(prevIndex.pages || [])]) {
       const p = `${e.slug}/index.html`;
       if (!now.has(e.slug) && tree.has(p)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
     }
@@ -85,7 +91,8 @@ async function computeChanges(gh, { blogText, others, newPost, lock, lockChanged
 }
 
 // staged: [{ key, path, bytes: Uint8Array }] images the author added and has not uploaded.
-export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, runner }) {
+// kind: 'post' (posts/<slug>.md) or 'page' (pages/<slug>.md, a standalone page).
+export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', runner }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -96,12 +103,15 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   if (blogText === null) throw new Refusal('no-blog-json', `${repo} has no ${prefix}blog.json`);
   const blog = validateBlog(blogText);
   const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
-  const target = `posts/${slug}.md`;
+  const target = `${kind === 'page' ? 'pages' : 'posts'}/${slug}.md`;
   if (create && tree.has(target)) throw new Refusal('slug-collision', `${target} already exists; a slug is set once and never reused`);
+  // a post and a page share one address space: the second to claim a slug is refused
+  const other = `${kind === 'page' ? 'posts' : 'pages'}/${slug}.md`;
+  if (create && tree.has(other)) throw new Refusal('slug-collision', `${other} already uses "${slug}"; posts and pages share one address space`);
   const newPost = parsePost({ path: target, text });
   if (newPost.lossy) throw newPost.lossy.at(target);
 
-  const otherPaths = [...tree.keys()].filter((p) => POST_PATH.test(p) && p !== target);
+  const otherPaths = [...tree.keys()].filter((p) => isContent(p) && p !== target);
   const others = await Promise.all(otherPaths.map(async (path) => ({ path, text: await gh.readText(repo, prefix + path, head.sha) })));
 
   const stagedByKey = new Map(staged.map((s) => [`${s.key}/${s.path}`, s]));
@@ -164,7 +174,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const sizeOf = (f) => f.size;
   summary.push({ repo, folder, branch: mode === 'pr' ? `new branch from ${branch}` : branch, files: changes.length, bytes: changes.reduce((n, f) => n + sizeOf(f), 0) });
 
-  return { repo, folder, branch, mode, slug, status: newPost.status, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
+  return { repo, folder, branch, mode, slug, kind, path: target, status: newPost.status, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
 }
 
 // Commit a (new or changed) blog.json together with the site regenerated from it: every page
@@ -176,7 +186,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
   const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
   const blog = validateBlog(blogText);
 
-  const postPaths = [...tree.keys()].filter((p) => POST_PATH.test(p));
+  const postPaths = [...tree.keys()].filter(isContent);
   const posts = await Promise.all(postPaths.map(async (path) => ({ path, text: await gh.readText(repo, prefix + path, head.sha) })));
   const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
   let lockChanged = false;
@@ -382,7 +392,7 @@ export async function executePlan(gh, plan, { pullBody = '' } = {}) {
   });
   receipt.commits.push({ repo: plan.repo, branch: newBranch || plan.branch, ...c, files: changes.length });
   if (newBranch) {
-    const pr = await gh.createPull(plan.repo, { title: message, head: newBranch, base: plan.branch, body: pullBody || `Proposed correction to \`${at(plan.folder, `posts/${plan.slug}.md`)}\`.` });
+    const pr = await gh.createPull(plan.repo, { title: message, head: newBranch, base: plan.branch, body: pullBody || `Proposed correction to \`${at(plan.folder, plan.path || `posts/${plan.slug}.md`)}\`.` });
     receipt.pull = { url: pr.html_url, number: pr.number };
   }
   return receipt;

@@ -100,6 +100,7 @@ label.check{display:block;font-size:.95rem;color:var(--fg);margin:.2rem 0}
 textarea{width:100%}
 textarea.mono{font:.85rem/1.5 ui-monospace,monospace}
 details summary{cursor:pointer;margin:.5rem 0}
+details.more{margin:.25rem 0 1rem}
 
 /* "Embed a video": a searchable dropdown with the Embed button beside it */
 dialog:has(.video-combo){max-width:40rem}

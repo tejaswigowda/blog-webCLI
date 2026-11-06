@@ -32,3 +32,7 @@ export const localRunner = async ({ extension, hook, ctx, input }) => {
   const mod = await import('data:text/javascript;base64,' + Buffer.from(extension.source).toString('base64'));
   return mod.hooks[hook](input, ctx);
 };
+
+// The only <script> a default page carries is JSON-LD, which is data and runs nothing; every gate that says "no
+// script" means no executable one.
+export const stripData = (html) => html.replace(/<script type="application\/ld\+json">[^<]*<\/script>\n?/g, '');

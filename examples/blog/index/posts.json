@@ -21,7 +21,8 @@
       "excerpt": "HLS is a playlist and a pile of segments. Both are static files, which means git can hold them and a static host can serve them — no streaming server, no…",
       "cover": "asset:images/hls-cover.png",
       "words": 160,
-      "status": "published"
+      "status": "published",
+      "author": "Ada Example"
     },
     {
       "slug": "markdown-is-the-format",
@@ -33,7 +34,8 @@
       "excerpt": "A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.",
       "cover": null,
       "words": 92,
-      "status": "published"
+      "status": "published",
+      "author": "Ada Example"
     }
   ]
 }

@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSiteWith } from '../lib/build-async.js';
 import { loadExtension } from '../lib/extensions.js';
-import { EX, localRunner, readDirFiles } from './helpers.js';
+import { EX, localRunner, readDirFiles, stripData } from './helpers.js';
 import { pinForExtension, extensionFilePaths } from '../lib/extensions.js';
 import { filesDigest } from '../lib/pin.js';
 import { loadTheme, pinFor, themeDigest, themeFilePaths } from '../lib/theme-pack.js';
@@ -54,7 +54,7 @@ test('X1: a generated page has no script, no event handler, no foreign styleshee
     for (const [file, html] of pages) {
       const where = `${name}: ${file}`;
       const markup = html.replace(/<style>[\s\S]*?<\/style>/g, '').replace(/<!--[\s\S]*?-->/g, '');
-      assert.ok(!/<script\b/i.test(html), `${where}: <script>`);
+      assert.ok(!/<script\b/i.test(stripData(html)), `${where}: <script>`);
       assert.ok(!/<noscript\b/i.test(html), `${where}: <noscript>`);
       assert.ok(!/\son[a-z]+\s*=/i.test(markup), `${where}: an event handler attribute`);
       assert.ok(!/javascript:|vbscript:/i.test(markup), `${where}: a script URL`);
@@ -118,6 +118,12 @@ test('X1: nothing reachable from the /blog/ reader can run code it fetched', asy
   for (const forbidden of ['app/sandbox.js', 'app/sandbox-frame.js', 'app/packs.js', 'app/editor.js', 'app/app.js']) assert.ok(!rel.includes(forbidden), `${forbidden} is reachable from the reader: ${rel.join(', ')}`);
   assert.ok(rel.includes('lib/contracts.js') && rel.includes('app/reader-core.js'), 'the graph walk found the reader\'s modules');
   for (const [file, src] of files) {
+    // the shipped scripts are string constants the generator hands out, never code that runs here (test/live.test.js and
+    // test/search.test.js check what they contain)
+    if (/(?:live|search)-source\.js$/.test(file)) {
+      assert.match(src, /^(?:\/\/[^\n]*\n)*export const [A-Z_]+ = "(?:[^"\\\n]|\\.)*";\n$/, `${path.relative(root, file)} is a single string constant`);
+      continue;
+    }
     const code = stripCommentsAndStrings(src);
     for (const [re, what] of EVALUATORS) assert.ok(!re.test(code), `${path.relative(root, file)} uses ${what}`);
   }

@@ -8,6 +8,7 @@ import { GitHub } from '../app/github.js';
 import { describePlan, executePlan, loadBlog, planSettings } from '../app/site.js';
 import { buildSite, validateBlog } from '../lib/blog.js';
 import { blogToForm, customizeFromForm, formToBlog, linksToText, parseLinks } from '../lib/settings.js';
+import { stripData } from './helpers.js';
 import { fakeGitHub } from './fake-github.js';
 
 const EXAMPLE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'examples', 'blog');
@@ -114,9 +115,9 @@ test('settings: a change regenerates every page from the new blog.json, in one c
   const plan = await planSettings(gh, { repo: 'example/blog', branch: 'main', form });
   assert.equal(net.ledger.uploaded.bytes, 0, 'planning uploads nothing');
   const paths = plan.changes.map((c) => c.path).sort();
-  assert.deepEqual(paths, ['blog.json', 'index.html', 'markdown-is-the-format/index.html', 'static-hls-in-git/index.html']);
+  assert.deepEqual(paths, ['archive/index.html', 'blog.json', 'index.html', 'markdown-is-the-format/index.html', 'static-hls-in-git/index.html', 'tags/git/index.html', 'tags/index.html', 'tags/video/index.html', 'tags/writing/index.html']);
   assert.ok(!paths.some((p) => p.startsWith('posts/')), 'posts are never touched by a settings change');
-  assert.match(describePlan(plan)[0], /^4 files, [\d.]+ KB, to github\.com\/example\/blog \(main\)$/);
+  assert.match(describePlan(plan)[0], /^9 files, [\d.]+ KB, to github\.com\/example\/blog \(main\)$/);
 
   const receipt = await executePlan(gh, plan);
   assert.equal(server.state['example/blog'].commits[receipt.commits[0].sha].msg, 'Update blog settings');
@@ -204,7 +205,7 @@ test('settings: "show new and edited posts before the build" writes content, shi
   await executePlan(gh, off);
   const gone = server.files('example/blog');
   assert.ok(!('404.html' in gone) && !('webcli-live.js' in gone));
-  assert.ok(!/<script/.test(gone['static-hls-in-git/index.html']));
+  assert.ok(!/<script/.test(stripData(gone['static-hls-in-git/index.html'])));
 });
 
 test('settings: a blog with no repository named cannot turn the live copy on, and is told why', async () => {

@@ -17,7 +17,7 @@ import { checkPublishedCss, loadTheme, pinFor, themeDigest, themeFilePaths } fro
 import { extensionFilePaths, loadExtension, pinForExtension } from '../lib/extensions.js';
 import { filesDigest, isPinnedRef } from '../lib/pin.js';
 import { stripComments } from '../lib/css.js';
-import { EX, localRunner, readDirFiles } from './helpers.js';
+import { EX, localRunner, readDirFiles, stripData } from './helpers.js';
 
 const run = promisify(execFile);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -140,7 +140,7 @@ test('built in themes: each loads under the app rules, builds a real blog, and s
     const lic = JSON.parse(out.files['licences.json']);
     assert.deepEqual(lic.dependencies.map((d) => [d.kind, d.name, d.licence]), [['theme', manifest.name, manifest.licence]], label);
     assert.match(out.files['index.html'], new RegExp(`theme: ${manifest.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} ${manifest.version} — ${manifest.licence}`));
-    for (const f of Object.keys(out.files).filter((n) => n.endsWith('.html'))) assert.ok(!/<script\b/i.test(out.files[f]), `${label} ${f}: no script`);
+    for (const f of Object.keys(out.files).filter((n) => n.endsWith('.html'))) assert.ok(!/<script\b/i.test(stripData(out.files[f])), `${label} ${f}: no script`);
 
     if (manifest.class_contract !== 'blog-webcli-v1') continue;
     // customization keeps working on top: the variables a blog's settings set are defined by the theme
@@ -209,7 +209,7 @@ test('built in extensions: all together, in the order a blog would list them', {
   // every output was sanitized and recorded; nothing leaked into the post sources
   const rec = JSON.parse(done.files['extension-outputs.json']);
   assert.ok(Object.keys(rec.outputs).length >= 10);
-  assert.ok(!/<script\b|\son\w+=/i.test(page + index));
+  assert.ok(!/<script\b|\son\w+=/i.test(stripData(page + index)));
   const again = buildSite({ ...inp, extensions: packs.map((p) => p.ext), outputs: rec.outputs });
   assert.deepEqual(again.files, done.files, 'regenerates identically from the recorded outputs');
 });

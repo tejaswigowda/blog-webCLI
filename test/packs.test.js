@@ -11,7 +11,7 @@ import { loadExtension, pinForExtension, validateExtensionManifest, extensionFil
 import { sanitizeHtml } from '../lib/sanitize.js';
 import { buildSite, validateBlog } from '../lib/blog.js';
 import { buildSiteWith } from '../lib/build-async.js';
-import { EX, localRunner, readDirFiles } from './helpers.js';
+import { EX, localRunner, readDirFiles, stripData } from './helpers.js';
 
 const enc = new TextEncoder();
 const code = (fn) => (e) => {
@@ -220,7 +220,7 @@ test('theme: pages inline its css over the base; theme.css matches; nothing is f
   assert.ok(page.includes('.screen-reader-text{'), 'the structural base is always present');
   assert.ok(!page.includes('header.site{display:flex'), 'the default theme is replaced, not layered under');
   assert.equal(files['theme.css'], page.match(/<style>([\s\S]*?)<\/style>/)[1] + '\n');
-  assert.ok(!/<script|<link[^>]+rel="stylesheet"|@import/i.test(page), 'no script and no external stylesheet');
+  assert.ok(!/<script|<link[^>]+rel="stylesheet"|@import/i.test(stripData(page)), 'no script and no external stylesheet');
   // customize still layers on top of a theme
   assert.ok(page.includes('--width:42rem'));
 });

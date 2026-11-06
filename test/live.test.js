@@ -15,7 +15,7 @@ import { loadTheme, pinFor, themeDigest, themeFilePaths } from '../lib/theme-pac
 import { filesDigest } from '../lib/pin.js';
 import { extensionFilePaths, loadExtension, pinForExtension } from '../lib/extensions.js';
 import { buildSiteWith } from '../lib/build-async.js';
-import { EX, corpus, localRunner, readDirFiles } from './helpers.js';
+import { EX, corpus, localRunner, readDirFiles, stripData } from './helpers.js';
 
 const enc = new TextEncoder();
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -130,8 +130,8 @@ test('without "content" nothing changes for the reader: no script, no 404 page, 
   const r = buildSite({ blog, posts, lock });
   assert.deepEqual(r.errors, []);
   assert.ok(!('webcli-live.js' in r.files) && !('404.html' in r.files));
-  for (const [f, html] of Object.entries(r.files)) if (f.endsWith('.html')) assert.ok(!/<script/i.test(html), f);
-  const post = Object.entries(r.files).find(([f]) => f.endsWith('/index.html'));
+  for (const [f, html] of Object.entries(r.files)) if (f.endsWith('.html')) assert.ok(!/<script/i.test(stripData(html)), f);
+  const post = Object.entries(r.files).find(([f]) => f === `${r.index[0].slug}/index.html`);
   assert.match(post[1], /<meta name="x-generator"/, 'the build is still recorded');
   assert.match(post[1], /<meta name="x-content-sha256"/);
   assert.ok(!/x-content-base/.test(post[1]));
@@ -159,9 +159,11 @@ test('the script a blog ships is the one the sources build to, and the version i
     /* installed with npm install; without it the check is skipped */
   }
   if (!esbuild) return;
-  const { buildLive } = await import('../cli/build-live.js');
-  const have = await fs.readFile(path.join(root, 'lib', 'live-source.js'), 'utf8');
-  assert.equal(have, await buildLive(), 'run `node cli/build-live.js` and commit lib/live-source.js');
+  const { TARGETS, buildTarget } = await import('../cli/build-live.js');
+  for (const t of TARGETS) {
+    const have = await fs.readFile(path.join(root, 'lib', t.out), 'utf8');
+    assert.equal(have, await buildTarget(t), `run \`node cli/build-live.js\` and commit lib/${t.out}`);
+  }
 });
 
 // ---------- L5: one renderer ----------
@@ -375,10 +377,13 @@ test('X1 for a live blog: the only script on any page is the one same-origin mod
   const { r } = await build();
   const htmls = Object.entries(r.files).filter(([f]) => f.endsWith('.html'));
   assert.ok(htmls.length >= 3);
-  for (const [f, html] of htmls) {
+  // the home page, the posts and 404.html carry the script; the generated listings (tags, archive) carry none
+  const carrying = (f) => f === 'index.html' || f === '404.html' || /^[a-z0-9-]+\/index\.html$/.test(f) && !/^(tags|archive|authors|search|page)\//.test(f);
+  for (const [f, page] of htmls) {
+    const html = stripData(page);
     const scripts = [...html.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0]);
-    assert.equal(scripts.length, 1, `${f}: ${scripts.join(' ')}`);
-    assert.match(scripts[0], /^<script type="module" src="(?:\.\.\/|\.\/|\/blog\/)webcli-live\.js"><\/script>|^<script type="module" src="[^":]+webcli-live\.js">$/, f);
+    assert.equal(scripts.length, carrying(f) ? 1 : 0, `${f}: ${scripts.join(' ')}`);
+    if (scripts.length) assert.match(scripts[0], /^<script type="module" src="(?:\.\.\/|\.\/|\/blog\/)webcli-live\.js"><\/script>|^<script type="module" src="[^":]+webcli-live\.js">$/, f);
     assert.ok(!/<script[^>]*>[^<]+<\/script>/i.test(html), `${f}: inline script`);
     assert.ok(!/\son[a-z]+\s*=\s*["']/i.test(html), `${f}: an event handler`);
     assert.ok(!/<noscript/i.test(html), f);

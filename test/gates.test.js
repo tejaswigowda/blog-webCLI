@@ -11,7 +11,7 @@ import { buildSite, renderPost, parsePost } from '../lib/blog.js';
 import { setMeta, parseMeta, splitFile } from '../lib/frontmatter.js';
 import { Refusal } from '../lib/errors.js';
 import { serve } from '../cli/serve.js';
-import { corpus } from './helpers.js';
+import { corpus, stripData } from './helpers.js';
 
 const run = promisify(execFile);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -63,7 +63,7 @@ test('B3: curl on a published post returns its full text with scripting disabled
     const url = `http://127.0.0.1:${server.address().port}/static-hls-in-git/`;
     const { stdout: html } = await run('curl', ['-s', '--fail', url]);
     const post = await fs.readFile(path.join(EXAMPLE, 'posts', 'static-hls-in-git.md'), 'utf8');
-    assert.ok(!/<script|<noscript|onload=|onerror=/i.test(html), 'page must not need scripting');
+    assert.ok(!/<script|<noscript|onload=|onerror=/i.test(stripData(html)), 'page must not need scripting');
     for (const phrase of ['HLS is a playlist and a pile of segments', 'Why it works', 'Segments never change once written, so they cache forever.', 'Hosting is a', 'A reference that names no provider is a reference you can move.', 'seg-000.ts', 'Read more at']) {
       assert.ok(html.includes(phrase), `missing: ${phrase}`);
     }
@@ -77,8 +77,9 @@ test('B3: curl on a published post returns its full text with scripting disabled
 });
 
 test('B4: every generated page carries OG and twitter tags with absolute urls', async () => {
-  const { files } = buildSite(await exampleInputs());
-  const pages = Object.keys(files).filter((f) => f.endsWith('.html'));
+  const { files, index } = buildSite(await exampleInputs());
+  // the posts and the home page carry the full set; the generated listings (tags, archive) are not shared as posts
+  const pages = Object.keys(files).filter((f) => f === 'index.html' || index.some((e) => f === `${e.slug}/index.html`));
   assert.equal(pages.length, 3);
   for (const f of pages) {
     const h = files[f];
@@ -269,7 +270,7 @@ test('video: a post embeds a release by reference; the page carries the pinned p
   assert.ok(page.includes(`<a href="${src}" rel="noopener noreferrer">Watch: hls-demo v1</a>`), 'a text link survives with scripting off');
   assert.match(page, /sandbox="allow-scripts"/);
   assert.ok(!/allow-same-origin/.test(page), "an embed never gets allow-same-origin");
-  assert.ok(!/<script/i.test(page));
+  assert.ok(!/<script/i.test(stripData(page)));
 });
 
 test('video: refusals', async () => {
