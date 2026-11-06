@@ -114,7 +114,7 @@ const link = (repo, extra = '') => `#repo=${repo}${extra}`;
 
 function renderTop(repo, ref) {
   const input = h('input', { name: 'repo', placeholder: 'owner/blog or owner/repo/folder', value: repo || '', 'aria-label': 'Repository' });
-  const form = h('form', { onsubmit: (e) => { e.preventDefault(); try { location.hash = link(parseRepo(input.value)); } catch (err) { view.replaceChildren(errBox(err)); } } }, input, h('button', { icon: 'arrow-right' }, 'Open'));
+  const form = h('form', { onsubmit: (e) => { e.preventDefault(); try { location.hash = link(parseRepo(input.value)); } catch (err) { view.replaceChildren(errBox(err)); } } }, input, h('button', { icon: 'arrow-right' }, ''));
   const auth = gh.token
     ? h('span', { class: 'signed', title: login ? `Signed in as ${login}` : 'Signed in' }, icon('user'), h('span', { class: 'who' }, login || 'Signed in'), h('button', { type: 'button', class: 'icon-btn', icon: 'log-out', title: 'Sign out', 'aria-label': 'Sign out', onclick: () => signOut() }))
     : h('button', { type: 'button', class: 'primary', icon: 'log-in', onclick: () => signInDialog() }, 'Sign in to edit');
@@ -182,6 +182,7 @@ function signInDialog() {
 // ---------- routing ----------
 
 let seq = 0;
+let asking = false; // a whoami request is in flight
 async function route() {
   const mine = ++seq;
   const r = parseHash();
@@ -189,10 +190,14 @@ async function route() {
   renderLedger(net.ledger);
   document.title = 'blog.webcli.app';
   view.replaceChildren(progressLine('Loading…'));
+  // the header names the user on every page, the start page included
+  if (gh.token && !login && !asking) {
+    asking = true;
+    gh.whoami().then((u) => { login = u.login; renderTop(parseHash().repo, parseHash().ref); }, () => {}).finally(() => { asking = false; });
+  }
   try {
     if (!r.repo) return home();
     const repo = parseRepo(r.repo);
-    if (gh.token && !login) gh.whoami().then((u) => { login = u.login; renderTop(r.repo, r.ref); }, () => {});
     if (!cache || cache.repo !== repo || cache.ref !== r.ref) cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
     if (mine !== seq) return;
     let node;
