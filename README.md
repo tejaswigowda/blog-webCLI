@@ -1,4 +1,4 @@
-# blog.webcli.app
+# blog-webCLI
 
 A blog is one or more GitHub repositories. `https://blog.webcli.app/#repo=owner/blog`
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
