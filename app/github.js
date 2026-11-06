@@ -196,17 +196,30 @@ export class GitHub {
 
   // files: [{ path, content: string | Uint8Array } | { path, delete: true }]
   async commit(repo, { branch, parent, baseTree, files, message, newBranch = false, onProgress = () => {} }) {
-    const entries = [];
-    let done = 0;
-    for (const f of files) {
-      onProgress(done++, files.length);
-      if (f.delete) entries.push({ path: f.path, mode: '100644', type: 'blob', sha: null });
-      else if (typeof f.content === 'string') entries.push({ path: f.path, mode: '100644', type: 'blob', content: f.content });
-      else {
-        const blob = await this.api('POST', `/repos/${repo}/git/blobs`, { content: toBase64(f.content), encoding: 'base64' });
-        entries.push({ path: f.path, mode: '100644', type: 'blob', sha: blob.sha });
+    // Small text goes into the tree request itself; binaries, and text past about 2 MB in all, become blobs of their own,
+    // a few at a time, so a large import is neither one enormous request nor one request after another.
+    let budget = 2_000_000;
+    const inline = files.map((f) => {
+      if (f.delete || typeof f.content !== 'string' || f.content.length > budget) return false;
+      budget -= f.content.length;
+      return true;
+    });
+    const entries = new Array(files.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < files.length) {
+        const i = next++;
+        const f = files[i];
+        onProgress(i, files.length); // as before: how many were started before this one
+        if (f.delete) entries[i] = { path: f.path, mode: '100644', type: 'blob', sha: null };
+        else if (inline[i]) entries[i] = { path: f.path, mode: '100644', type: 'blob', content: f.content };
+        else {
+          const blob = await this.api('POST', `/repos/${repo}/git/blobs`, typeof f.content === 'string' ? { content: f.content, encoding: 'utf-8' } : { content: toBase64(f.content), encoding: 'base64' });
+          entries[i] = { path: f.path, mode: '100644', type: 'blob', sha: blob.sha };
+        }
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, files.length) }, worker));
     const tree = await this.api('POST', `/repos/${repo}/git/trees`, { base_tree: baseTree, tree: entries });
     const commit = await this.api('POST', `/repos/${repo}/git/commits`, { message, tree: tree.sha, parents: [parent] });
     if (newBranch) await this.api('POST', `/repos/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: commit.sha });

@@ -109,6 +109,68 @@ as they are (for example an image that is not pinned) the creation is refused wi
 An existing `blog.json` is never replaced. The repository itself must already exist and have
 one commit (GitHub cannot write to an empty one); the app tells you when it does not.
 
+## Importing from WordPress
+
+On the home page, **Import from WordPress** (`#import`) takes a WordPress blog, or several, into a GitHub repository: every post, page and
+draft as markdown, every picture in an `images` folder, and a blog.webcli.app blog around them. A four-step wizard:
+
+1. **Sources.** Choose WordPress's own export file (*Tools → Export → All content*, an `.xml` file), one for each blog; the file is read in
+   the browser and is not sent anywhere. Or give a live site's address: its public REST API (`/wp-json/wp/v2`) is read instead, which gives
+   only published posts and pages and only works when the site lets other web pages read it. An export always works and includes drafts.
+2. **Blogs.** What was found (posts, drafts, pages, media files, and any other content type, which is named and not imported); each blog's
+   title, description, author and folder can be changed. With several blogs each goes in a folder of one repository. Options: import drafts (as
+   drafts), and import every picture in the media library, not only the ones posts use.
+3. **Pictures.** The pictures are fetched from the old site (four at a time, by this page, with no cookie, no token and no referrer), the text
+   is converted, and a list says what could not be kept. Nothing is uploaded yet.
+4. **Commit.** Name a repository you can write to (`owner/name`, or `owner/name/folder` to put every blog below a folder). The usual
+   pre-flight lists exactly what will be sent. Then one commit holds the pictures and a second holds the blogs, regenerated with those pictures
+   pinned, so what is committed is what CI would regenerate. An existing `blog.json` is never replaced.
+
+**What becomes what**
+
+| WordPress | here |
+|---|---|
+| a published post | `posts/<slug>.md`, `status: published`, `date` the post's own date (not the import's) |
+| a draft, pending, scheduled or private post | the same with `status: draft` (and a note); trash and auto-drafts are skipped |
+| a page | `pages/<slug>.md`; a page that is in a navigation menu gets `menu: <position>` |
+| tags and categories | `tags` ("Uncategorized" is dropped) |
+| the featured image | `cover: asset:images/…` |
+| the excerpt, when there is one | `description` |
+| the post's author | `author`, only where it differs from the blog's (the author of most posts) |
+| the post's slug | the slug; changed (and noted) only if it is empty, already used, or a path this app reserves |
+| a picture on the old site, in a post or in the media library | `images/wp/<its path under wp-content/uploads>`, named in posts as `asset:images/wp/…` and pinned |
+| a link from one imported post to another | rewritten to the new page (`../<slug>/`) |
+| comments, plugins' content types (products, forms…), widgets, themes | not imported; the types are counted and named in the review |
+
+The text is converted to what the editor can say, which is what markdown can say: paragraphs, headings (to level 3; deeper ones become level
+3), bold, italic, strike, inline code, links, images, lists, quotes and code blocks. A line break becomes a new paragraph. Anything else is reduced to
+its words, and the review names it per file: a table becomes lines of text with ` | ` between cells, an embedded video or iframe becomes a link, a
+`[gallery]` becomes its pictures, `[caption]` keeps its picture and words, other shortcodes are dropped, colours and fonts are dropped. Every
+file is checked to survive `md → Delta → md` byte for byte, as every post is, and one that cannot be is imported as plain paragraphs and
+noted. A picture hosted on another site is left linked there, not copied.
+
+**Pictures and what a website allows.** A browser page may read another site's file only if that site allows it (CORS). A site with a CDN in
+front often does; many do not, and a WordPress REST API may refuse a page without an origin. A picture that cannot be read keeps its address
+on the old site, so nothing breaks while that site is up, and the review says how many and why. For every picture, use the command line, which a
+website's CORS policy does not limit:
+
+```
+node cli/blog.js import wp export.xml my-blog --repo me/site/blog      # or a site address: import wp https://example.com …
+```
+
+It writes `blog.json`, `posts/`, `pages/` and `images/` and nothing else (options `--domain`, `--no-drafts`, `--no-library`); push the pictures,
+then run `blog-webcli pin` (the pin is the commit the pictures are in) and `build`. The images folder sits beside a blog that has a folder of
+its own, and inside a blog at the top of a repository.
+
+**What the browser is allowed.** To fetch another site's files the editor's content-security policy lets the page read any `https:` address
+(it already allowed images from any `https:` address). Those requests are made by one function (`fetchRemote` in [app/net.js](app/net.js)):
+https only (or this machine, for tests), no credentials, no referrer, a size limit, counted in the egress ledger, and never given the token.
+What comes back is never run and never put into the page as markup: a picture is accepted only if its first bytes say PNG, JPEG, GIF, WebP or AVIF
+(never an SVG, whatever the server called it) and is then only sent to GitHub as a blob. The export file is read by a small XML reader
+([lib/xml.js](lib/xml.js)) that skips a DOCTYPE and never expands an entity it declares.
+
+The wizard keeps what it has read and fetched until you reload the page (signing in does not lose it); *Start over* clears it.
+
 ## The /blog/ reader
 
 `https://blog.webcli.app/blog/` is a read-only page: no editor, no sign-in, no token, a strict
@@ -1024,6 +1086,7 @@ node cli/blog.js theme import <wordpress-slug> [outdir]    ingest a wordpress.or
 node cli/blog.js ext add owner/repo[/folder]@ref [dir]     pin an extension (fetched as data and hashed; never run)
 node cli/blog.js ext remove owner/repo [dir]
 node cli/blog.js licences [dir]                            every licence the blog depends on
+node cli/blog.js import wp <export.xml | https://site> [dir] --repo owner/name[/folder]   a WordPress blog as files (see Importing from WordPress)
 node cli/serve.js [dir] [port] static server for local preview
 ```
 
@@ -1084,7 +1147,8 @@ upload, and nothing is uploaded until you confirm.
 * Sign in with a **fine-grained** token (see [Token permissions](#token-permissions)).
   Classic `ghp_` tokens are refused. The token is held per tab unless you tick "remember"
   (then `localStorage`).
-* The page has a strict CSP and never inserts blog content except through the escaping
+* The page has a strict CSP (scripts only from this origin; it may read `https:` addresses only so the WordPress import can fetch
+  pictures, see [Importing from WordPress](#importing-from-wordpress)) and never inserts blog content except through the escaping
   renderer, because blog content is untrusted and shares an origin with the token.
 * **Egress ledger** (footer): *uploaded* is a count of non-GET request bytes and reads 0
   until you publish; *read* covers listing and rendering. Before sending, a pre-flight
@@ -1113,7 +1177,7 @@ upload, and nothing is uploaded until you confirm.
 `draft-in-publish` · `classic-token` · `unpinned-ref` · `pin-mismatch` · `bad-theme` · `bad-extension` ·
 `no-licence` · `bad-licence` · `not-in-directory` · `extension-output-missing` · `extension-failed` ·
 `unsafe-extension-output` · `bad-release` · `unknown-slug-in-order` · `duplicate-slug-in-order` · `bad-order-list` ·
-`missing-order-field` · `mixed-order-field-types` · `bad-order-field`. A build that is refused writes nothing.
+`missing-order-field` · `mixed-order-field-types` · `bad-order-field` · `bad-wp-export` · `bad-wp-site` · `import-refused`. A build that is refused writes nothing.
 
 ## Gates
 
@@ -1170,12 +1234,22 @@ upload, and nothing is uploaded until you confirm.
 | S7 standalone pages: no date or tags, in the menu by position, in no index, feed or search; drafts invisible; one address space | `test/features.test.js`, `test/features-app.test.js`, `test/e2e/features.e2e.mjs` |
 | S8 every feature on, the live renderer's post is byte-identical to the generator's; regenerating in any input order is byte-identical | `test/features.test.js` |
 | S9 turning a feature off deletes what it wrote, in the editor's pre-flight and in the CLI; `check` finds a stale file | `test/features-app.test.js` |
+| W1 a WordPress export reads into posts, pages, drafts, tags, authors, the menu and the library; trash and other types are not imported; a DOCTYPE entity is never expanded | `test/wp-content.test.js` |
+| W2 every imported file is canonical markdown (`md → Delta → md` byte-identical), builds, and says what was flattened | `test/wp-content.test.js` |
+| W3 pictures: only PNG/JPEG/GIF/WebP/AVIF by their bytes, never an SVG; a failed one stays linked to the old site and is said; nothing identifying is sent | `test/wp-content.test.js`, `test/wp-import-app.test.js`, `test/wp-cli.test.js` |
+| W4 two exports become two blogs in one repository: pictures in one commit, blogs in a second, pinned, regenerable; an existing blog is never replaced | `test/wp-import-app.test.js` |
+| W5 the wizard, from the home page to a commit, in real Chrome against a cross-origin old site | `test/e2e/import.e2e.mjs` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves
 every named import, so a renamed export cannot silently break the browser-only modules.
 
 ## Known limits
+
+* **WordPress import:** pictures on a site that does not allow cross-origin reads cannot be fetched by the browser (use the CLI); the REST
+  fallback sees only published posts and pages; a line break inside a paragraph becomes a new paragraph; comments, forms, products and other
+  plugins' content are not imported; links to pages that are not imported still point at the old site; a post's old permalink structure is not
+  kept (the new address is `/<slug>/`, so keep the old site up, or redirect, for links from elsewhere).
 
 * A **new standalone page** is not drawn before the Pages build the way a new post is: the live script's 404 path reads
   `posts/<slug>.md`, so `/about/` is a 404 until the build finishes. An edited page, like any page, shows what was built.

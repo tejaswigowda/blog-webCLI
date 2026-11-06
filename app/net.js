@@ -38,7 +38,31 @@ export function createNet(fetchImpl = (...a) => globalThis.fetch(...a)) {
     };
   }
 
-  return { request, ledger, subscribe: (fn) => (listeners.add(fn), () => listeners.delete(fn)) };
+  // Another site's file (a WordPress image or its REST API): read-only, never given a token, a cookie or a referrer, and
+  // refused unless it is an https address (or this machine, for testing). Counted in the ledger like every other read.
+  async function fetchRemote(url, { max = Infinity } = {}) {
+    let u;
+    try {
+      u = new URL(url);
+    } catch {
+      throw new Error(`"${url}" is not a web address`);
+    }
+    const loopback = u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]');
+    if (u.protocol !== 'https:' && !loopback) throw new Error('only https addresses can be read');
+    const res = await fetchImpl(u.href, { method: 'GET', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'follow' });
+    const declared = Number(res.headers && res.headers.get && res.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > max) throw new Error(`it is ${fmtBytes(declared)}, more than the ${fmtBytes(max)} allowed`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    ledger.read.bytes += bytes.length;
+    ledger.read.requests += 1;
+    ledger.log.push({ method: 'GET', url: `${u.origin}${u.pathname}`, up: 0, down: bytes.length, status: res.status });
+    if (ledger.log.length > 500) ledger.log.shift();
+    emit();
+    if (bytes.length > max) throw new Error(`it is ${fmtBytes(bytes.length)}, more than the ${fmtBytes(max)} allowed`);
+    return { status: res.status, ok: res.ok, headers: res.headers, bytes, text: () => new TextDecoder().decode(bytes), json: () => JSON.parse(new TextDecoder().decode(bytes)) };
+  }
+
+  return { request, fetchRemote, ledger, subscribe: (fn) => (listeners.add(fn), () => listeners.delete(fn)) };
 }
 
 export function fmtBytes(n) {

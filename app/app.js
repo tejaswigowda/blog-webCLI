@@ -28,6 +28,7 @@ import { blogToForm, formToBlog } from '../lib/settings.js';
 import { validateBlog } from '../lib/blog.js';
 import { indexBody } from '../lib/contracts.js';
 import { loadPinnedTheme } from './packs.js';
+import { createImportView } from './import-view.js';
 
 const net = createNet();
 // Extensions run only here, at publish, in a sandbox that has no DOM, no network and no token.
@@ -192,7 +193,7 @@ function errBox(e) {
 
 const parseHash = () => {
   const p = new URLSearchParams(location.hash.slice(1));
-  const mode = p.has('themes') ? 'themes' : p.has('extensions') ? 'extensions' : p.has('licences') ? 'licences' : p.has('settings') ? 'settings' : p.has('new') || p.has('newpage') ? 'new' : p.has('correct') || p.has('correctpage') ? 'correct' : p.has('edit') || p.has('editpage') ? 'edit' : null;
+  const mode = p.has('import') ? 'import' : p.has('themes') ? 'themes' : p.has('extensions') ? 'extensions' : p.has('licences') ? 'licences' : p.has('settings') ? 'settings' : p.has('new') || p.has('newpage') ? 'new' : p.has('correct') || p.has('correctpage') ? 'correct' : p.has('edit') || p.has('editpage') ? 'edit' : null;
   // a standalone page (pages/<slug>.md) is edited, or corrected by pull request, with the same editor as a post
   const kind = p.has('newpage') || p.has('editpage') || p.has('correctpage') ? 'page' : 'post';
   return { repo: p.get('repo'), post: p.get('post') || p.get('edit') || p.get('editpage') || p.get('correct') || p.get('correctpage'), ref: p.get('ref') || undefined, mode, kind };
@@ -269,6 +270,7 @@ function signInDialog() {
 // ---------- routing ----------
 
 let seq = 0;
+let importer = null; // the WordPress import wizard keeps its state for the life of the page
 let asking = false; // a whoami request is in flight
 async function route() {
   const mine = ++seq;
@@ -283,6 +285,12 @@ async function route() {
     gh.whoami().then((u) => { login = u.login; renderTop(parseHash().repo, parseHash().ref); }, () => {}).finally(() => { asking = false; });
   }
   try {
+    if (r.mode === 'import') {
+      document.title = 'Import from WordPress · blog.webcli.app';
+      importer ||= createImportView({ h, nav, gh, net, link, fmtBytes, working, confirmPlan, sent, fail, toast, signInDialog, icon });
+      view.replaceChildren(importer());
+      return;
+    }
     if (!r.repo) return home();
     const repo = parseRepo(r.repo);
     if (!cache || cache.repo !== repo || cache.ref !== r.ref) cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
@@ -312,6 +320,10 @@ function home() {
     h('h1', {}, 'A blog is a GitHub repository'),
     h('p', {}, 'Open any blog with ', h('code', {}, '#repo=owner/blog'), ', or ', h('code', {}, '#repo=owner/repo/folder'), ' when the blog lives in a folder of a repository it shares with its images or videos. Posts are markdown with frontmatter, assets live in their own repositories or folders, and publishing commits the markdown and regenerates plain static pages, an index and a feed.'),
     h('p', { class: 'muted' }, 'Nothing is hosted here and nothing is uploaded until you publish. The egress ledger below counts every byte.'),
+    h('div', { class: 'card' }, h('div', { class: 'card-header' }, 'Coming from WordPress?'), h('div', { class: 'card-body' },
+      h('p', {}, 'Bring a WordPress blog (or several) into a GitHub repository: every post, page and draft as markdown, every picture in an images folder, and a blog.webcli.app blog around them. You choose an export file; nothing is sent until you have seen the pre-flight.'),
+      h('div', { class: 'actions' }, nav('Import from WordPress', '#import', { class: 'primary', icon: 'upload' })),
+    )),
   );
 }
 
@@ -1486,10 +1498,14 @@ function confirmPlan(plan) {
       resolve(answer);
     };
     // replaceChildren(null) inserts the text "null": leave out what is not there
+    // an import can be thousands of files: the list shows the first of them, the totals above it are for all
+    const rows = [...plan.assetGroups.flatMap((g) => g.files.map((x) => ({ ...x, repo: g.repo }))), ...plan.changes.map((c) => ({ ...c, repo: plan.repo }))];
+    const SHOWN = 300;
     dlg.replaceChildren(...[
       h('h2', {}, 'Ready to send'),
       h('div', { class: 'preflight' }, describePlan(plan).map((l) => h('div', {}, l))),
-      h('div', { class: 'files' }, [...plan.assetGroups.flatMap((g) => g.files.map((x) => ({ ...x, repo: g.repo }))), ...plan.changes.map((c) => ({ ...c, repo: plan.repo }))].map((c) => h('div', {}, `${c.action.padEnd(6)} ${c.repo}/${c.path}  ${fmtBytes(c.size)}`))),
+      plan.headline ? h('div', { class: 'preflight' }, plan.headline.map((l) => h('div', {}, l))) : null,
+      h('div', { class: 'files' }, rows.slice(0, SHOWN).map((c) => h('div', {}, `${c.action.padEnd(6)} ${c.repo}/${c.path}  ${fmtBytes(c.size)}`)), rows.length > SHOWN ? h('div', { class: 'muted' }, `… and ${rows.length - SHOWN} more files`) : null),
       plan.licences ? h('div', {}, h('h3', {}, 'Licences this blog will depend on'), h('div', { class: 'files' }, plan.licences.map((l) => h('div', {}, `${l.kind.padEnd(10)} ${l.name} ${l.version || ''}  ${l.licence}${l.repo ? `  ${l.repo}@${l.ref}` : '  (built in)'}`)))) : null,
       buildNote(plan),
       plan.unlisted && plan.unlisted.length ? h('div', { class: 'caution' }, `${plan.unlisted.length === 1 ? 'This post is' : `${plan.unlisted.length} published posts are`} not in ${plan.orderFile || 'the order list'}, so ${plan.unlisted.length === 1 ? 'it' : 'they'} will be added at the end, by date: ${plan.unlisted.join(', ')}. Add ${plan.unlisted.length === 1 ? 'it' : 'them'} to ${plan.orderFile || 'the list'} to place ${plan.unlisted.length === 1 ? 'it' : 'them'}.`) : null,

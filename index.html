@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0d0f1a">
 <!-- Blog content is untrusted and shares an origin with the token: no inline script, no foreign scripts. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https: data: blob:; font-src 'self' data:; frame-src 'self' https:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://cdn.jsdelivr.net; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src https: data: blob:; font-src 'self' data:; frame-src 'self' https:; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; base-uri 'none'; form-action 'none'">
 <title>blog.webcli.app</title>
 <meta name="description" content="A blog is a GitHub repository. Open one with #repo=owner/blog.">
 <link rel="stylesheet" href="vendor/quill/quill.snow.css">

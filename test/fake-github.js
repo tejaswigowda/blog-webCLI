@@ -103,7 +103,7 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds 
         return json({ truncated: false, tree: [...t].map(([path, e]) => ({ path, type: 'blob', sha: e.sha })) });
       }
       if (rest[1] === 'blobs') {
-        const e = await entry(Uint8Array.from(atob(b.content), (c) => c.charCodeAt(0)));
+        const e = await entry(b.encoding === 'utf-8' ? b.content : Uint8Array.from(atob(b.content), (c) => c.charCodeAt(0)));
         S.blobs[e.sha] = e;
         return json({ sha: e.sha }, 201);
       }

@@ -10,6 +10,7 @@
 //   ext add <owner/repo[/folder]@ref> [dir]     pin an extension (fetched as data and hashed; never run here)
 //   ext remove <owner/repo> [dir]
 //   licences [dir]                              every licence the blog depends on
+//   import wp <export.xml | https://site> [dir] --repo owner/name[/folder]   a WordPress blog's posts, pages and pictures, as files
 //
 // This tool never executes extension code. Extension output is recorded data (extension-outputs.json),
 // written when you publish from the editor, where extensions run in a sandbox.
@@ -23,6 +24,7 @@ import { loadPacks, readExtensionToPin, readThemeToPin } from '../app/packs.js';
 import { parseOutputsFile } from '../lib/extensions.js';
 import { blogJsonText } from '../lib/init.js';
 import { licenceRecords } from '../lib/licences.js';
+import { importWordPress } from './wp-content-import.js';
 import { importWordPressTheme } from './wp-import.js';
 import { splitFile, joinFile } from '../lib/frontmatter.js';
 import { deltaToMd, mdToDelta } from '../lib/markdown.js';
@@ -296,9 +298,9 @@ async function licences(dir) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const commands = { build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.') };
+const commands = { build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
 if (!commands[cmd]) {
-  console.error('usage: blog-webcli <build|check|fmt|pin|theme|ext|licences> …');
+  console.error('usage: blog-webcli <build|check|fmt|pin|theme|ext|licences|import> …');
   process.exit(2);
 }
 try {
