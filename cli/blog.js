@@ -4,10 +4,26 @@
 //   check [dir]   regenerate in memory and fail on any difference (CI, gate B8)
 //   fmt   [dir]   rewrite posts into canonical markdown
 //   pin   [dir]   pin unpinned asset: references to commits, and verify video: release tags, via the GitHub API
+//   theme pin <owner/repo[/folder]@ref> [dir]   pin a theme (a tag or commit; a branch is refused)
+//   theme clear [dir]                           go back to the built-in theme
+//   theme import <wordpress-slug> [outdir]      turn a wordpress.org directory theme into a theme repository
+//   ext add <owner/repo[/folder]@ref> [dir]     pin an extension (fetched as data and hashed; never run here)
+//   ext remove <owner/repo> [dir]
+//   licences [dir]                              every licence the blog depends on
+//
+// This tool never executes extension code. Extension output is recorded data (extension-outputs.json),
+// written when you publish from the editor, where extensions run in a sandbox.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Refusal } from '../lib/errors.js';
 import { buildSite, GENERATED_MARK, validateBlog, parsePost } from '../lib/blog.js';
+import { createNet } from '../app/net.js';
+import { GitHub } from '../app/github.js';
+import { loadPacks, readExtensionToPin, readThemeToPin } from '../app/packs.js';
+import { parseOutputsFile } from '../lib/extensions.js';
+import { blogJsonText } from '../lib/init.js';
+import { licenceRecords } from '../lib/licences.js';
+import { importWordPressTheme } from './wp-import.js';
 import { splitFile, joinFile } from '../lib/frontmatter.js';
 import { deltaToMd, mdToDelta } from '../lib/markdown.js';
 import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
@@ -30,13 +46,27 @@ async function load(dir) {
   }
   const lp = path.join(dir, 'assets.lock.json');
   const lock = (await exists(lp)) ? JSON.parse(await fs.readFile(lp, 'utf8')) : {};
-  return { blog, posts, lock };
+  const op = path.join(dir, 'extension-outputs.json');
+  const outputs = parseOutputsFile((await exists(op)) ? await fs.readFile(op, 'utf8') : null);
+  return { blog, posts, lock, outputs };
 }
 
+// Anonymous GitHub reads, for fetching a pinned theme or extension as data.
+const github = () => new GitHub(createNet((...a) => globalThis.fetch(...a)));
+
 async function generate(dir) {
-  const { blog, posts, lock } = await load(dir);
-  return buildSite({ blog, posts, lock });
+  const { blog, posts, lock, outputs } = await load(dir);
+  const validated = validateBlog(blog);
+  let packs = { theme: null, extensions: [] };
+  if ((validated.theme && typeof validated.theme === 'object') || (validated.extensions || []).length) {
+    console.log('fetching the pinned theme and extensions (as data) …');
+    packs = await loadPacks(github(), validated);
+  }
+  return buildSite({ blog, posts, lock, ...packs, outputs });
 }
+
+// Generated files that exist only while a theme or extensions are in use.
+const OPTIONAL = ['theme.css', 'extension-outputs.json'];
 
 async function staleDirs(dir, expected) {
   const out = [];
@@ -68,6 +98,10 @@ async function build(dir) {
     await fs.rm(path.dirname(path.join(dir, rel)), { recursive: true });
     console.log(`removed stale ${rel}`);
   }
+  for (const f of OPTIONAL) if (!expected.has(f) && (await exists(path.join(dir, f)))) {
+    await fs.rm(path.join(dir, f));
+    console.log(`removed stale ${f}`);
+  }
   console.log(`built ${r.index.length} published post(s), ${expected.size} file(s)`);
   return 0;
 }
@@ -85,6 +119,7 @@ async function check(dir) {
     else if (have !== content) diffs.push(`differs  ${rel}`);
   }
   for (const rel of await staleDirs(dir, expected)) diffs.push(`stale    ${rel}`);
+  for (const f of OPTIONAL) if (!expected.has(f) && (await exists(path.join(dir, f)))) diffs.push(`stale    ${f}`);
   if (diffs.length) {
     console.error('generated output is out of date — run `blog-webcli build` and commit:\n  ' + diffs.join('\n  '));
     return 1;
@@ -152,14 +187,80 @@ async function pin(dir) {
   return 0;
 }
 
-const [cmd, dirArg] = process.argv.slice(2);
-const commands = { build, check, fmt, pin };
+// "owner/repo[/folder]@ref" -> { where, ref }
+function splitAt(spec) {
+  const i = (spec || '').lastIndexOf('@');
+  if (i < 1 || i === spec.length - 1) throw new Refusal('unpinned-ref', `write it as owner/repo@<tag or commit>, got "${spec}"; a pin always names a ref`);
+  return { where: spec.slice(0, i), ref: spec.slice(i + 1) };
+}
+
+async function writeBlogJson(dir, mutate) {
+  const file = path.join(dir, 'blog.json');
+  if (!(await exists(file))) throw new Refusal('no-blog-json', `no blog.json in ${path.resolve(dir)}`);
+  const blog = JSON.parse(await fs.readFile(file, 'utf8'));
+  mutate(blog);
+  validateBlog(blog);
+  await fs.writeFile(file, blogJsonText(blog));
+}
+
+async function theme(args) {
+  const [sub, a, b] = args;
+  if (sub === 'pin') {
+    const { where, ref } = splitAt(a);
+    const { pin, manifest } = await readThemeToPin(github(), where, ref);
+    await writeBlogJson(b || '.', (blog) => { blog.theme = pin; });
+    console.log(`pinned theme ${manifest.name} ${manifest.version} (${manifest.licence}) — ${pin.repo}@${pin.ref}\nsha256 ${pin.sha256}\nnow run: blog-webcli build`);
+    return 0;
+  }
+  if (sub === 'clear') {
+    await writeBlogJson(a || '.', (blog) => { delete blog.theme; });
+    console.log('theme cleared; run: blog-webcli build');
+    return 0;
+  }
+  if (sub === 'import') {
+    return importWordPressTheme(a, b || `theme-${a}`);
+  }
+  console.error('usage: blog-webcli theme <pin owner/repo@ref [dir] | clear [dir] | import slug [outdir]>');
+  return 2;
+}
+
+async function ext(args) {
+  const [sub, a, b] = args;
+  if (sub === 'add') {
+    const { where, ref } = splitAt(a);
+    const { pin, manifest } = await readExtensionToPin(github(), where, ref, { fetchAsset: async (url) => { const r = await fetch(url); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } });
+    await writeBlogJson(b || '.', (blog) => {
+      blog.extensions = [...(blog.extensions || []).filter((e) => e.repo !== pin.repo), pin];
+    });
+    console.log(`pinned extension ${manifest.name} ${manifest.version} (${manifest.licence}, ${manifest.kind}; hooks ${manifest.hooks.join(', ')}) — ${pin.repo}@${pin.ref}\nIt has not been run. Publish from the editor to run it in the sandbox and record its output.`);
+    return 0;
+  }
+  if (sub === 'remove') {
+    await writeBlogJson(b || '.', (blog) => {
+      blog.extensions = (blog.extensions || []).filter((e) => e.repo !== a);
+      if (!blog.extensions.length) delete blog.extensions;
+    });
+    console.log(`removed ${a}; run: blog-webcli build`);
+    return 0;
+  }
+  console.error('usage: blog-webcli ext <add owner/repo@ref [dir] | remove owner/repo [dir]>');
+  return 2;
+}
+
+async function licences(dir) {
+  const { blog } = await load(dir);
+  for (const r of licenceRecords(validateBlog(blog))) console.log(`${r.kind.padEnd(10)} ${String(r.name).padEnd(28)} ${String(r.version || '').padEnd(10)} ${r.licence}${r.repo ? `   ${r.repo}@${r.ref}` : '   (built in)'}`);
+  return 0;
+}
+
+const [cmd, ...rest] = process.argv.slice(2);
+const commands = { build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.') };
 if (!commands[cmd]) {
-  console.error('usage: blog-webcli <build|check|fmt|pin> [dir]');
+  console.error('usage: blog-webcli <build|check|fmt|pin|theme|ext|licences> …');
   process.exit(2);
 }
 try {
-  process.exitCode = await commands[cmd](dirArg || '.');
+  process.exitCode = await commands[cmd]();
 } catch (e) {
   if (e instanceof Refusal) {
     console.error(`refused: ${e.message}`);

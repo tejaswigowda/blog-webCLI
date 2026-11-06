@@ -2,11 +2,13 @@
 // Read-only and anonymous. If the blog cannot be loaded it points at the static site.
 import { createNet, fmtBytes } from '../app/net.js';
 import { GitHub } from '../app/github.js';
-import { NotFound, loadIndex, loadPost } from '../app/site.js';
+import { NotFound, loadIndex, loadPost } from '../app/read.js';
 import { hashFor, isTrustedHost, normalizeBlogUrl, openBlog, parseReaderHash, staticAddress, staticPostUrl } from '../app/reader-core.js';
-import { postArticle, postList, siteFooter, siteHeader } from '../lib/page.js';
+import { indexBody, postBody } from '../lib/contracts.js';
 import { escapeHtml as esc } from '../lib/html.js';
 import { resolveLogo, themeCss } from '../lib/customize.js';
+import { checkPublishedCss } from '../lib/theme-pack.js';
+import { at } from '../lib/reporef.js';
 import { resolveAsset } from '../lib/assets.js';
 import { THEMES } from '../lib/theme.js';
 import { Refusal } from '../lib/errors.js';
@@ -14,7 +16,7 @@ import { parseRepoRef } from '../lib/reporef.js';
 
 const net = createNet();
 const gh = new GitHub(net); // anonymous on purpose: a reader holds no token
-const page = document.getElementById('page');
+const page = document.getElementById('reader');
 const theme = document.getElementById('theme');
 theme.textContent = THEMES.default;
 
@@ -76,6 +78,7 @@ async function route() {
   const mine = ++seq;
   const parsed = parseReaderHash(location.hash);
   document.title = 'blog.webcli.app/blog';
+  document.body.className = '';
   theme.textContent = THEMES.default;
   if (!parsed.repo && !parsed.blogUrl) return home();
   if (!parsed.repo) {
@@ -92,8 +95,22 @@ async function route() {
     const ctx = await openBlog(gh, parsed);
     blog = ctx.blog;
     if (mine !== seq) return;
-    theme.textContent = themeCss(blog);
     const repo = parseRepoRef(parsed.repo).ref;
+    const contract = (blog.theme && typeof blog.theme === 'object' && blog.theme.contract) || 'blog-webcli-v1';
+    let themeNote = '';
+    theme.textContent = themeCss(blog);
+    if (blog.theme && typeof blog.theme === 'object') {
+      // The blog's own committed copy of its theme (data in the blog's repository). The reader never
+      // fetches a theme repository and runs nothing; the css is checked before it is applied.
+      try {
+        const { repo: plain, folder } = parseRepoRef(repo);
+        const css = await gh.readText(plain, at(folder, 'theme.css'), parsed.ref);
+        if (css === null) throw new Error('the blog has not published its theme.css yet');
+        theme.textContent = checkPublishedCss(css);
+      } catch (e) {
+        themeNote = notice(`The theme could not be applied (${esc(e.detail || e.message)}); showing the default style.`, true);
+      }
+    }
     const linkHome = hashFor(parsed);
     let logoUrl = null;
     try {
@@ -101,7 +118,11 @@ async function route() {
     } catch {
       /* an unresolved logo is simply not shown */
     }
-    const header = siteHeader(blog, { home: linkHome, feed: `${blog.domain}/feed.xml`, logoUrl });
+    const chrome = { blog, home: linkHome, feed: `${blog.domain}/feed.xml`, logoUrl };
+    const show = (b) => {
+      document.body.className = b.bodyClass;
+      page.innerHTML = themeNote + b.html;
+    };
 
     if (parsed.post) {
       let loaded;
@@ -109,30 +130,30 @@ async function route() {
         loaded = await loadPost(gh, repo, parsed.post, parsed.ref, ctx);
       } catch (e) {
         if (!(e instanceof NotFound)) throw e;
-        if (mine === seq) page.innerHTML = `${header}${notice(`No such post. <a href="${esc(linkHome)}">Back to ${esc(blog.title)}</a>`)}${siteFooter(blog)}`;
+        if (mine === seq) show(indexBody(contract, { ...chrome, entries: [], hrefFor: () => linkHome, indexHtml: notice(`No such post. <a href="${esc(linkHome)}">Back to ${esc(blog.title)}</a>`) }));
         return;
       }
       if (mine !== seq) return;
       let coverUrl = null;
       try {
-        if (loaded.post.meta.cover) coverUrl = resolveAsset(loaded.post.meta.cover, blog, ctx.lock);
+        if (loaded.post.meta.cover && loaded.post.meta.cover !== 'auto') coverUrl = resolveAsset(loaded.post.meta.cover, blog, ctx.lock); // an automatic cover is the share preview, not drawn
       } catch {
         /* an unresolved cover is simply not shown */
       }
       document.title = `${loaded.post.meta.title} · ${blog.title}`;
-      const extra = [
+      const footerExtra = [
         `<a href="${esc(linkHome)}">← ${esc(blog.title)}</a>`,
         `<a href="../#repo=${esc(repo)}&amp;correct=${esc(parsed.post)}" rel="nofollow">Suggest a correction</a>`,
         `<a href="${esc(staticPostUrl(blog.domain, parsed.post))}" rel="noopener noreferrer">Static page</a>`,
       ].join(' · ');
-      page.innerHTML = `${header}${postArticle({ blog, meta: loaded.post.meta, bodyHtml: loaded.html, coverUrl })}${siteFooter(blog, extra)}`;
+      show(postBody(contract, { ...chrome, meta: loaded.post.meta, bodyHtml: loaded.html, coverUrl, footerExtra }));
       return;
     }
 
     const entries = await loadIndex(gh, repo, parsed.ref);
     if (mine !== seq) return;
     document.title = blog.title;
-    page.innerHTML = `${header}<h1>${esc(blog.title)}</h1><p class="meta">${esc(blog.description)}</p>${entries.length ? postList(entries, blog, (slug) => hashFor(parsed, { post: slug })) : '<p class="meta">No published posts yet.</p>'}${siteFooter(blog)}`;
+    show(indexBody(contract, { ...chrome, entries, hrefFor: (slug) => hashFor(parsed, { post: slug }), indexHtml: entries.length ? undefined : '<p class="meta">No published posts yet.</p>' }));
   } catch (e) {
     if (mine === seq) failsafe(parsed, blog, e);
   }

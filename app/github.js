@@ -49,9 +49,11 @@ export async function gitBlobSha(bytes) {
 }
 
 export class GitHub {
-  constructor(net, { token = null } = {}) {
+  constructor(net, { token = null, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
     this.net = net;
     this.token = token;
+    this.wait = wait;
+    this.onWait = null; // (seconds) => void, told when a write is being retried after a rate limit
   }
 
   headers(extra = {}) {
@@ -60,7 +62,24 @@ export class GitHub {
     return h;
   }
 
+  // GitHub throttles content creation (a secondary rate limit, answered 403 or 429). A video upload is
+  // many blobs, so wait it out and retry the same request, as hls.webcli.app does, rather than fail
+  // halfway through. Reads and other errors are not retried.
   async api(method, path, body) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.request(method, path, body);
+      } catch (e) {
+        const limited = method !== 'GET' && (e.status === 403 || e.status === 429) && /rate limit/i.test(e.message);
+        if (!limited || attempt >= 4) throw e;
+        const seconds = 70 * (attempt + 1);
+        if (this.onWait) this.onWait(seconds);
+        await this.wait(seconds * 1000);
+      }
+    }
+  }
+
+  async request(method, path, body) {
     const res = await this.net.request(`${API}${path}`, {
       method,
       headers: this.headers(body === undefined ? {} : { 'Content-Type': 'application/json' }),
@@ -90,6 +109,26 @@ export class GitHub {
     return res.text();
   }
 
+  // Raw bytes of a file at ref (binary-safe), or null when absent.
+  async readBytes(repo, path, ref) {
+    const res = this.token
+      ? await this.net.request(`${API}/repos/${repo}/contents/${encPath(path)}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`, { headers: this.headers({ Accept: 'application/vnd.github.raw+json' }) })
+      : await this.net.request(`https://raw.githubusercontent.com/${repo}/${encodeURIComponent(ref || 'HEAD')}/${encPath(path)}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new GitHubError(res.status, res.text().slice(0, 200));
+    return res.bytes;
+  }
+
+  async branchExists(repo, name) {
+    try {
+      await this.api('GET', `/repos/${repo}/git/ref/heads/${encPath(name)}`);
+      return true;
+    } catch (e) {
+      if (e.status === 404) return false;
+      throw e;
+    }
+  }
+
   async listDir(repo, path, ref) {
     try {
       const list = await this.api('GET', `/repos/${repo}/contents/${encPath(path)}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`);
@@ -108,6 +147,19 @@ export class GitHub {
       if (e.status === 404) return false;
       throw e;
     }
+  }
+
+  // A lightweight tag. Never moved: the caller checks that it does not exist, and GitHub refuses a second.
+  createTag(repo, tag, sha) {
+    return this.api('POST', `/repos/${repo}/git/refs`, { ref: `refs/tags/${tag}`, sha });
+  }
+
+  // The tree a tag points at, whether the tag is lightweight or annotated.
+  async tagTreeSha(repo, tag) {
+    let obj = (await this.api('GET', `/repos/${repo}/git/ref/tags/${encPath(tag)}`)).object;
+    if (obj && obj.type === 'tag') obj = (await this.api('GET', `/repos/${repo}/git/tags/${obj.sha}`)).object;
+    if (!obj) return null;
+    return (await this.api('GET', `/repos/${repo}/git/commits/${obj.sha}`)).tree.sha;
   }
 
   // Tag names of a repository ("clip/v3"), newest first is the caller's business.
@@ -138,9 +190,11 @@ export class GitHub {
   }
 
   // files: [{ path, content: string | Uint8Array } | { path, delete: true }]
-  async commit(repo, { branch, parent, baseTree, files, message, newBranch = false }) {
+  async commit(repo, { branch, parent, baseTree, files, message, newBranch = false, onProgress = () => {} }) {
     const entries = [];
+    let done = 0;
     for (const f of files) {
+      onProgress(done++, files.length);
       if (f.delete) entries.push({ path: f.path, mode: '100644', type: 'blob', sha: null });
       else if (typeof f.content === 'string') entries.push({ path: f.path, mode: '100644', type: 'blob', content: f.content });
       else {

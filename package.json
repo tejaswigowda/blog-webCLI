@@ -1,10 +1,10 @@
 {
   "name": "blog-webcli",
   "version": "0.1.0",
-  "description": "blog.webcli.app — a blog is a GitHub repo; this static app renders and edits it.",
+  "description": "blog.webcli.app \u2014 a blog is a GitHub repo; this static app renders and edits it.",
   "type": "module",
   "private": true,
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "bin": {
     "blog-webcli": "cli/blog.js"
   },
@@ -12,7 +12,8 @@
     "test": "node --test \"test/*.test.js\"",
     "build:example": "node cli/blog.js build examples/blog",
     "check:example": "node cli/blog.js check examples/blog",
-    "serve": "node cli/serve.js"
+    "serve": "node cli/serve.js",
+    "test:e2e": "node --test \"test/e2e/*.e2e.mjs\""
   },
   "engines": {
     "node": ">=20"

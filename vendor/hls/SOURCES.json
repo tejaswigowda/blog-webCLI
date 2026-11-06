@@ -1,0 +1,24 @@
+{
+  "origin": "https://github.com/tejaswigowda/hls-webCLI",
+  "commit": "8c5753f00caa79f476d391a9794a2a3197d42763",
+  "licence": "GPL-3.0-only",
+  "$comment": "sha256 of each vendored file as copied from docs/ of that commit. test/vendored.test.js fails if one changes: re-vendor by copying again and updating this file, never by editing.",
+  "files": {
+    "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "lib/ingest.js": "019400a63638bd66e8872a8f4ce102ba433ce073944823b3c2dd8df2b937f4b6",
+    "lib/prepare.js": "298f3eb1c3fe30bb2dc0a0df8c190eb548669a80e3894ba02b706b0a28525b43",
+    "strata/audio.js": "a375ff7ff9837244edf606201035f934793420132809e97b6dbd4eeeea1c184a",
+    "strata/captions.js": "edc302dbcff4a603ca27ff1c362dbcade66aa66b7bf37efd6d573f38a5c9663c",
+    "strata/encoderInfo.js": "c66e850e24eb2f450f12673db4afa6b72fc24c2dca9884f4b27a521c7661a5a9",
+    "strata/filesManifest.js": "9a3149ffa294ff1235dc0adc3d6864ce2f934d2bbfa6cfa8313effa14d70a4e7",
+    "strata/fmp4.js": "8abde74b05d15660956f31da1e8f1f30a088f3fa0d4b9b05da3e0d5af220065f",
+    "strata/frameHashes.js": "546ef49b1f155cac12ca39d37c5cb09c1937479579a7ddd87f9425c1c5e41c14",
+    "strata/frames.js": "0010dbaf90e9267c69b9090e2a5623be289b055ed280ca4179cf87376c6aea66",
+    "strata/ladder.js": "35798360630874d959786aa87525240cfa7a62a61bca04cfc1d00489fae0d067",
+    "strata/publishSet.js": "73ff06a6b23b230fe862650a0f78ec9abc892e95ff9993b590e817bce394d893",
+    "strata/records.js": "2ea8e4f19d1d59f76b2cf58429ecd8148309a95df6cfe55a87715036b3c13b27",
+    "strata/releases.js": "f320a2b840c2642caecdd47239fa01aefebbce06d22e96a4789d2d6596fa7bf5",
+    "strata/renderJson.js": "ac9e811153f0afc20acb71fad00a15ce4e7b35f14f05de6e50243b9193703d17",
+    "strata/vendored.json": "9f5dc8cc089ce31809f4bf17684ca4bba3c60ff257aaf64c97bf532b633d7d5f"
+  }
+}

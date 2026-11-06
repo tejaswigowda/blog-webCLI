@@ -1,0 +1,10 @@
+{
+  "name": "Classic Sample",
+  "version": "1.2.0",
+  "licence": "GPL-2.0-or-later",
+  "source": "https://example.org/classic-sample/",
+  "attribution": "Original sample written for blog-webcli; follows the WordPress classic class contract.",
+  "class_contract": "wordpress-classic",
+  "css": ["style.css"],
+  "dropped": { "php": ["index.php", "single.php", "functions.php"] }
+}

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- The container for extension code. It is loaded with sandbox="allow-scripts" (no allow-same-origin),
+     so it has an opaque origin: no storage, no cookies, no access to the editor or its token.
+     This policy forbids every network request; the Worker it starts inherits it. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' blob:; worker-src blob:; connect-src 'none'; img-src 'none'; style-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
+<title>extension sandbox</title>
+</head>
+<body>
+<script src="sandbox-frame.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "Plain Paper",
+  "version": "1.0.0",
+  "licence": "MIT",
+  "description": "A warm, quiet theme for blog-webcli markup.",
+  "class_contract": "blog-webcli-v1",
+  "css": ["style.css"],
+  "assets": ["img/rule.svg"],
+  "tokens": {
+    "colors": { "background": "#faf7f0", "foreground": "#2b2b2b", "primary": "#8a3b12" },
+    "fontSizes": { "large": "1.5rem" }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Reading time",
+  "version": "1.0.0",
+  "licence": "MIT",
+  "kind": "build",
+  "description": "Adds an estimated reading time above each post.",
+  "hooks": ["post:html"],
+  "capabilities": []
+}

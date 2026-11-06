@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "generator": {
+    "name": "blog-webcli",
+    "licence": "GPL-3.0-only"
+  },
+  "blog": {
+    "title": "Example Blog",
+    "author": "Ada Example"
+  },
+  "dependencies": [
+    {
+      "kind": "theme",
+      "name": "default",
+      "licence": "GPL-3.0-only",
+      "builtin": true
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+/* Plain Paper — a theme for blog-webcli's own markup. MIT. */
+body { font-family: Georgia, serif; line-height: 1.7; }
+.wrap { max-width: 38rem; margin: 0 auto; padding: 2rem 1.25rem; }
+header.site { border-bottom: 1px solid var(--fg); padding-bottom: .5rem; }
+header.site a.brand { font-weight: 700; text-decoration: none; color: var(--fg); }
+h1 { font-size: var(--wp--preset--font-size--large); background: url(img/rule.svg) no-repeat bottom left; padding-bottom: .5rem; }
+a { color: var(--link); }
+@media (max-width: 600px) { .wrap { padding: 1rem; } }

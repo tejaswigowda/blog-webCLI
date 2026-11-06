@@ -4,6 +4,12 @@ A blog is one or more GitHub repositories. `https://blog.webcli.app/#repo=owner/
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-blog deployment.
 
+**Licence: GPL-3.0-only** ([LICENSE](LICENSE)). The app includes hls-webCLI's video encoder
+([vendor/hls/](vendor/hls), GPL-3.0), so the whole app is GPL-3.0. Themes and extensions are separate
+repositories with their own licences (the built-in ones are MIT) and are not affected. Note that the
+pages the app generates carry its built-in default theme, which is part of the app, and say so in
+their licence comment and in `licences.json`; a blog that wants no GPL text in its pages pins a theme.
+
 ```
 blog repo     posts/*.md · blog.json · assets.lock.json · index/posts.json · generated HTML · feed.xml
 images repo   binaries
@@ -27,7 +33,7 @@ or the media a folder. If an asset or video folder sits inside the blog's own fo
 cannot take its name as a slug (`slug-collision`). The blog only ever reads and writes inside
 its folder, so publishing never touches the images or renders beside it. With a folder, serve
 GitHub Pages from the repository root and put `.nojekyll` there (the generated one inside the
-folder is ignored by Pages); set `domain` to the folder's URL.
+folder is ignored by Pages); `domain` is the folder's URL (the app fills it in, see below).
 
 Publishing does two things: it commits the **markdown**, and it commits **generated
 static HTML** (a page per post, an index, `feed.xml`) that the blog repo's own GitHub
@@ -46,12 +52,23 @@ date: 2026-11-05             # authored; the index is ordered by this
 author: Ada Example
 tags: [video, git]
 status: draft | published    # draft = in no index, page or feed
-cover: asset:images/hls-cover.png
+cover: asset:images/hls-cover.png   # or: auto
 description: optional; defaults to the first paragraph
 ---
 
 Body in markdown…
 ```
+
+**Cover.** `cover: asset:images/x.png` names the cover: it is drawn above the post and is the
+preview image when the post is shared (`og:image`, `twitter:image`). In the editor the Cover field
+has **Upload…** (the image is staged and committed to the images repository when you publish, like an
+image in the body; the post names it by a logical `asset:` reference, never a provider) and **Auto**.
+`cover: auto` lets the generator pick the post's own picture, at build time: its **first image**,
+else the **poster of its first video** (every hls release has a `poster.jpg`, at an address pinned by
+the release tag), else the blog's `cover`. An automatic cover is the share preview and the index's
+`cover` (the chosen asset; none when it is a poster); it is not drawn on the page, where it would
+repeat what the post already shows. With nothing to pick and no blog cover, the build warns that the
+page has no `og:image`. The source keeps the word `auto`, so changing the picture changes the cover.
 
 Quill is a *view* over the markdown. Nothing but markdown is ever stored.
 
@@ -79,8 +96,9 @@ On save the editor drops empty paragraphs and moves formatting off edge whitespa
 ## Creating a blog
 
 Open a repository (or `owner/repo/folder`) that has no `blog.json` and sign in: instead of a
-dead end the app offers a short form (title, description, author, the address the blog is
-served at, and optionally an images repo and a video repo). *Create blog…* shows the usual
+dead end the app offers a short form (title, description, author, and optionally an images repo
+and a video repo (the address the blog is served at is shown but not asked for, see below); left blank, both default to folders of
+the blog's own repository). *Create blog…* shows the usual
 pre-flight and commits, in one commit, `blog.json` plus the generated site (`index.html`,
 `feed.xml`, `index/posts.json`, `.nojekyll`), so the generated-output check passes from the
 first commit. Posts already in the folder are indexed, not lost; if they cannot be published
@@ -116,9 +134,50 @@ CSP, and the same egress ledger (always 0 B uploaded). It takes the blog from th
   confirmation, so the page cannot be used as an open redirect. Only `https:` is accepted.
 * Posts link to *Suggest a correction* (the editor, which opens a pull request) and *Static page*.
 
+## The address the blog is served at
+
+`blog.json`'s `domain` is where GitHub Pages serves the blog: it feeds links, the feed and `og:url`.
+**The editor never takes it from a form field**: it is shown read-only (Settings and the create
+form) and written from GitHub's own answer.
+
+* **Pages on and readable:** GitHub's address from the repository's Pages settings, so a custom
+  domain is picked up (with the blog's folder appended). To change it, change it in GitHub
+  (*Settings → Pages*); the app links there.
+* **Pages off:** nothing is served yet, and the field says so in a warning, with the step to turn it
+  on (*Settings → Pages → Deploy from a branch → your default branch, / (root)*) and a link to the
+  blog's reader page, which works meanwhile. The address shown is the conventional one
+  (`https://<owner>.github.io/<repo>/<folder>`, or the root for an `<owner>.github.io` repository), or
+  what `blog.json` already says; it becomes true once Pages is on.
+* **Pages on, but the token cannot read it:** what `blog.json` already says, and a note that the token
+  needs *Pages: Read-only* to have it read from GitHub (optional; see Token permissions).
+
+**View blog** (next to Settings) opens the GitHub Pages site when GitHub says it is on and built, a
+custom domain included, and the `/blog/` reader otherwise (Pages off, still deploying, or not
+readable by the token): it never links to a site that is not there.
+
+Saving Settings rewrites `domain` only when GitHub gives the address; otherwise it leaves what was
+saved. A `domain` edited by hand in `blog.json` (for the CLI) is therefore kept until GitHub answers.
+Tested in [test/address.test.js](test/address.test.js) and [test/e2e/address.e2e.mjs](test/e2e/address.e2e.mjs).
+
+## Settings screen
+
+Signed in, open your blog and press **Settings** (`#repo=owner/repo[/folder]&settings`). It edits
+`blog.json` without hand-editing JSON: general info, media repositories (and the CDN/player URL
+templates), colours with light and dark values, fonts, width and text size, post list layout,
+header logo and links, footer text and links, and custom CSS. A **live preview** restyles as you
+type (in an isolated shadow root, following your system light/dark setting); a value the validator
+refuses shows why and leaves the last good preview in place.
+
+*Save settings…* shows the usual pre-flight and commits `blog.json` together with every
+regenerated page in one commit (`Update blog settings`). Posts are never touched. Only what differs
+from the defaults is written, blank fields are removed, and keys the form does not know about are
+carried through. A header logo must already exist in your images repository; it is pinned when you
+save, and a file that does not exist is refused before anything is sent. A post that cannot be
+published as it is blocks a settings change, as it would block any publish.
+
 ## Customization
 
-`blog.json` takes an optional `customize` section. The generated static pages and the `/blog/`
+`blog.json` takes an optional `customize` section (edit it in the Settings screen above, or by hand). The generated static pages and the `/blog/`
 reader build their styles from it with the same code, so they match. Every value is checked against
 a closed set; an unknown setting or an out-of-range value is refused (`bad-blog-json`), never guessed.
 
@@ -149,10 +208,220 @@ a closed set; an unknown setting or an out-of-range value is refused (`bad-blog-
 
 The header logo is checked once, up front: a logo that is not pinned refuses the whole build.
 
+## Themes and extensions
+
+A **theme is a repository** of CSS. An **extension is a repository** of code. There is no package
+manager, no build step and no registry service: both are named by address and pinned.
+
+> **Extensions run at publish, not at read. Their output is committed.**
+
+The published static HTML depends on no third-party code at read time. A theme's CSS is baked into
+every page; an extension's effect lands in the committed output, where it is diffed, reviewed and
+reverted like any other change. The reader executes nothing. Something that must run in a reader's
+browser is not an extension: it is a *sandboxed embed* (below).
+
+### Pinning
+
+`blog.json` records what it uses, by `{ repo, ref, sha256 }`:
+
+```json
+"theme": { "repo": "me/my-theme", "ref": "v1.2.0", "sha256": "…", "name": "My Theme", "version": "1.2.0",
+           "licence": "MIT", "contract": "blog-webcli-v1" },
+"extensions": [ { "repo": "me/reading-time", "ref": "v1.0.0", "sha256": "…", "name": "Reading time",
+                  "version": "1.0.0", "licence": "MIT", "kind": "build", "hooks": ["post:html"] } ]
+```
+
+* `ref` is a **release tag** (`v1.2.0`) **or a commit sha. A branch is refused** (`unpinned-ref`): it
+  can move and would restyle every page it ever touched. The app also asks GitHub: a name that is a
+  branch, or both a tag and a branch, is refused; a tag that does not exist is refused.
+* `sha256` covers every file the manifest lists (path and content). Content that does not match is
+  refused (`pin-mismatch`), so a moved tag or rewritten repository is caught instead of drifting.
+* Name, version, licence (and contract, kind, hooks) are recorded beside the pin so licences are
+  visible without fetching anything; they are checked against the manifest on every load.
+
+### A theme repository
+
+```
+owner/theme-name[/folder]
+├── theme.json        manifest
+├── style.css
+├── fonts/ img/       optional assets, listed in theme.json "assets"
+└── LICENSE
+```
+
+```json
+{ "name": "…", "version": "1.2.0", "licence": "GPL-2.0-or-later",
+  "source": "https://wordpress.org/themes/…", "attribution": "…",
+  "css": ["style.css"], "assets": ["fonts/x.woff2"],
+  "class_contract": "wordpress-classic",
+  "tokens": { "colors": { "primary": "#8a3b12" }, "fontSizes": { "large": "1.5rem" } },
+  "dropped": { "php": ["index.php", "functions.php"] } }
+```
+
+* **CSS is checked, not trusted.** `url()` may name only the theme's own listed assets (rewritten to
+  pinned addresses) or small inline `data:` images and fonts. No `@import`, no foreign URL, no
+  `image-set()`, no script hook, no `</style`; escapes and comments are resolved before judging, so
+  `u\72l(` does not slip through. The reader re-checks the committed `theme.css` before applying it.
+* **`tokens`** (colours, font families and sizes, spacing, lifted from a block theme's `theme.json`)
+  become `--wp--preset--*` custom properties, and the conventional colour slugs also set this app's
+  own variables. Values are validated.
+* Your `customize` settings (colours, width, header, footer, list, CSS) still apply on top of a theme.
+
+### Markup contracts
+
+`class_contract` says which markup the theme's CSS targets, and **the generator emits that markup**:
+
+| Contract | Emits |
+|---|---|
+| `blog-webcli-v1` | this app's own markup (`.wrap`, `header.site`, `ul.posts`, …) |
+| `wordpress-classic` | the de facto classic-theme contract: `#page.site`, `#masthead.site-header`, `.site-title`, `.site-description`, `#site-navigation.primary-navigation` > `ul.menu-wrapper`, `#content.site-content` > `main#main.site-main`, `article.post.hentry.tag-…` with `.entry-header.alignwide`, `.entry-title`, `.entry-meta`, `.entry-content`, `.entry-summary`, `.entry-footer`, `.post-thumbnail`, `#colophon.site-footer`; `body` classes `home blog` / `single single-post postid-N`; content blocks `wp-block-heading`, `wp-block-quote`, `wp-block-code`, `wp-block-list`, `wp-block-image`, `wp-block-embed` |
+
+The static pages and the `/blog/` reader build their `<body>` from the same code, so a theme styles
+both identically. Post ids (`post-N`) derive from the slug, so adding a post renumbers nothing.
+Not emitted (there is nothing behind them): comments, search, sidebars/widgets, pagination, category
+and author archives, the mobile menu button.
+
+### Ingesting a WordPress theme
+
+```
+node cli/blog.js theme import twentytwentyone ./my-theme-repo
+```
+
+A classic theme is not just `style.css`: PHP templates do the structure. What transfers is the CSS
+and the markup contract; the PHP templates, `functions.php` and JavaScript are **not converted** and
+the manifest lists them under `dropped`, so the conversion is honest about being partial.
+
+* **Directory themes only.** The slug must be a theme in the wordpress.org directory, where GPL
+  compatibility *including assets* is a listing requirement (`not-in-directory` otherwise).
+* The licence comes from `style.css` and must be in the GPL family (`GPL-2.0-or-later`, …). No
+  declared licence is `no-licence`; any other licence is `bad-licence`.
+* **Split-licensing language is refused, not adjudicated.** If `style.css`, `readme.txt` or
+  `README.md` talk about assets licensed separately, commercial or proprietary terms, ThemeForest /
+  Envato licences and the like, the theme is refused (`bad-licence`). This is a conservative
+  heuristic; compatible third-party credits (MIT, CC0, SIL OFL) do not trigger it.
+* Records `source`, `licence`, `attribution`, upstream `version`, the archive's sha256 and what was
+  dropped. The result is proven to load under this app's own CSS rules before anything is written.
+* Tokens are lifted from a block theme's `theme.json` palette, font families, font sizes and spacing.
+
+Commit the folder to a repository, tag a release, then `node cli/blog.js theme pin owner/repo@v2.9.0`
+(or use the **Theme** screen). A GPL theme repository beside this MIT tool is coherent: the licences
+stay in their own repositories and neither infects the other. *Tried for real* on
+`twentytwentyone` 2.9: GPL-2.0-or-later detected, 48 PHP files, 12 scripts and 9 other CSS files
+recorded as dropped, and all 25 core classes its CSS styles are emitted by the generator, so the
+unmodified theme styles a generated page.
+
+### An extension repository
+
+```
+owner/ext-name[/folder]
+├── extension.json
+├── index.mjs
+└── LICENSE
+```
+
+```json
+{ "name": "Reading time", "version": "1.0.0", "licence": "MIT", "kind": "build",
+  "hooks": ["post:html"], "capabilities": [], "pinned_assets": [] }
+```
+
+```js
+// index.mjs — a pure function over data
+export const hooks = {
+  'post:html'(html, ctx) { return `<p class="reading-time">…</p>${html}`; },   // ctx: { slug, title, date, tags }
+};
+```
+
+Hooks are `post:markdown` (markdown → markdown), `post:html` (the post body's HTML) and
+`index:html` (the post list). There are **no capabilities**: `capabilities` must be empty, because
+none is defined, so none can be granted. An example is in [examples/ext-reading-time/](examples/ext-reading-time).
+
+**Build extensions** run in a sandbox at publish:
+
+* a **Web Worker** (no DOM),
+* inside an iframe with **`sandbox="allow-scripts"` and no `allow-same-origin`** (an opaque origin:
+  no storage, no cookies, no reach into the editor or its token),
+* under a CSP with **`connect-src 'none'`** that the Worker inherits (no network), *and* with every
+  network and storage API removed from the Worker's global scope and prototype chain (two
+  independent layers; each is tested alone),
+* handed only `{ source, hook, input, ctx }` as data, never a token or a URL,
+* with a **hard time limit**: an extension that does not return is destroyed, not waited for.
+
+**Output is data.** The sandbox's result is committed as `extension-outputs.json`, keyed by the
+extension's digest, the hook, the post context and the input. The generator, the CLI and CI
+regenerate from that file alone and **never execute extension code**. If an output is missing (a
+post changed, an extension was added) the build refuses with `extension-output-missing`; publish
+from the editor, which runs only what is new. HTML output is rebuilt from an allow-list before it
+reaches a page: `<script>`, event handlers, `javascript:` URLs, `<style>`, forms and unknown iframes
+are *refused* (`unsafe-extension-output`), not silently stripped. Our own video embeds are hidden
+from extensions behind placeholders.
+
+**Embeds.** A reader-side widget is not an extension; it is a **sandboxed embed**. An extension
+with `"kind": "embed"` declares the pages it may frame under `pinned_assets` (`{ url, sha256 }`; the
+URL must name a tag or commit, never a branch, and its hash is checked when the extension is
+pinned). It may emit only `<iframe src="<a pinned asset>" sandbox="allow-scripts">`, and
+`allow-same-origin` (or any other sandbox token) is refused. With `allow-scripts` alone the frame
+has an opaque origin: no access to the parent's storage, cookies or token; communication would be
+`postMessage` over an API the embed documents, or nothing. This is the same reasoning that made
+`/blog/` a separate token-free reader. Our own video embed uses the same attribute; the real hls
+player was checked to run unchanged under it.
+
+### Licences
+
+* **No declared licence is a refusal**, not a warning, for themes, extensions and the pins in
+  `blog.json` (`no-licence`; an unusable value such as `none` or `proprietary` is `bad-licence`).
+* Licences are recorded in `blog.json`, in `licences.json` (generated), as a comment in every
+  generated page, and shown in the app (**Settings → Licences**, and in the pre-flight of every
+  change that adds one). `node cli/blog.js licences` prints the set.
+
+### Discovery without a registry
+
+[themes.json](themes.json) and [extensions.json](extensions.json) are lists in this repository,
+curated by pull request (name, repo, ref, licence, description, screenshot) and rendered by the
+**Theme** and **Extensions** screens under the heading **Built in**. There is no service, database
+or account, and anyone can publish a theme by publishing a repository. If nobody merges the pull
+request, the theme still works by its address (`owner/repo[/folder]@tag`); the list is a
+convenience, not a gate.
+
+**Built in** is what the two companion repositories publish. Each folder is a complete theme or
+extension, pinned by the hash of its own files, and every list entry names the tag `v1.0.0`:
+
+| Repository | Folders |
+|---|---|
+| [blog-webCLI-themes](https://github.com/tejaswigowda/blog-webCLI-themes) | `essay`, `terminal`, `paper`, `cards` (MIT, `blog-webcli-v1`) and `wp/twentytwentyone` (GPL-2.0-or-later, `wordpress-classic`) |
+| [blog-webCLI-extensions](https://github.com/tejaswigowda/blog-webCLI-extensions) | `reading-time`, `heading-anchors`, `table-of-contents`, `smart-typography`, `archive-by-year`, `image-captions` (MIT, all build extensions with no capabilities) |
+
+```
+node cli/blog.js theme pin tejaswigowda/blog-webCLI-themes/essay@v1.0.0
+node cli/blog.js ext add   tejaswigowda/blog-webCLI-extensions/heading-anchors@v1.0.0
+```
+
+[test/builtin.test.js](test/builtin.test.js) checks the real folders against this app: each theme
+and extension loads and pins under these rules and builds a real blog; every folder is listed and
+every entry matches its manifest, its licence and a tag that exists; every class a `blog-webcli-v1`
+theme styles is one the generator emits; the extensions run together, deterministically and from
+their recorded outputs. It looks for the repositories next to this one (set `BLOG_WEBCLI_THEMES`
+and `BLOG_WEBCLI_EXTENSIONS` to point elsewhere) and skips when they are absent.
+
 ## Assets
 
 Posts name `asset:<key>/<path>`, never a provider. `blog.json` maps keys to repos and
 holds the URL template; `assets.lock.json` pins each referenced file to a commit sha.
+
+**Enter nothing and the blog's own repository is used.** With no `assets` in `blog.json`, images are
+read from and committed to an `images/` folder of the blog's repository (`blog.json`'s `repo`, so
+`me/blog` gives `me/blog/images`, and a blog at `me/site/blog` gives `me/site/images`); with no
+`video`, videos come from a `videos/` folder the same way. Settings shows those fields blank, with
+the default as the placeholder. The default is **not written into `blog.json`**: it is only used
+when nothing is there, so setting an images repository later is a plain edit, and changing it later
+changes every blog that never entered one. It applies only when the section is absent (an author who
+wrote `assets` keeps exactly what they wrote), never to the blog's own place, and only when
+`blog.json` has a `repo`. A default folder does not reserve a slug (a post called `images` is fine);
+a folder you configure still does. For a different repository, enter it in **Settings → Images
+repository** (`me/images`).
+
+A `blog.json` with no `repo` has no default. Choosing an image then says so and links to Settings in
+a new tab, so the post being written is not lost; the next attempt re-reads `blog.json`, so no reload
+is needed.
 
 ```json
 {
@@ -202,17 +471,78 @@ In a post, a video is a block on its own line, naming the repo key, the release 
 }
 ```
 
+With no `video` section, the repository is a `videos/` folder of the blog's own repository (see
+[Assets](#assets)). hls.webcli.app publishes to the *root* of the repository it is pointed at, so for
+the default the release has to be placed under `videos/<name>/` (tagged `<name>/vN`); to use renders
+published at a repository's root, set the video repository to that repository.
+
 In a shared repository the release lives under the video folder (`…@clip/v3/<folder>/clip/`);
 tags are per repository, so `clip/v3` is checked at `me/site` whatever the folder. hls.webcli.app
 itself writes at the repository root, so use a folder for video only if you place the release there.
 
 Generated pages get a sandboxed `<iframe>` at `<player>#<base>&present=true` (the *Copy embed
 link* address) plus a plain "Watch" link inside the figure for readers without scripting. The
-editor's video button lists the releases it finds in the video repos. Publishing a post refuses
+editor's video button opens **Embed a video** (below). Publishing a post refuses
 a reference to a tag that does not exist (`unresolved-asset`); a draft may name one not yet
 published. `node cli/blog.js pin` verifies tags too. Changing player or CDN is a `blog.json`
 edit and a rebuild; no post is touched, and a post naming the player or CDN address is refused
 (`provider-url`).
+
+### Uploading a video
+
+In the editor, the video button opens **Embed a video**: a **searchable dropdown of the videos in the
+video repository with the Embed button beside it**. Type to filter (any order, case-insensitive,
+by name, version or repository); the arrow keys move, Enter chooses, Enter again embeds, Esc closes
+the list. The chosen video's poster is shown below. There is no "create a release" step: a release
+(a folder of HLS and a tag that never moves) is made for you, in one of two ways.
+
+* **Upload a video…** takes an MP4 or MOV and does everything: it is encoded **in your browser** into
+  an HLS ladder, published as a release in the video repository, and embedded in the post.
+* **A render folder that is already in the repository** (a folder holding a `master.m3u8` with no tag
+  yet, for example one you pushed from hls.webcli.app's download) is listed in the dropdown as *not
+  published yet*. Choosing it changes the button to **Publish and embed**: you get the usual review
+  (*Tag clip/v1 on github.com/me/blog (main) … nothing is uploaded*), the tag is created, and the
+  video is embedded. Videos published with hls.webcli.app appear in the dropdown by themselves.
+
+1. Pick the file. It is read in the page and inspected first, so a video that cannot be packaged is
+   refused at once with the reason (`not-mp4`, `fragmented-input`, `no-video`, `unsupported-codec`,
+   `rotated-input`, `unknown-frame-rate`, `vfr-input`, `fractional-frame-rate`, `no-keyframes`):
+   H.264 at a steady 24, 25, 30, 50 or 60 fps, with a keyframe to start from.
+2. See what it is (size, frame rate, length, audio) and choose: the release name (from the file name,
+   under hls.webcli.app's naming rules), **every rung that fits the source** (1080p, 720p, 480p; never
+   upscaled, and a smaller source gets one rung at its own size), and whether to keep the audio. The
+   estimate of what it adds to the repository follows your choices (a full ladder is about 46 MB a
+   minute, so untick rungs for a long video); a release may hold at most 300 MB.
+3. **Encode and review…** runs the encoder with a progress bar and a cancel button. Nothing is sent.
+4. The review is the usual pre-flight: *"N files, X MB, to github.com/me/blog (main) in videos/<name>/
+   as <name>/v1"*, the file list, and what was encoded. **Commit and push** sends one commit and then
+   the tag, with progress by file and a wait-and-retry if GitHub rate-limits the many writes.
+5. The release is embedded in the post.
+
+The encoder is **hls-webCLI's, vendored unedited** in [vendor/hls/](vendor/hls) (Strata's own export
+modules: WebCodecs ladder, fragmented-MP4 segmenter, playlists, `render.json`, `files.sha256`), so a
+render made here is the one hls.webcli.app would make. [vendor/hls/SOURCES.json](vendor/hls/SOURCES.json)
+records the hash of every file and `test/vendored.test.js` fails if one is edited. It needs a browser
+with WebCodecs (recent Chrome, Edge or Safari); without one the dialog says so. Videos made with
+hls.webcli.app and published there still appear in the dropdown. The upload says what it is: its `render.json` records
+`determinism.frames: false`, because an uploaded file was not drawn by Strata's time-source-audited
+renderer. The video repository is, by default, a `videos/` folder of the blog's repository; for a
+shared repository `render.json`'s publication block names the repository, not the folder, so
+hls.webcli.app's *Verify* would not find a release that lives in a subfolder.
+
+Whatever the route, a release is checked before anything is sent, and refused with `bad-release` if
+it is not one: a name that is not lowercase words joined by `-`; no `master.m3u8`; a file that is not
+a playlist, segment, caption, poster, image or manifest; unsafe paths; a playlist that names anything
+outside the release (an absolute URL, a leading `/`, `..`: a release that depends on another host is
+the lock-in this app avoids); a `files.sha256` that does not match the files; more than 2000 files,
+50 MB a file or 300 MB in all. A tag is never moved: if it exists by the time the commit is made,
+nothing is tagged. If the commit lands but the tag fails, the message says so, and the folder then
+shows in the dropdown as *not published yet*: choosing it tags it, which is the retry. Writing needs
+the token to cover the video repository (see Token permissions); the CDN can take a few minutes to
+serve a new tag, so the player may not load a just-published video straight away. Tested in
+[test/release.test.js](test/release.test.js), [test/encode.test.js](test/encode.test.js) and, in a real
+browser, [test/e2e/release.e2e.mjs](test/e2e/release.e2e.mjs) and
+[test/e2e/upload-video.e2e.mjs](test/e2e/upload-video.e2e.mjs).
 
 ## CLI
 
@@ -221,8 +551,17 @@ node cli/blog.js build [dir]   regenerate index, pages, feed (writes nothing if 
 node cli/blog.js check [dir]   regenerate in memory; non-zero on any difference — for CI
 node cli/blog.js fmt   [dir]   rewrite posts into canonical markdown
 node cli/blog.js pin   [dir]   pin unpinned asset: references, verify video: release tags (GitHub API, $GITHUB_TOKEN optional)
+node cli/blog.js theme pin owner/repo[/folder]@ref [dir]   pin a theme (a tag or commit; a branch is refused)
+node cli/blog.js theme clear [dir]                         back to the default theme
+node cli/blog.js theme import <wordpress-slug> [outdir]    ingest a wordpress.org directory theme
+node cli/blog.js ext add owner/repo[/folder]@ref [dir]     pin an extension (fetched as data and hashed; never run)
+node cli/blog.js ext remove owner/repo [dir]
+node cli/blog.js licences [dir]                            every licence the blog depends on
 node cli/serve.js [dir] [port] static server for local preview
 ```
+
+`build` and `check` fetch a pinned theme (as data) to regenerate; they **never execute extension
+code**, they use the recorded `extension-outputs.json`.
 
 CI: copy [templates/blog-check.yml](templates/blog-check.yml) into the blog repo.
 Serve generated pages by enabling GitHub Pages on the blog repo (root of the default
@@ -238,6 +577,7 @@ can write to every repository the account owns.
 |---|---|---|
 | Contents | Read and write | reading `blog.json`, posts and release tags; committing posts, generated pages and images; creating a blog. All that publishing, drafts and creating a blog need. |
 | Pull requests | Read and write | only "Suggest a correction", which opens a pull request. Omit it if you do not use that. |
+| Pages | Read-only | optional: lets the app read the blog's real address (a custom domain) from GitHub Pages. Without it the address is the convention or what `blog.json` says. |
 | Metadata | Read-only | added automatically |
 
 Token settings:
@@ -250,9 +590,10 @@ Token settings:
 * Not needed: Workflows (the app never writes `.github/workflows`), Administration (it never
   creates repositories), or anything account-wide.
 
-Permissions apply to every repository you select; they cannot differ per repository. The app
-only *reads* the video repository (listing and checking release tags), so use a separate token
-with Contents write when publishing there with hls.webcli.app.
+Permissions apply to every repository you select; they cannot differ per repository. Reading the
+video repository (listing and checking release tags) needs nothing extra, but **creating a release
+from the editor writes there** (a commit and a tag), so a token used for that must include the video
+repository, with Contents read and write like the others. hls.webcli.app uses its own token.
 
 ### Troubleshooting: `403 Resource not accessible by personal access token`
 
@@ -287,7 +628,9 @@ upload, and nothing is uploaded until you confirm.
 
 `no-blog-json` · `bad-blog-json` · `missing-frontmatter` · `bad-frontmatter` · `slug-mismatch` ·
 `slug-collision` · `unresolved-asset` · `provider-url` · `unsafe-url` · `lossy-round-trip` ·
-`draft-in-publish` · `classic-token`. A build that is refused writes nothing.
+`draft-in-publish` · `classic-token` · `unpinned-ref` · `pin-mismatch` · `bad-theme` · `bad-extension` ·
+`no-licence` · `bad-licence` · `not-in-directory` · `extension-output-missing` · `extension-failed` ·
+`unsafe-extension-output` · `bad-release`. A build that is refused writes nothing.
 
 ## Gates
 
@@ -306,6 +649,19 @@ upload, and nothing is uploaded until you confirm.
 | B9 drafts in no index, page or feed | `test/gates.test.js`, `test/app.test.js` |
 | B10 renaming a title does not change the URL | `test/gates.test.js` |
 | B11 ledger reads zero uploaded after render-and-browse | `test/app.test.js` |
+| X1 no third-party code executes when reading a published blog | `test/x1.test.js` (pages: no script/handler/foreign stylesheet; import-graph scan of the reader and generator for evaluators, Workers and dynamic import; CSPs), `test/e2e/themes.e2e.mjs` (the reader contacts neither the theme nor the extension repository) |
+| X2 build extensions run in a Worker with no DOM, no network, no credentials | `test/e2e/sandbox.e2e.mjs` (real Chrome: hostile extensions, an attacker server that must see nothing, the frame CSP alone, a runaway loop killed) |
+| X3 embeds are `sandbox="allow-scripts"` without `allow-same-origin` | `test/packs.test.js` (sanitizer), `test/packs-app.test.js`, `test/x1.test.js` |
+| X4 themes and extensions pinned by ref and hash; a branch is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/cli-packs.test.js` |
+| X5 no declared licence is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/wp-import.test.js` |
+| X6 WordPress ingestion: directory only; records source, licence, what was dropped | `test/wp-import.test.js` (and a real import of `twentytwentyone`) |
+| X7 `class_contract` changes the emitted markup; a classic theme styles a generated page unmodified | `test/packs.test.js`, `test/packs-app.test.js` |
+| X8 every licence a blog depends on is visible in one place | `test/packs.test.js`, `test/e2e/themes.e2e.mjs` |
+| X9 a theme repository with no entry in any list works by address | `test/packs-app.test.js`, `test/cli-packs.test.js` |
+
+`npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
+in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves
+every named import, so a renamed export cannot silently break the browser-only modules.
 
 ## Known limits
 
@@ -316,7 +672,9 @@ upload, and nothing is uploaded until you confirm.
   the ledger does not count them. Video is not played until the iframe loads; static pages load
   it lazily.
 * The release picker lists tags; it does not check that a tag's folder is a complete release.
-* A page with no `cover` and no blog-level `cover` has no `og:image` (a warning at build).
+* A page with no `cover` (or `cover: auto` with no image or video to pick) and no blog-level `cover`
+  has no `og:image` (a warning at build). A video poster chosen by `auto` is not checked for
+  existence when generating: releases made by hls.webcli.app or this app always have one.
 * Staged images cannot be committed in a correction (pull request) when the image folder is in
   the blog's own repository: that would push to the default branch. Publish them in a normal edit.
 * The release picker does not check that a video folder exists at the chosen folder, only the tag.
@@ -324,8 +682,28 @@ upload, and nothing is uploaded until you confirm.
   an audio file is reachable as a pinned link, `[Listen](asset:audio/ep1.mp3)`.
 * An invalid `customize` section refuses the build, and the reader falls back to the static site
   link rather than rendering with half of it.
+* The `/blog/` reader shows a themed blog (its committed `theme.css`, the same markup) but does not
+  apply extension output: it never fetches or evaluates extension repositories, and it applies no
+  recorded outputs, so extension effects appear on the static pages only.
+* Extensions run only in the editor's sandbox. A blog with extensions cannot be regenerated by the
+  CLI or CI unless `extension-outputs.json` already covers every post (it is committed, so normally
+  it does); otherwise they refuse and say to publish from the editor.
+* The split-licensing check is a conservative text heuristic over `style.css` and the readme, not a
+  legal judgement; it refuses on a match and cannot see licence terms written elsewhere.
+* An embed's pinned assets can be verified by the editor only on jsDelivr or GitHub raw (the hosts
+  its CSP lets it read); the CLI can fetch any https host.
+* Only `style.css` of a WordPress theme is taken, not other stylesheets it loads from PHP, and only a
+  block theme's design tokens, not its `theme.json` styles or templates.
+* The `wordpress-classic` contract covers what a blog has (no comments, widgets, pagination or
+  archives); a theme's CSS for those simply matches nothing.
 * Two adjacent lists of the *same* type separated by a blank line merge on round trip, so
   such files are refused as non-canonical.
 * Read counts bytes fetched by this app; images the browser loads from the asset CDN are
   not routed through it.
 * `vendor/quill/` is Quill 2.0.3 (BSD-3), vendored so the app loads no third-party script.
+* `vendor/hls/` is hls-webCLI's encoder (GPL-3.0), vendored unedited and hash-checked. Encoding a
+  video needs WebCodecs (recent Chrome, Edge or Safari) and holds the video and the encoded files
+  in memory, so the input is limited to 1 GB and a release to 300 MB. It takes the encoder's own
+  limits: H.264 only, steady 24/25/30/50/60 fps, no rotation; no captions yet (hls.webcli.app adds
+  those). Writes are retried when GitHub rate-limits them, but an interrupted upload leaves no
+  commit and no tag, so it is simply run again.

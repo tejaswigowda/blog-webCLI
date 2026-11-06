@@ -1,0 +1,90 @@
+{
+ "repo": "tejaswigowda/strata-editor",
+ "commit": "ce703d517497334398c04d2506d5b148fa26e481",
+ "files": [
+  {
+   "file": "fmp4.js",
+   "upstream": "docs/editor/js/export/fmp4.js",
+   "sha256": "8abde74b05d15660956f31da1e8f1f30a088f3fa0d4b9b05da3e0d5af220065f",
+   "patches": 0
+  },
+  {
+   "file": "ladder.js",
+   "upstream": "docs/editor/js/export/ladder.js",
+   "sha256": "89d139853d9d69596a2a43477580e90192c18b9ea04d406e2cfe29e293f88546",
+   "patches": 1
+  },
+  {
+   "file": "audio.js",
+   "upstream": "docs/editor/js/export/audio.js",
+   "sha256": "a375ff7ff9837244edf606201035f934793420132809e97b6dbd4eeeea1c184a",
+   "patches": 0
+  },
+  {
+   "file": "captions.js",
+   "upstream": "docs/editor/js/export/captions.js",
+   "sha256": "edc302dbcff4a603ca27ff1c362dbcade66aa66b7bf37efd6d573f38a5c9663c",
+   "patches": 0
+  },
+  {
+   "file": "filesManifest.js",
+   "upstream": "docs/editor/js/export/filesManifest.js",
+   "sha256": "9a3149ffa294ff1235dc0adc3d6864ce2f934d2bbfa6cfa8313effa14d70a4e7",
+   "patches": 0
+  },
+  {
+   "file": "releases.js",
+   "upstream": "docs/editor/js/export/releases.js",
+   "sha256": "f320a2b840c2642caecdd47239fa01aefebbce06d22e96a4789d2d6596fa7bf5",
+   "patches": 0
+  },
+  {
+   "file": "publishSet.js",
+   "upstream": "docs/editor/js/export/publishSet.js",
+   "sha256": "21248fd8b9c1576ca7784248cb1189d3d03e2e708cf94cf9008f4828878b20c6",
+   "patches": 1
+  },
+  {
+   "file": "renderJson.js",
+   "upstream": "docs/editor/js/export/renderJson.js",
+   "sha256": "16dc570e34e462e75cb3e9789b1e3b16aa59d24c1c4b89d5da843ec1f36726af",
+   "patches": 1
+  },
+  {
+   "file": "frames.js",
+   "upstream": "docs/editor/js/export/frames.js",
+   "sha256": "0010dbaf90e9267c69b9090e2a5623be289b055ed280ca4179cf87376c6aea66",
+   "patches": 0
+  },
+  {
+   "file": "encoderInfo.js",
+   "upstream": "docs/editor/js/export/encoderInfo.js",
+   "sha256": "c66e850e24eb2f450f12673db4afa6b72fc24c2dca9884f4b27a521c7661a5a9",
+   "patches": 0
+  },
+  {
+   "file": "frameHashes.js",
+   "upstream": "docs/editor/js/export/frameHashes.js",
+   "sha256": "546ef49b1f155cac12ca39d37c5cb09c1937479579a7ddd87f9425c1c5e41c14",
+   "patches": 0
+  },
+  {
+   "file": "records.js",
+   "upstream": "docs/editor/js/export/records.js",
+   "sha256": "2ea8e4f19d1d59f76b2cf58429ecd8148309a95df6cfe55a87715036b3c13b27",
+   "patches": 0
+  },
+  {
+   "file": "verify-publication.mjs",
+   "upstream": "tools/verify-publication.mjs",
+   "sha256": "8866387e2393a6e64575aa1be0692f2efe7f080da498a962f5a498fb945daf0f",
+   "patches": 1
+  },
+  {
+   "file": "render.schema.json",
+   "upstream": "docs/schemas/render.schema.json",
+   "sha256": "9c4c38542d67e65bdbb465e530f9e764d58d591be71320a8442bb6b5ae4a22af",
+   "patches": 0
+  }
+ ]
+}

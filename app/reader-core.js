@@ -6,7 +6,7 @@
 import { isRepoRef, parseRepoRef } from '../lib/reporef.js';
 import { defaultDomain } from '../lib/init.js';
 import { withRepoOverrides } from '../lib/blog.js';
-import { loadBlog } from './site.js';
+import { loadBlog } from './read.js';
 
 export function parseReaderHash(hash) {
   const p = new URLSearchParams(String(hash || '').replace(/^#/, ''));

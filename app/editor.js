@@ -51,7 +51,7 @@ export async function loadQuill() {
           const node = super.create(value);
           node.setAttribute('data-video', value);
           node.setAttribute('src', videoResolver(value));
-          node.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+          node.setAttribute('sandbox', 'allow-scripts');
           node.setAttribute('referrerpolicy', 'no-referrer');
           return node;
         }

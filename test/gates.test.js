@@ -267,7 +267,8 @@ test('video: a post embeds a release by reference; the page carries the pinned p
   const src = 'https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/example/renders@hls-demo/v1/hls-demo/&amp;present=true';
   assert.ok(page.includes(`<iframe src="${src}"`));
   assert.ok(page.includes(`<a href="${src}" rel="noopener noreferrer">Watch: hls-demo v1</a>`), 'a text link survives with scripting off');
-  assert.match(page, /sandbox="allow-scripts allow-same-origin"/);
+  assert.match(page, /sandbox="allow-scripts"/);
+  assert.ok(!/allow-same-origin/.test(page), "an embed never gets allow-same-origin");
   assert.ok(!/<script/i.test(page));
 });
 
@@ -291,7 +292,9 @@ test('video: refusals', async () => {
   assert.deepEqual(codes('[watch](https://strataeditor.dev/player/#https://cdn.jsdelivr.net/gh/a/b@c/v1/c/)'), ['provider-url']);
   const noVideo = JSON.parse(input.blog);
   delete noVideo.video;
-  assert.deepEqual(codes('![](video:videos/clip@v1)', JSON.stringify(noVideo)), ['unresolved-asset']);
+  assert.deepEqual(codes('![](video:videos/clip@v1)', JSON.stringify(noVideo)), [], 'no video section: videos default to a folder of the blog\'s own repository');
+  delete noVideo.repo;
+  assert.deepEqual(codes('![](video:videos/clip@v1)', JSON.stringify(noVideo)), ['unresolved-asset'], 'a blog that does not say where it lives has no default');
   const badCfg = JSON.parse(input.blog);
   badCfg.video.player = 'http://insecure.example/player/';
   assert.throws(() => buildSite({ ...input, blog: JSON.stringify(badCfg) }), (e) => e.code === 'bad-blog-json');

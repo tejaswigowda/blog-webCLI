@@ -39,9 +39,9 @@ test('create: blog.json and the generated empty site in one commit; the app then
   const { server, net, authed, anon } = await world();
   const plan = await planInit(authed, { repo: 'me/notes', branch: 'main', fields: FIELDS });
   assert.equal(net.ledger.uploaded.bytes, 0, 'planning uploads nothing');
-  assert.deepEqual(plan.changes.map((c) => c.path).sort(), ['.nojekyll', 'blog.json', 'feed.xml', 'index.html', 'index/posts.json']);
+  assert.deepEqual(plan.changes.map((c) => c.path).sort(), ['.nojekyll', 'blog.json', 'feed.xml', 'index.html', 'index/posts.json', 'licences.json']);
   assert.ok(plan.changes.every((c) => c.action === 'add'));
-  assert.match(describePlan(plan)[0], /^5 files, [\d.]+ (B|KB), to github\.com\/me\/notes \(main\)$/);
+  assert.match(describePlan(plan)[0], /^6 files, [\d.]+ (B|KB), to github\.com\/me\/notes \(main\)$/);
 
   const receipt = await executePlan(authed, plan);
   assert.equal(receipt.commits.length, 1);
@@ -94,7 +94,7 @@ test('create: refusals, all before any write', async () => {
   const refuse = (fields, code) => assert.rejects(planInit(authed, { repo: 'me/notes', branch: 'main', fields }), (e) => e.code === code, JSON.stringify(fields));
   await refuse({ ...FIELDS, title: '' }, 'bad-blog-json');
   await refuse({ ...FIELDS, author: ' ' }, 'bad-blog-json');
-  await refuse({ ...FIELDS, domain: 'not a url' }, 'bad-blog-json');
+  // (the address is not typed: GitHub's own, see test/address.test.js)
   await refuse({ ...FIELDS, images: 'not a repo' }, 'bad-blog-json');
   await refuse({ ...FIELDS, images: 'me/notes' }, 'bad-blog-json'); // the blog's own place
   await assert.rejects(planInit(authed, { repo: 'me/notes/blog', branch: 'main', fields: { ...FIELDS, video: 'me/notes/blog' } }), (e) => e.code === 'bad-blog-json');

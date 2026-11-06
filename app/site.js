@@ -1,73 +1,25 @@
 // Reader and publisher cores. No DOM: the UI calls these, and so do the tests.
 import { Refusal } from '../lib/errors.js';
-import { POST_PATH, buildSite, parsePost, validateBlog } from '../lib/blog.js';
-import { SLUG_RE, parseMeta, splitFile } from '../lib/frontmatter.js';
-import { collectAssetRefs, parseAssetRef, resolveAsset } from '../lib/assets.js';
-import { deltaToHtml } from '../lib/html.js';
-import { collectVideoRefs, parseVideoRef, videoEmbedUrl } from '../lib/video.js';
+import { POST_PATH, parsePost, validateBlog } from '../lib/blog.js';
+import { buildSiteWith } from '../lib/build-async.js';
+import { parseOutputsFile } from '../lib/extensions.js';
+import { loadPacks, readExtensionToPin, readThemeToPin } from './packs.js';
+import { licenceRecords } from '../lib/licences.js';
+import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
+import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs } from '../lib/customize.js';
 import { blogJsonText, makeBlogJson } from '../lib/init.js';
+import { formToBlog } from '../lib/settings.js';
 import { gitBlobSha } from './github.js';
 import { fmtBytes } from './net.js';
+import { addressFrom } from '../lib/init.js';
 
 const enc = new TextEncoder();
 const json = (o) => JSON.stringify(o, null, 2) + '\n';
 export const PLACEHOLDER_SHA = '0'.repeat(40);
 
-export class NotFound extends Error {}
-
-// `owner/name` or `owner/name/folder`; the folder is where the blog lives inside the repository.
-export function parseRepo(s) {
-  return parseRepoRef(s).ref;
-}
-
-// ---------- reading ----------
-
-export async function loadBlog(gh, where, ref) {
-  const { repo, folder } = parseRepoRef(where);
-  const text = await gh.readText(repo, at(folder, 'blog.json'), ref);
-  if (text === null) throw new Refusal('no-blog-json', `${repo} has no ${at(folder, 'blog.json')}`);
-  const blog = validateBlog(text);
-  const lockText = await gh.readText(repo, at(folder, 'assets.lock.json'), ref);
-  return { blog, lock: lockText ? JSON.parse(lockText) : {} };
-}
-
-// The generated index when present; otherwise list posts/ and read frontmatter.
-export async function loadIndex(gh, where, ref) {
-  const { repo, folder } = parseRepoRef(where);
-  const text = await gh.readText(repo, at(folder, 'index/posts.json'), ref);
-  if (text !== null) return JSON.parse(text).posts;
-  const names = (await listPostFiles(gh, where, ref));
-  const entries = [];
-  for (const n of names) {
-    const raw = await gh.readText(repo, at(folder, `posts/${n}`), ref);
-    try {
-      const m = parseMeta(splitFile(raw, n).front, n);
-      if (m.status === 'published') entries.push({ slug: m.slug, title: m.title, date: m.date, tags: m.tags || [], excerpt: '', cover: m.cover || null, status: 'published' });
-    } catch {
-      /* unreadable posts are simply not listed */
-    }
-  }
-  return entries.sort((a, b) => (a.date < b.date ? 1 : -1));
-}
-
-export async function listPostFiles(gh, where, ref) {
-  const { repo, folder } = parseRepoRef(where);
-  return (await gh.listDir(repo, at(folder, 'posts'), ref)).filter((n) => n.endsWith('.md'));
-}
-
-export async function loadPost(gh, where, slug, ref, { blog, lock }, { allowDraft = false } = {}) {
-  if (!SLUG_RE.test(slug)) throw new NotFound('No such post.');
-  const { repo, folder } = parseRepoRef(where);
-  const text = await gh.readText(repo, at(folder, `posts/${slug}.md`), ref);
-  if (text === null) throw new NotFound('No such post.');
-  const post = parsePost({ path: `posts/${slug}.md`, text });
-  if (post.lossy) throw post.lossy.at(post.path);
-  if (post.status !== 'published' && !allowDraft) throw new NotFound('No such post.');
-  const resolve = (r) => resolveAsset(r, blog, lock);
-  return { post, text, html: deltaToHtml(post.delta, { resolve, resolveVideo: (r) => videoEmbedUrl(r, blog), strict: false }) };
-}
+export { NotFound, listPostFiles, loadBlog, loadIndex, loadPost, parseRepo } from './read.js';
 
 // Releases published by hls.webcli.app into each configured video repository.
 export async function listVideoReleases(gh, blog) {
@@ -86,16 +38,30 @@ export async function listVideoReleases(gh, blog) {
 
 const sortLock = (lock) => Object.fromEntries(Object.entries(lock).sort(([a], [b]) => (a < b ? -1 : 1)));
 
-// `tree` is relative to the blog's folder; `prefix` puts the changes back where they live in the repository.
-async function computeChanges({ blogText, others, newPost, lock, lockChanged, tree, prevIndex, prefix = '' }) {
-  const posts = [...others, { path: newPost.path, text: newPost.text }];
-  const site = buildSite({ blog: blogText, posts, lock });
+// The site for a blog.json and its posts: the pinned theme and extensions are fetched and verified,
+// recorded extension outputs are read from the repository, and any output still missing is
+// produced by `runner` (the sandbox) — or refused when there is none.
+async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner }) {
+  const blog = validateBlog(blogText);
+  const packs = await loadPacks(gh, blog);
+  const recorded = tree.has('extension-outputs.json') ? await gh.readText(repo, prefix + 'extension-outputs.json', head.sha) : null;
+  const site = await buildSiteWith({ blog: blogText, posts, lock, ...packs, outputs: parseOutputsFile(recorded) }, runner);
   if (site.errors.length) {
-    const first = site.errors[0];
-    const e = new Refusal(first.code, site.errors.map((x) => x.detail + (x.where ? ` (${x.where})` : '')).join('\n'));
+    const e = new Refusal(site.errors[0].code, site.errors.map((x) => x.detail + (x.where ? ` (${x.where})` : '')).join('\n'));
     e.all = site.errors;
     throw e;
   }
+  return site;
+}
+
+// Generated files that disappear when the feature that made them is switched off.
+const OPTIONAL_GENERATED = ['theme.css', 'extension-outputs.json'];
+const staleOptional = (site, tree, prefix) => OPTIONAL_GENERATED.filter((f) => tree.has(f) && !(f in site.files)).map((f) => ({ path: prefix + f, delete: true, size: 0, action: 'delete' }));
+
+// `tree` is relative to the blog's folder; `prefix` puts the changes back where they live in the repository.
+async function computeChanges(gh, { blogText, others, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head, runner }) {
+  const posts = [...others, { path: newPost.path, text: newPost.text }];
+  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner });
   const out = { ...site.files, [newPost.path]: newPost.text };
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
   const changes = [];
@@ -103,6 +69,7 @@ async function computeChanges({ blogText, others, newPost, lock, lockChanged, tr
     const bytes = enc.encode(content);
     if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
   }
+  changes.push(...staleOptional(site, tree, prefix));
   if (prevIndex) {
     const now = new Set(site.index.map((e) => e.slug));
     for (const e of prevIndex.posts || []) {
@@ -114,7 +81,7 @@ async function computeChanges({ blogText, others, newPost, lock, lockChanged, tr
 }
 
 // staged: [{ key, path, bytes: Uint8Array }] images the author added and has not uploaded.
-export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false }) {
+export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, runner }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -171,8 +138,8 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
 
   const prevIndexText = tree.has('index/posts.json') ? await gh.readText(repo, prefix + 'index/posts.json', head.sha) : null;
   const prevIndex = prevIndexText ? JSON.parse(prevIndexText) : null;
-  const ctx = { blogText, others, newPost: { path: target, text }, tree, prevIndex, prefix };
-  const { changes } = await computeChanges({ ...ctx, lock: lockPlan, lockChanged });
+  const ctx = { blogText, others, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, runner };
+  const { changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
 
   const assetGroups = [];
   for (const s of staged.filter((s) => pending.includes(`${s.key}/${s.path}`))) {
@@ -196,41 +163,168 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   return { repo, folder, branch, mode, slug, status: newPost.status, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending };
 }
 
+// Commit a (new or changed) blog.json together with the site regenerated from it: every page
+// embeds the blog's styles, header and footer, so a settings change touches them all. Blog-level
+// assets (the header logo) are pinned here; a post that cannot be published as it is refuses the change.
+async function planBlogJson(gh, { where, branch, head, whole, blogText, message, title, existed, runner }) {
+  const { repo, folder } = parseRepoRef(where);
+  const prefix = folder ? `${folder}/` : '';
+  const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
+  const blog = validateBlog(blogText);
+
+  const postPaths = [...tree.keys()].filter((p) => POST_PATH.test(p));
+  const posts = await Promise.all(postPaths.map(async (path) => ({ path, text: await gh.readText(repo, prefix + path, head.sha) })));
+  const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
+  let lockChanged = false;
+  for (const ref of blogAssetRefs(blog)) {
+    const { key, path } = parseAssetRef(ref);
+    if (lock[`${key}/${path}`]) continue;
+    const assetWhere = blog.assets && blog.assets.repos[key];
+    if (!assetWhere) throw new Refusal('unresolved-asset', `${ref}: blog.json has no asset repo "${key}"`);
+    const a = parseRepoRef(assetWhere);
+    const sha = await gh.pathSha(a.repo, at(a.folder, path));
+    if (!sha) throw new Refusal('unresolved-asset', `${ref}: no file at ${a.repo}/${at(a.folder, path)}`);
+    lock[`${key}/${path}`] = sha;
+    lockChanged = true;
+  }
+
+  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner });
+  const out = { 'blog.json': blogText, ...site.files };
+  if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
+  const changes = [];
+  for (const [path, content] of Object.entries(out)) {
+    const bytes = enc.encode(content);
+    if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
+  }
+  changes.push(...staleOptional(site, tree, prefix));
+  const summary = [{ repo, folder, branch, files: changes.length, bytes: changes.reduce((n, f) => n + f.size, 0) }];
+  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title, message, existed, head, changes, assetGroups: [], summary, ctx: null, lockPlan: {}, pending: [] };
+}
+
 // Create a blog where there is none: blog.json, and the generated site for whatever posts
 // are already there (none is fine), in one commit. Refuses to touch an existing blog.json.
-export async function planInit(gh, { repo: where, branch, fields }) {
+// Where this blog is served, as GitHub says: never typed in. With Pages on and readable, its own
+// address (a custom domain included); otherwise what is already in blog.json, or the convention.
+//   live:     GitHub Pages is enabled for the repository
+//   exact:    the address is GitHub's, not a guess
+//   built:    GitHub has built the site (Pages answers 404 for a site that is on but not yet deployed)
+//   readable: the token could read the Pages settings (it needs "Pages: Read-only")
+export async function detectAddress(gh, where) {
+  const { repo } = parseRepoRef(where);
+  const info = await gh.repoInfo(repo);
+  const live = !!info.has_pages;
+  let url = null;
+  let built = false;
+  let readable = true;
+  if (live) {
+    try {
+      const pages = await gh.api('GET', `/repos/${repo}/pages`);
+      url = pages.html_url || null;
+      built = pages.status === 'built';
+    } catch {
+      readable = false;
+    }
+  }
+  return { address: addressFrom(where, url), live, exact: !!url, built, readable, settingsUrl: `https://github.com/${repo}/settings/pages` };
+}
+
+export async function planInit(gh, { repo: where, branch, fields, runner }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
   const whole = await gh.tree(repo, head.treeSha);
   if (whole.has(prefix + 'blog.json')) throw new Error(`${repo} already has ${prefix}blog.json; open it instead of creating it.`);
-  const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
-
   let blogText;
   try {
-    blogText = blogJsonText(makeBlogJson(where, fields));
+    const found = await detectAddress(gh, where);
+    blogText = blogJsonText(makeBlogJson(where, { ...fields, domain: found.address }));
   } catch (e) {
     throw e instanceof Refusal ? e : new Refusal('bad-blog-json', e.message);
   }
-  validateBlog(blogText);
+  return planBlogJson(gh, { where, branch, head, whole, blogText, message: `Create blog: ${fields.title.trim()}`, title: fields.title, existed: false, runner });
+}
 
-  const postPaths = [...tree.keys()].filter((p) => POST_PATH.test(p));
-  const posts = await Promise.all(postPaths.map(async (path) => ({ path, text: await gh.readText(repo, prefix + path, head.sha) })));
-  const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
-  const site = buildSite({ blog: blogText, posts, lock });
-  if (site.errors.length) {
-    const e = new Refusal(site.errors[0].code, site.errors.map((x) => x.detail + (x.where ? ` (${x.where})` : '')).join('\n'));
-    e.all = site.errors;
-    throw e;
+// Change the blog's settings. The form is applied to the blog.json on the branch (unknown keys
+// survive), validated, and every generated page is regenerated from it.
+export async function planSettings(gh, { repo: where, branch, form, runner }) {
+  const { repo, folder } = parseRepoRef(where);
+  const prefix = folder ? `${folder}/` : '';
+  const head = await gh.headCommit(repo, branch);
+  const whole = await gh.tree(repo, head.treeSha);
+  const current = await gh.readText(repo, prefix + 'blog.json', head.sha);
+  if (current === null) throw new Refusal('no-blog-json', `${repo} has no ${prefix}blog.json`);
+  let blogText;
+  try {
+    const saved = JSON.parse(current);
+    // the address is not a setting: GitHub's own when it can be read, else what blog.json already says
+    const found = await detectAddress(gh, where).catch(() => null);
+    const domain = found && found.exact ? found.address : saved.domain;
+    blogText = blogJsonText(formToBlog(saved, { ...form, domain }));
+  } catch (e) {
+    throw e instanceof Refusal || e.code ? e : new Refusal('bad-blog-json', e.message);
   }
+  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText, message: 'Update blog settings', title: form.title, existed: true, runner });
+  plan.unchanged = plan.changes.length === 0;
+  return plan;
+}
 
-  const changes = [];
-  for (const [path, content] of Object.entries({ 'blog.json': blogText, ...site.files })) {
-    const bytes = enc.encode(content);
-    if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
+// ---------- themes and extensions ----------
+
+async function currentBlogJson(gh, where, branch) {
+  const { repo, folder } = parseRepoRef(where);
+  const head = await gh.headCommit(repo, branch);
+  const whole = await gh.tree(repo, head.treeSha);
+  const text = await gh.readText(repo, at(folder, 'blog.json'), head.sha);
+  if (text === null) throw new Refusal('no-blog-json', `${repo} has no ${at(folder, 'blog.json')}`);
+  return { head, whole, blog: JSON.parse(text) };
+}
+
+// Embeds' pinned assets are verified once, when the extension is pinned, from the two hosts the
+// editor is allowed to read from.
+const assetFetcher = (gh) => async (url) => {
+  const host = new URL(url).hostname;
+  if (!['cdn.jsdelivr.net', 'raw.githubusercontent.com'].includes(host)) throw new Refusal('bad-extension', `cannot verify a pinned asset on ${host} here; host it on jsDelivr (gh/…@<tag or commit>) or GitHub raw`);
+  const res = await gh.net.request(url);
+  return res.ok ? res.bytes : null;
+};
+
+// Use (or stop using) a theme. `use` is { where: owner/repo[/folder], ref, base? }: found by address, so
+// a theme that is in no list works. Every page is regenerated; the plan lists the licences involved.
+export async function planTheme(gh, { repo: where, branch, use, runner }) {
+  const { head, whole, blog } = await currentBlogJson(gh, where, branch);
+  let message;
+  if (use) {
+    const { pin, manifest } = await readThemeToPin(gh, use.where, use.ref, { base: use.base });
+    blog.theme = pin;
+    message = `Use theme: ${manifest.name} ${manifest.version} (${manifest.licence})`;
+  } else {
+    delete blog.theme;
+    message = 'Use the default theme';
   }
-  const summary = [{ repo, folder, branch, files: changes.length, bytes: changes.reduce((n, f) => n + f.size, 0) }];
-  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title: fields.title, message: `Create blog: ${fields.title.trim()}`, existed: false, head, changes, assetGroups: [], summary, ctx: null, lockPlan: {}, pending: [] };
+  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message, title: blog.title, existed: true, runner });
+  plan.licences = licenceRecords(validateBlog(blog));
+  plan.unchanged = plan.changes.length === 0;
+  return plan;
+}
+
+// Add (or replace) an extension, or remove one: `add` is { where, ref }, `remove` an owner/repo. The
+// plan includes the sandbox's recorded output (extension-outputs.json); nothing runs outside the sandbox.
+export async function planExtension(gh, { repo: where, branch, add, remove, runner }) {
+  const { head, whole, blog } = await currentBlogJson(gh, where, branch);
+  let message;
+  if (add) {
+    const { pin, manifest } = await readExtensionToPin(gh, add.where, add.ref, { fetchAsset: assetFetcher(gh) });
+    blog.extensions = [...(blog.extensions || []).filter((e) => e.repo !== pin.repo), pin];
+    message = `Add extension: ${manifest.name} ${manifest.version} (${manifest.licence})`;
+  } else {
+    blog.extensions = (blog.extensions || []).filter((e) => e.repo !== remove);
+    if (!blog.extensions.length) delete blog.extensions;
+    message = `Remove extension: ${remove}`;
+  }
+  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message, title: blog.title, existed: true, runner });
+  plan.licences = licenceRecords(validateBlog(blog));
+  plan.unchanged = plan.changes.length === 0;
+  return plan;
 }
 
 export function describePlan(plan) {
@@ -268,7 +362,7 @@ export async function executePlan(gh, plan, { pullBody = '' } = {}) {
 
   // Page content embeds the pin, so regenerate now that real shas exist.
   let changes = plan.changes;
-  if (plan.pending.length) ({ changes } = await computeChanges({ ...plan.ctx, lock: finalLock, lockChanged: true }));
+  if (plan.pending.length) ({ changes } = await computeChanges(gh, { ...plan.ctx, lock: finalLock, lockChanged: true }));
   if (!changes.length) return receipt;
 
   const verb = plan.mode === 'pr' ? 'Correct' : plan.status === 'draft' ? 'Draft' : plan.existed ? 'Update' : 'Publish';
