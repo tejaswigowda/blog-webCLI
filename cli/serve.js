@@ -26,8 +26,10 @@ export function serve(root, port = 0) {
       res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream' });
       res.end(body);
     } catch {
-      res.writeHead(404);
-      res.end('not found');
+      // like GitHub Pages: a path the site does not have is answered, with a 404 status, by its own 404.html
+      const page = await fs.readFile(path.join(root, '404.html')).catch(() => null);
+      res.writeHead(404, { 'content-type': page ? TYPES['.html'] : 'text/plain' });
+      res.end(page || 'not found');
     }
   });
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));

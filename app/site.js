@@ -9,6 +9,7 @@ import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
 import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs } from '../lib/customize.js';
+import { resolveOrder } from '../lib/order.js';
 import { blogJsonText, makeBlogJson } from '../lib/init.js';
 import { formToBlog } from '../lib/settings.js';
 import { gitBlobSha } from './github.js';
@@ -19,7 +20,7 @@ const enc = new TextEncoder();
 const json = (o) => JSON.stringify(o, null, 2) + '\n';
 export const PLACEHOLDER_SHA = '0'.repeat(40);
 
-export { NotFound, listPostFiles, loadBlog, loadIndex, loadPost, parseRepo } from './read.js';
+export { NotFound, listPostFiles, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo } from './read.js';
 
 // Releases published by hls.webcli.app into each configured video repository.
 export async function listVideoReleases(gh, blog) {
@@ -45,7 +46,10 @@ async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, r
   const blog = validateBlog(blogText);
   const packs = await loadPacks(gh, blog);
   const recorded = tree.has('extension-outputs.json') ? await gh.readText(repo, prefix + 'extension-outputs.json', head.sha) : null;
-  const site = await buildSiteWith({ blog: blogText, posts, lock, ...packs, outputs: parseOutputsFile(recorded) }, runner);
+  // a manual order is an authored file (order.json) beside blog.json; the generator reads it, never writes it
+  const order = resolveOrder(blog);
+  const orderList = order.by === 'manual' && tree.has(order.list) ? await gh.readText(repo, prefix + order.list, head.sha) : null;
+  const site = await buildSiteWith({ blog: blogText, posts, lock, ...packs, outputs: parseOutputsFile(recorded), orderList }, runner);
   if (site.errors.length) {
     const e = new Refusal(site.errors[0].code, site.errors.map((x) => x.detail + (x.where ? ` (${x.where})` : '')).join('\n'));
     e.all = site.errors;
@@ -55,7 +59,7 @@ async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, r
 }
 
 // Generated files that disappear when the feature that made them is switched off.
-const OPTIONAL_GENERATED = ['theme.css', 'extension-outputs.json'];
+const OPTIONAL_GENERATED = ['theme.css', 'extension-outputs.json', '404.html', 'webcli-live.js'];
 const staleOptional = (site, tree, prefix) => OPTIONAL_GENERATED.filter((f) => tree.has(f) && !(f in site.files)).map((f) => ({ path: prefix + f, delete: true, size: 0, action: 'delete' }));
 
 // `tree` is relative to the blog's folder; `prefix` puts the changes back where they live in the repository.
@@ -139,7 +143,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const prevIndexText = tree.has('index/posts.json') ? await gh.readText(repo, prefix + 'index/posts.json', head.sha) : null;
   const prevIndex = prevIndexText ? JSON.parse(prevIndexText) : null;
   const ctx = { blogText, others, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, runner };
-  const { changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
+  const { site, changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
 
   const assetGroups = [];
   for (const s of staged.filter((s) => pending.includes(`${s.key}/${s.path}`))) {
@@ -160,7 +164,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const sizeOf = (f) => f.size;
   summary.push({ repo, folder, branch: mode === 'pr' ? `new branch from ${branch}` : branch, files: changes.length, bytes: changes.reduce((n, f) => n + sizeOf(f), 0) });
 
-  return { repo, folder, branch, mode, slug, status: newPost.status, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending };
+  return { repo, folder, branch, mode, slug, status: newPost.status, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
 }
 
 // Commit a (new or changed) blog.json together with the site regenerated from it: every page
@@ -198,7 +202,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
   }
   changes.push(...staleOptional(site, tree, prefix));
   const summary = [{ repo, folder, branch, files: changes.length, bytes: changes.reduce((n, f) => n + f.size, 0) }];
-  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title, message, existed, head, changes, assetGroups: [], summary, ctx: null, lockPlan: {}, pending: [] };
+  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title, message, existed, head, changes, assetGroups: [], summary, ctx: null, lockPlan: {}, pending: [], unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
 }
 
 // Create a blog where there is none: blog.json, and the generated site for whatever posts

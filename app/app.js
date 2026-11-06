@@ -12,13 +12,17 @@ import { Refusal } from '../lib/errors.js';
 import { describeError, progressLine, toast, working } from './ui.js';
 import { describeDate, loadMoment, today } from './dates.js';
 import { icon } from './icons.js';
+import { fmtClock, pollDeploy } from '../lib/deploy.js';
+import { assessBuilds, describeBuilds, noteBuild, recentBuilds } from '../lib/buildrate.js';
+import { liveEnabled, ownsNotFoundPage } from '../lib/content.js';
+import { READER_SORTS, readerSort, saveSort, savedSort } from '../lib/sort.js';
 import { mdToDelta, deltaToMarkdownChecked } from '../lib/markdown.js';
 import { SLUG_RE, joinFile, newFront, parseMeta, setMeta, splitFile } from '../lib/frontmatter.js';
 import { parsePost } from '../lib/blog.js';
 import { resolveAsset } from '../lib/assets.js';
 import { videoBase, videoEmbedUrl } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
-import { defaultDomain, defaultTitle } from '../lib/init.js';
+import { DEFAULT_CONTENT_BASE, defaultDomain, defaultTitle } from '../lib/init.js';
 import { FONTS, resolveLogo, themeCss } from '../lib/customize.js';
 import { blogToForm, formToBlog } from '../lib/settings.js';
 import { validateBlog } from '../lib/blog.js';
@@ -76,7 +80,24 @@ function fail(e) {
   return toast({ kind: 'error', title: d.title, message: d.message });
 }
 
+// Every commit to the repository the blog lives in is a GitHub Pages build; count them (lib/buildrate.js).
+function countBuilds(receipt) {
+  const last = receipt.commits[receipt.commits.length - 1];
+  if (!last || receipt.pull) return;
+  for (const c of receipt.commits) if (c.repo === last.repo) noteBuild(localStorage, c.repo);
+}
+
+// What the pre-flight says about the build this commit starts, before anything is sent.
+function buildNote(plan) {
+  if (plan.mode === 'pr' || !plan.changes.length) return null;
+  const a = assessBuilds(recentBuilds(localStorage, plan.repo).length);
+  if (a.level === 'ok') return null;
+  const here = cache && parseRepoRef(cache.repo).repo === plan.repo ? cache.blog : null;
+  return h('div', { class: a.level === 'limit' ? 'err' : 'caution' }, describeBuilds(a, { readersSeeIt: !!here && liveEnabled(here) }));
+}
+
 function sent(receipt, opts = {}) {
+  countBuilds(receipt);
   const links = [
     ...receipt.commits.map((c) => ({ href: c.url, text: `${c.files} file${c.files === 1 ? '' : 's'} → ${c.repo}@${c.branch} (${c.sha.slice(0, 8)})` })),
     ...(receipt.pull ? [{ href: receipt.pull.url, text: `Pull request #${receipt.pull.number}` }] : []),
@@ -94,6 +115,70 @@ const outbound = (label, url, attrs = {}) => h('button', { type: 'button', ...at
 function dateEl(iso, { long = false } = {}) {
   const d = describeDate(iso);
   return h('time', { datetime: iso, title: d.full }, long ? (d.relative && d.full !== d.relative ? `${d.full} · ${d.relative}` : d.full) : d.label);
+}
+
+// Where a publish is on its way to readers: committed -> building -> live (0:34), and the link withheld until
+// GitHub says the build is live. The state is GitHub's own (lib/deploy.js), not a guess.
+function deployPanel({ gh, repo, hasPages }) {
+  const box = h('div', { class: 'deploy', hidden: true, 'aria-live': 'polite' });
+  let run = 0; // a newer publish replaces the one being watched
+
+  const copy = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ kind: 'success', title: 'Link copied', message: url });
+    } catch {
+      toast({ kind: 'info', title: 'Copy this link', message: url, timeout: 0 });
+    }
+  };
+
+  function draw(st, ctx) {
+    const live = st.state === 'live';
+    const failed = st.state === 'failed';
+    const waiting = st.state === 'committed' || st.state === 'unknown';
+    const stage = (label, cls) => h('li', { class: `step ${cls}`, 'aria-current': cls === 'active' ? 'step' : null }, label);
+    const clock = st.seconds !== undefined ? ` (${fmtClock(st.seconds)})` : '';
+    const steps = h('ol', { class: 'steps' },
+      stage('Committed', 'done'),
+      stage(failed ? 'Build failed' : st.state === 'building' || waiting ? `Building${st.state === 'building' ? clock : ''}` : 'Built', failed ? 'failed' : live ? 'done' : st.state === 'building' ? 'active' : 'todo'),
+      stage(live ? `Live${clock}` : 'Live', live ? 'done' : 'todo'));
+    const parts = [steps];
+    const say = (text, cls = 'hint') => parts.push(h('div', { class: cls }, text));
+    if (st.state === 'failed') {
+      say(`GitHub Pages could not build the site: ${st.error}${ctx.soft ? ' Readers still see the current text: their pages check the repository themselves.' : ''}`, 'err');
+    } else if (st.state === 'unknown') {
+      say(st.reason, 'caution');
+    } else if (!ctx.published) {
+      say('Saved as a draft: nothing is public, so there is no link to share.');
+    } else if (live) {
+      say('Live. Link previews will now show this post too.');
+    } else {
+      say(ctx.soft
+        ? 'Readers can already open this link and see the current text. Link previews (Slack, iMessage, social cards) read the built page, so they wait for the build.'
+        : ctx.isNew ? 'This link will not work for anyone until the build finishes.' : 'Readers see the previous version until the build finishes.');
+      if (st.stalled) say(`No build has started after three minutes: GitHub Pages may be throttling builds (about 10 an hour).${ctx.soft ? ' Your readers still see the current text.' : ''}`, 'caution');
+    }
+    parts.push(h('div', { class: 'actions' },
+      ctx.published ? h('button', { type: 'button', icon: 'copy', disabled: !live, title: live ? ctx.url : 'Available once the build is live', onclick: () => copy(ctx.url) }, 'Copy link') : null,
+      failed ? outbound('Open the build log', `https://github.com/${repo}/actions`, { icon: 'external-link' }) : null));
+    box.replaceChildren(...parts);
+  }
+
+  async function track(ctx) {
+    const mine = ++run;
+    box.hidden = false;
+    if (!hasPages) {
+      draw({ state: 'unknown', reason: 'GitHub Pages is not enabled for this repository, so there is no deployment to follow. Turn it on under Settings → Pages.' }, ctx);
+      return;
+    }
+    draw({ state: 'committed', seconds: 0 }, ctx);
+    try {
+      await pollDeploy({ getBuild: () => gh.pagesBuild(repo), sha: ctx.sha, since: ctx.since, onState: (st) => { if (mine === run) draw(st, ctx); }, signal: { get aborted() { return mine !== run; } } });
+    } catch (e) {
+      if (mine === run) draw({ state: 'unknown', reason: `Could not read the build state: ${e.message}` }, ctx);
+    }
+  }
+  return { el: box, track };
 }
 
 const noted = (message) => toast({ kind: 'info', message });
@@ -393,6 +478,18 @@ async function settingsView(repo, r) {
       h('div', { class: 'row' }, field('Images', input('images', { placeholder: homeFolder('images') })), field('Audio', input('audio', { placeholder: 'owner/name or owner/name/folder' })), field('Video', input('video', { placeholder: homeFolder('videos') }))),
       h('details', {}, h('summary', {}, 'URL templates (change CDN or player)'), h('div', { class: 'row' }, field('Image / audio URL', input('assetBase', { placeholder: 'https://…{owner}/{repo}@{sha}/{path}' }))), h('div', { class: 'row' }, field('Video player', input('videoPlayer')), field('Video URL', input('videoBase')))),
     ),
+    section(
+      'Post order',
+      h('div', { class: 'row' }, field('Order the blog by', select('orderBy', [['date', 'Date'], ['title', 'Title'], ['manual', 'A list I keep (order.json)'], ['frontmatter', 'A frontmatter field']])), field('Direction', select('orderDir', [['', 'Default'], ['asc', 'Ascending'], ['desc', 'Descending']]))),
+      h('div', { class: 'row' }, field('Frontmatter field', input('orderField', { placeholder: 'episode' }), 'Every published post must have it, all numbers or all text.'), field('List file', input('orderList', { placeholder: 'order.json' }), '{"order": ["first-slug", "second-slug"]}: drafts may be in it; a post that is in no list is added at the end, by date.')),
+      h('div', { class: 'hint' }, 'Newest first is the default. This sets the index, the previous/next links on every page and the order of the feed document; a reader can still sort the list for themselves, which changes nothing else. Ties are broken by slug, always.'),
+    ),
+    section(
+      'Publishing speed',
+      check('live', 'Show new and edited posts to readers before the GitHub Pages build finishes'),
+      h('div', { class: 'hint' }, 'GitHub Pages takes from seconds to minutes to publish what you commit. With this on, each page checks the repository itself (one small file request, no account, no API) and shows the current text, and a post that has no page yet is drawn at its address. Search engines and link previews still wait for the build.'),
+      h('details', {}, h('summary', {}, 'Where the live copy is read from'), h('div', { class: 'row' }, field('Content URL', input('contentBase', { placeholder: DEFAULT_CONTENT_BASE }), 'A template ending in /{path}, using {owner} and {repo}. Blank: the default.'))),
+    ),
     section('Colors', h('div', { class: 'colors' }, h('span', {}), h('b', {}, 'Light'), h('b', {}, 'Dark'), ...colorRows), h('div', { class: 'hint' }, 'Leave blank for the default. A colour with no dark value keeps the default dark palette.')),
     section(
       'Type and layout',
@@ -605,7 +702,7 @@ function licencesView(repo, r) {
 async function listView(repo, r) {
   const { blog } = cache;
   document.title = blog.title;
-  const entries = await loadIndex(gh, repo, r.ref);
+  const entries = await loadIndex(gh, repo, r.ref, { blog });
   const wrap = h('div', {}, h('h1', {}, blog.title), h('p', { class: 'muted' }, blog.description));
   // View blog opens the GitHub Pages site when GitHub is serving one, else the reader (which needs no Pages)
   const viewBlog = outbound('View blog', `blog/${link(repo, r.ref ? `&ref=${r.ref}` : '')}`, { icon: 'external-link', title: 'Opens the reader: GitHub Pages is not serving this blog' });
@@ -618,9 +715,16 @@ async function listView(repo, r) {
       }
     }).catch(() => {});
   }
-  wrap.append(
-    h('ul', { class: 'posts' }, entries.map((e) => h('li', { class: 'card-link' }, h('h3', {}, nav(e.title, link(repo, `&post=${e.slug}${r.ref ? `&ref=${r.ref}` : ''}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(e.date), (e.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))), e.excerpt ? h('p', {}, e.excerpt) : null))),
-  );
+  // The list starts in the blog's own order (the index records it); a reader may sort it for themselves. That
+  // changes this list and nothing else: no address, no previous/next, nothing written anywhere.
+  const sortLabel = h('label', { class: 'sortbar' }, 'Sort ');
+  const list = h('ul', { class: 'posts' });
+  const drawList = (mode) => list.replaceChildren(...readerSort(entries, mode).map((e) => h('li', { class: 'card-link' }, h('h3', {}, nav(e.title, link(repo, `&post=${e.slug}${r.ref ? `&ref=${r.ref}` : ''}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(e.date), (e.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))), e.excerpt ? h('p', {}, e.excerpt) : null)));
+  const mode0 = savedSort(sessionStorage, repo);
+  const picker = h('select', { 'aria-label': 'Sort posts', onchange: () => { saveSort(sessionStorage, repo, picker.value); drawList(picker.value); } }, READER_SORTS.map(([k, label]) => h('option', { value: k, selected: k === mode0 }, label)));
+  sortLabel.append(picker);
+  drawList(mode0);
+  wrap.append(...(entries.length > 1 ? [sortLabel] : []), list);
   if (!entries.length) wrap.append(h('p', { class: 'muted' }, 'No published posts yet.'));
   return wrap;
 }
@@ -676,6 +780,7 @@ async function editorView(repo, r) {
   let { blog } = cache;
   const staged = new Map();
   const canPush = !!(info.permissions && info.permissions.push);
+  const deploy = deployPanel({ gh, repo: plainRepo, hasPages: !!info.has_pages });
 
   setAssetResolver((ref) => {
     const s = staged.get(ref.replace(/^asset:/, ''));
@@ -743,6 +848,7 @@ async function editorView(repo, r) {
         correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', outbound('Propose the change on GitHub instead', `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `posts/${r.post}.md`)}`, { class: 'link' }), ' — it forks and opens the pull request for you.')) : null,
         h('div', { class: 'row' }, field('Date', f.date, dateNote), field('Tags', f.tags), field('Status', f.status)),
         h('div', { class: 'actions' }, go),
+        deploy.el,
       ))),
     ),
   );
@@ -850,6 +956,7 @@ async function editorView(repo, r) {
   go.addEventListener('click', async () => {
     go.disabled = true;
     try {
+      const creating = isNew;
       const { slug, text, md } = buildText();
       const used = new Set([...text.matchAll(/asset:([^\s)\]]+)/g)].map((x) => x[1]));
       const plan = await working('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, staged: [...staged.values()].filter((s) => used.has(`${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
@@ -860,6 +967,11 @@ async function editorView(repo, r) {
       if (!(await confirmPlan(plan))) return;
       const receipt = await working('Committing…', () => executePlan(gh, plan, { pullBody: note.value.trim() }), { button: go });
       sent(receipt, { title: correcting ? 'Correction proposed' : f.status.value === 'published' ? 'Published' : 'Draft saved' });
+      const pushed = [...receipt.commits].reverse().find((c) => c.repo === plainRepo);
+      if (!correcting && pushed) {
+        const now = cache && cache.blog ? cache.blog : blog;
+        deploy.track({ sha: pushed.sha, since: Date.now(), url: `${now.domain}/${slug}/`, published: f.status.value === 'published', isNew: creating, soft: liveEnabled(now) && (!creating || ownsNotFoundPage(now)) });
+      }
       const path = `posts/${slug}.md`;
       existing = { post: parsePost({ path, text }) };
       isNew = false;
@@ -1311,6 +1423,8 @@ function confirmPlan(plan) {
       h('div', { class: 'preflight' }, describePlan(plan).map((l) => h('div', {}, l))),
       h('div', { class: 'files' }, [...plan.assetGroups.flatMap((g) => g.files.map((x) => ({ ...x, repo: g.repo }))), ...plan.changes.map((c) => ({ ...c, repo: plan.repo }))].map((c) => h('div', {}, `${c.action.padEnd(6)} ${c.repo}/${c.path}  ${fmtBytes(c.size)}`))),
       plan.licences ? h('div', {}, h('h3', {}, 'Licences this blog will depend on'), h('div', { class: 'files' }, plan.licences.map((l) => h('div', {}, `${l.kind.padEnd(10)} ${l.name} ${l.version || ''}  ${l.licence}${l.repo ? `  ${l.repo}@${l.ref}` : '  (built in)'}`)))) : null,
+      buildNote(plan),
+      plan.unlisted && plan.unlisted.length ? h('div', { class: 'caution' }, `${plan.unlisted.length === 1 ? 'This post is' : `${plan.unlisted.length} published posts are`} not in ${plan.orderFile || 'the order list'}, so ${plan.unlisted.length === 1 ? 'it' : 'they'} will be added at the end, by date: ${plan.unlisted.join(', ')}. Add ${plan.unlisted.length === 1 ? 'it' : 'them'} to ${plan.orderFile || 'the list'} to place ${plan.unlisted.length === 1 ? 'it' : 'them'}.`) : null,
       h('p', { class: 'hint' }, plan.mode === 'pr' ? 'This opens a pull request; the default branch is not changed.' : 'Nothing has been uploaded yet.'),
       h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'git-commit', onclick: () => done(true) }, plan.mode === 'pr' ? 'Open pull request' : 'Commit and push'), h('button', { icon: 'x', onclick: () => done(false) }, 'Cancel')),
     ].filter(Boolean));

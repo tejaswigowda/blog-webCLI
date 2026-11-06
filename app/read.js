@@ -7,6 +7,7 @@ import { resolveAsset } from '../lib/assets.js';
 import { deltaToHtml } from '../lib/html.js';
 import { videoEmbedUrl } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
+import { DEFAULT_ORDER, parseOrderList, resolveOrder, sequenceOf } from '../lib/order.js';
 
 export class NotFound extends Error {}
 
@@ -26,23 +27,43 @@ export async function loadBlog(gh, where, ref) {
   return { blog, lock: lockText ? JSON.parse(lockText) : {} };
 }
 
-// The generated index when present; otherwise list posts/ and read frontmatter.
-export async function loadIndex(gh, where, ref) {
+// The generated index when present: its posts in the blog's own order. The order is the build's to decide
+// (lib/order.js) and is recorded as `sequence`; this only reads it, so a browser can never disagree with the
+// pages. With no index yet (a blog nobody has built), the posts are listed from posts/ and put in order by the
+// same module, from `blog` when the caller has it.
+export async function loadIndexFull(gh, where, ref, { blog = null } = {}) {
   const { repo, folder } = parseRepoRef(where);
   const text = await gh.readText(repo, at(folder, 'index/posts.json'), ref);
-  if (text !== null) return JSON.parse(text).posts;
-  const names = (await listPostFiles(gh, where, ref));
-  const entries = [];
+  if (text !== null) {
+    const index = JSON.parse(text);
+    // Take the recorded sequence as it is: look each slug up, never compare two posts. (An entry the sequence does
+    // not name, which a hand-edited index could have, follows in the order the file gives.)
+    const byslug = new Map(index.posts.map((e) => [e.slug, e]));
+    const named = (index.sequence || []).filter((s) => byslug.has(s));
+    const posts = [...named.map((s) => byslug.get(s)), ...index.posts.filter((e) => !named.includes(e.slug))];
+    return { posts, sequence: posts.map((e) => e.slug), order: index.order || { ...DEFAULT_ORDER } };
+  }
+  const names = await listPostFiles(gh, where, ref);
+  const found = [];
   for (const n of names) {
     const raw = await gh.readText(repo, at(folder, `posts/${n}`), ref);
     try {
       const m = parseMeta(splitFile(raw, n).front, n);
-      if (m.status === 'published') entries.push({ slug: m.slug, title: m.title, date: m.date, tags: m.tags || [], excerpt: '', cover: m.cover && m.cover !== 'auto' ? m.cover : null, status: 'published' });
+      if (m.status === 'published') found.push({ slug: m.slug, path: `posts/${n}`, meta: m, entry: { slug: m.slug, title: m.title, date: m.date, tags: m.tags || [], excerpt: '', cover: m.cover && m.cover !== 'auto' ? m.cover : null, status: 'published' } });
     } catch {
       /* unreadable posts are simply not listed */
     }
   }
-  return entries.sort((a, b) => (a.date < b.date ? 1 : -1));
+  const order = resolveOrder(blog || {});
+  const list = order.by === 'manual' ? parseOrderList(await gh.readText(repo, at(folder, order.list), ref), order.list) : null;
+  const seq = sequenceOf({ order, posts: found, files: new Set(names.map((n) => n.replace(/\.md$/, ''))), list });
+  if (seq.errors.length) throw seq.errors[0];
+  const byslug = new Map(found.map((f) => [f.slug, f.entry]));
+  return { posts: seq.slugs.map((s) => byslug.get(s)), sequence: seq.slugs, order };
+}
+
+export async function loadIndex(gh, where, ref, opts) {
+  return (await loadIndexFull(gh, where, ref, opts)).posts;
 }
 
 export async function listPostFiles(gh, where, ref) {

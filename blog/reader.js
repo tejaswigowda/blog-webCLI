@@ -2,9 +2,11 @@
 // Read-only and anonymous. If the blog cannot be loaded it points at the static site.
 import { createNet, fmtBytes } from '../app/net.js';
 import { GitHub } from '../app/github.js';
-import { NotFound, loadIndex, loadPost } from '../app/read.js';
+import { NotFound, loadIndexFull, loadPost } from '../app/read.js';
 import { hashFor, isTrustedHost, normalizeBlogUrl, openBlog, parseReaderHash, staticAddress, staticPostUrl } from '../app/reader-core.js';
-import { indexBody, postBody } from '../lib/contracts.js';
+import { indexBody, indexList, postBody } from '../lib/contracts.js';
+import { neighbours } from '../lib/order.js';
+import { READER_SORTS, readerSort, saveSort, savedSort } from '../lib/sort.js';
 import { escapeHtml as esc } from '../lib/html.js';
 import { resolveLogo, themeCss } from '../lib/customize.js';
 import { checkPublishedCss } from '../lib/theme-pack.js';
@@ -146,14 +148,32 @@ async function route() {
         `<a href="../#repo=${esc(repo)}&amp;correct=${esc(parsed.post)}" rel="nofollow">Suggest a correction</a>`,
         `<a href="${esc(staticPostUrl(blog.domain, parsed.post))}" rel="noopener noreferrer">Static page</a>`,
       ].join(' · ');
-      show(postBody(contract, { ...chrome, meta: loaded.post.meta, bodyHtml: loaded.html, coverUrl, footerExtra }));
+      // previous / next follow the blog's own order, as the index records it; a reader's sort never touches them
+      let navLinks = null;
+      try {
+        const idx = await loadIndexFull(gh, repo, parsed.ref, { blog });
+        navLinks = neighbours(idx.sequence, parsed.post, new Map(idx.posts.map((e) => [e.slug, e.title])), (slug) => hashFor(parsed, { post: slug }));
+      } catch {
+        /* without the index there is simply no previous/next */
+      }
+      show(postBody(contract, { ...chrome, meta: loaded.post.meta, bodyHtml: loaded.html, coverUrl, footerExtra, nav: navLinks }));
       return;
     }
 
-    const entries = await loadIndex(gh, repo, parsed.ref);
+    const { posts: entries } = await loadIndexFull(gh, repo, parsed.ref, { blog });
     if (mine !== seq) return;
     document.title = blog.title;
-    show(indexBody(contract, { ...chrome, entries, hrefFor: (slug) => hashFor(parsed, { post: slug }), indexHtml: entries.length ? undefined : '<p class="meta">No published posts yet.</p>' }));
+    // The blog's own order is the start; a reader may sort the list for themselves. That changes this list and
+    // nothing else: the address stays as it is, and previous/next on a post do not move.
+    const draw = (mode) => {
+      const options = READER_SORTS.map(([k, label]) => `<option value="${esc(k)}"${k === mode ? ' selected' : ''}>${esc(label)}</option>`).join('');
+      const bar = entries.length > 1 ? `<label class="sortbar">Sort <select id="reader-sort" aria-label="Sort posts">${options}</select></label>` : '';
+      const list = entries.length ? bar + indexList(contract, { blog, entries: readerSort(entries, mode), hrefFor: (slug) => hashFor(parsed, { post: slug }) }) : '<p class="meta">No published posts yet.</p>';
+      show(indexBody(contract, { ...chrome, entries, hrefFor: (slug) => hashFor(parsed, { post: slug }), indexHtml: list }));
+      const picker = document.getElementById('reader-sort');
+      if (picker) picker.addEventListener('change', () => { saveSort(sessionStorage, repo, picker.value); draw(picker.value); });
+    };
+    draw(savedSort(sessionStorage, repo));
   } catch (e) {
     if (mine === seq) failsafe(parsed, blog, e);
   }

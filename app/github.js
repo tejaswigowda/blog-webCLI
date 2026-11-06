@@ -172,6 +172,11 @@ export class GitHub {
     return this.api('GET', `/repos/${repo}`);
   }
 
+  // The latest GitHub Pages build (status queued|building|built|errored, commit, error), for the deployment state.
+  pagesBuild(repo) {
+    return this.api('GET', `/repos/${repo}/pages/builds/latest`);
+  }
+
   async headCommit(repo, branch) {
     const c = await this.api('GET', `/repos/${repo}/commits/${encodeURIComponent(branch)}`);
     return { sha: c.sha, treeSha: c.commit.tree.sha };

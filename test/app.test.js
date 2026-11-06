@@ -108,7 +108,8 @@ test('publish: pre-flight is concrete, one commit, and matches what the CLI woul
   assert.equal(lines.length, 1);
   assert.match(lines[0], /^\d+ files?, [\d.]+ (B|KB|MB), to github\.com\/example\/blog \(main\)$/);
   const paths = plan.changes.map((c) => c.path).sort();
-  assert.deepEqual(paths, ['feed.xml', 'fresh-post/index.html', 'index.html', 'index/posts.json', 'posts/fresh-post.md']);
+  // the new post is the newest, so the page that was newest gains a neighbour (its previous link)
+  assert.deepEqual(paths, ['feed.xml', 'fresh-post/index.html', 'index.html', 'index/posts.json', 'posts/fresh-post.md', 'static-hls-in-git/index.html']);
 
   const receipt = await executePlan(authed, plan);
   assert.equal(receipt.commits.length, 1);

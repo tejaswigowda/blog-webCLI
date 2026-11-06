@@ -168,3 +168,47 @@ test('settings: in a folder, only the folder changes; and there must be a blog.j
   assert.ok(server.files('me/s')['blog/hello/index.html'].includes('hi'));
   await assert.rejects(planSettings(gh, { repo: 'me/s', branch: 'main', form }), (e) => e.code === 'no-blog-json');
 });
+
+test('settings: "show new and edited posts before the build" writes content, ships the script and a 404 page, and turning it off removes them', async () => {
+  const { server, gh } = await world();
+  const ctx = await loadBlog(gh, 'example/blog');
+  const form = blogToForm(ctx.blog);
+  assert.equal(form.live, false);
+  assert.equal(form.contentBase, '');
+  assert.ok(!('content' in formToBlog(ctx.blog, form)), 'unticked: nothing is written');
+
+  // ticked, with nothing typed: the default template goes into blog.json (the only place a host is named)
+  const on = await planSettings(gh, { repo: 'example/blog', branch: 'main', form: { ...form, live: true } });
+  const paths = on.changes.map((c) => c.path).sort();
+  assert.ok(paths.includes('webcli-live.js') && paths.includes('404.html') && paths.includes('blog.json'));
+  assert.ok(on.changes.filter((c) => c.path.endsWith('/index.html')).length >= 2, 'every post page is regenerated with the script');
+  await executePlan(gh, on);
+  const after = server.files('example/blog');
+  assert.match(JSON.parse(after['blog.json']).content.base, /^https:\/\/.*\{owner\}.*\{repo\}.*\/\{path\}$/);
+  assert.ok(after['static-hls-in-git/index.html'].includes('<script type="module" src="../webcli-live.js"></script>'));
+  assert.ok(after['404.html'].includes('data-webcli-notfound'));
+  // CI would regenerate exactly this
+  const regen = buildSite({ blog: after['blog.json'], lock: JSON.parse(after['assets.lock.json']), posts: Object.entries(after).filter(([p]) => p.startsWith('posts/')).map(([path, text]) => ({ path, text })) });
+  for (const [p, c] of Object.entries(regen.files)) assert.equal(after[p], c, p);
+
+  // the base can be changed to somewhere else, and the pages follow with no code change
+  const moved = blogToForm(JSON.parse(after['blog.json']));
+  assert.equal(moved.live, true);
+  const elsewhere = await planSettings(gh, { repo: 'example/blog', branch: 'main', form: { ...moved, contentBase: 'https://elsewhere.test/{owner}/{repo}/{ref}/{path}' } });
+  await executePlan(gh, elsewhere);
+  assert.match(server.files('example/blog')['404.html'], /x-content-base" content="https:\/\/elsewhere\.test\/example\/blog\/HEAD\/"/);
+
+  // off again: the script and the 404 page go, the pages lose their script tag
+  const off = await planSettings(gh, { repo: 'example/blog', branch: 'main', form: { ...moved, live: false } });
+  assert.ok(off.changes.some((c) => c.path === '404.html' && c.delete) && off.changes.some((c) => c.path === 'webcli-live.js' && c.delete));
+  await executePlan(gh, off);
+  const gone = server.files('example/blog');
+  assert.ok(!('404.html' in gone) && !('webcli-live.js' in gone));
+  assert.ok(!/<script/.test(gone['static-hls-in-git/index.html']));
+});
+
+test('settings: a blog with no repository named cannot turn the live copy on, and is told why', async () => {
+  const base = await exampleBlog();
+  delete base.repo;
+  assert.throws(() => validateBlog(formToBlog(base, { ...blogToForm(base), live: true })), (e) => e.code === 'bad-blog-json' && /needs "repo"/.test(e.detail));
+});

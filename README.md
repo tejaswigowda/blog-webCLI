@@ -11,7 +11,7 @@ pages the app generates carry its built-in default theme, which is part of the a
 their licence comment and in `licences.json`; a blog that wants no GPL text in its pages pins a theme.
 
 ```
-blog repo     posts/*.md · blog.json · assets.lock.json · index/posts.json · generated HTML · feed.xml
+blog repo     posts/*.md · blog.json · [order.json] · assets.lock.json · index/posts.json · generated HTML · feed.xml
 images repo   binaries
 audio repo    binaries
 video repo    a renders repository published by hls.webcli.app (HLS releases, tagged <name>/vN)
@@ -69,6 +69,9 @@ the release tag), else the blog's `cover`. An automatic cover is the share previ
 `cover` (the chosen asset; none when it is a poster); it is not drawn on the page, where it would
 repeat what the post already shows. With nothing to pick and no blog cover, the build warns that the
 page has no `og:image`. The source keeps the word `auto`, so changing the picture changes the cover.
+
+A post never says where it sits in a sequence: that is the blog's [`order`](#order), and for a hand-kept order a separate
+list file. Previous/next links are generated from it.
 
 Quill is a *view* over the markdown. Nothing but markdown is ever stored.
 
@@ -158,6 +161,286 @@ readable by the token): it never links to a site that is not there.
 Saving Settings rewrites `domain` only when GitHub gives the address; otherwise it leaves what was
 saved. A `domain` edited by hand in `blog.json` (for the CLI) is therefore kept until GitHub answers.
 Tested in [test/address.test.js](test/address.test.js) and [test/e2e/address.e2e.mjs](test/e2e/address.e2e.mjs).
+
+## Configuration reference
+
+There is no server, no environment variable and no config file for the app itself. A blog is configured
+by files in its own repository, and everything has a default, so the smallest blog is four fields. Each
+setting lives in exactly one place:
+
+| Where | What it configures | Written by |
+|---|---|---|
+| [`blog.json`](#blogjson) | the blog: identity, address, media, theme, extensions, live copy, styling | you, or **Settings** in the editor |
+| [post frontmatter](#post-frontmatter) (`posts/<slug>.md`) | one post | you, or the editor |
+| `order.json` (or the file `order.list` names) | the sequence of posts, when the blog is [ordered by hand](#order) | you (the one authored file beside `blog.json`) |
+| `assets.lock.json` | the commit each `asset:` reference is pinned to | the editor / `blog-webcli pin` (never by hand) |
+| `extension-outputs.json` | what each extension returned at publish | the editor's sandbox (never by hand) |
+| `index/posts.json`, `feed.xml`, `theme.css`, `licences.json`, `404.html`, `webcli-live.js`, every page | generated from the above | the generator; CI diffs them |
+| the reader's URL hash | one view of a blog (`/blog/#repo=…&ref=…&images=…`, see [the reader](#the-blog-reader)) | the link |
+| GitHub Pages settings | where the blog is served (branch, custom domain, HTTPS) | GitHub; the app reads it, it does not store it |
+| [`themes.json`](themes.json), [`extensions.json`](extensions.json) in *this* repository | the "Built in" lists in the theme and extension pickers (a convenience: any repository works by address) | pull request |
+
+Nothing is ever configured by writing a hostname into a post. A post names things logically
+(`asset:images/x.png`, `video:videos/clip@v2`); `blog.json` says where they live.
+
+### blog.json
+
+A complete file with every section in use. It passes the generator's validator as written; only the first
+four keys are required, and the real file is plain JSON (no comments):
+
+```json
+{
+  "title": "My Blog",
+  "description": "What this blog is about",
+  "author": "Ada Example",
+  "domain": "https://me.github.io/blog",
+  "repo": "me/blog",
+  "theme": "default",
+  "cover": "asset:images/default-cover.png",
+  "assets": {
+    "base": "https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}",
+    "repos": { "images": "me/images", "audio": "me/audio" }
+  },
+  "video": {
+    "player": "https://strataeditor.dev/player/",
+    "base": "https://cdn.jsdelivr.net/gh/{owner}/{repo}@{tag}/{slug}/",
+    "repos": { "videos": "me/renders" }
+  },
+  "content": {
+    "base": "https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}",
+    "ref": "HEAD"
+  },
+  "extensions": [
+    { "repo": "me/reading-time", "ref": "v1.0.0", "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "name": "Reading time", "version": "1.0.0", "licence": "MIT", "kind": "build", "hooks": ["post:html"] }
+  ],
+  "customize": {
+    "colors": { "accent": "#0b7a5f", "dark": { "accent": "#5fd3a8" } },
+    "font": "serif",
+    "width": "42rem",
+    "header": { "links": [{ "label": "About", "url": "https://example.com/about" }] },
+    "footer": { "text": "© 2026 Ada Example" },
+    "list": { "layout": "cards", "excerpts": true, "dates": true, "tags": true }
+  }
+}
+```
+
+#### Top-level keys
+
+| Key | Required | Value | If left out |
+|---|---|---|---|
+| `title` | yes | text | refused (`bad-blog-json`) |
+| `description` | yes | text; the default page description and `og:description` | refused |
+| `author` | yes | text; the byline and the feed author, unless a post sets its own | refused |
+| `domain` | yes | an absolute `http(s)://` URL the blog is served at, with its folder if any (`https://me.github.io/blog`). Used for canonical links, `og:url` and the feed. A trailing `/` is dropped. The editor does not let you type it: it reads GitHub Pages (a custom domain included) and writes what GitHub says; in the CLI you write it | refused |
+| `repo` | no | where the blog lives: `owner/name` or `owner/name/folder`. Needed for the defaults below, for `content`, and for "Suggest a correction" links. A blog that omits it still builds | media defaults and `content` are unavailable |
+| `theme` | no | `"default"`, or a [pinned theme](#pinning) object | `"default"` |
+| `extensions` | no | up to 8 [pinned extensions](#pinning), no repository twice | none |
+| `cover` | no | an `asset:` reference: the share image of the index, and of any post with no `cover` of its own | no `og:image` unless a post has one (a build warning says so) |
+| `assets` | no | binaries (images, audio): [below](#assets) | an `images/` folder of `repo` |
+| `video` | no | video releases: [below](#video) | a `videos/` folder of `repo` |
+| `content` | no | the live copy that makes publishing feel instant: [below](#content) | off: pages carry no script and there is no `404.html` |
+| `order` | no | how posts are sequenced: [below](#order) | newest first (`date`, `desc`) |
+| `customize` | no | colours, fonts, width, header, footer, list layout, CSS: see [Customization](#customization) | the default look |
+
+Unknown top-level keys are carried through untouched by the editor and ignored by the generator. Anything
+the generator does read is validated against a closed set: a wrong value is refused with a reason
+(`bad-blog-json`), never guessed, and a refused build writes nothing.
+
+#### `assets`
+
+```json
+"assets": { "base": "https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}",
+            "repos": { "images": "me/images", "audio": "me/audio" } }
+```
+
+| Key | Value |
+|---|---|
+| `base` | an `http(s)` URL template containing `{sha}` and `{path}`; `{owner}` and `{repo}` also work. A post says `asset:images/x.png`; the generated page carries `base` filled in with the commit the file is pinned to, so a page does not change when an image is replaced. Changing CDN is an edit here plus a rebuild: no post is touched |
+| `repos` | at least one key (`[a-z0-9][a-z0-9_-]*`, e.g. `images`) mapped to `owner/name` or `owner/name/folder`. The key is what posts write after `asset:` |
+
+A repository here may not be the blog's own place (`repo`): give the blog or the media a folder. A folder
+that sits inside the blog's folder reserves its name, so a post cannot use it as a slug. More, including
+folders and pinning: [Assets](#assets-1).
+
+#### `video`
+
+```json
+"video": { "player": "https://strataeditor.dev/player/",
+           "base": "https://cdn.jsdelivr.net/gh/{owner}/{repo}@{tag}/{slug}/",
+           "repos": { "videos": "me/renders" } }
+```
+
+| Key | Value |
+|---|---|
+| `player` | an `https` URL (no `#`) of the player page; each video is an iframe of it |
+| `base` | an `https` URL template that ends in `/` and contains `{tag}` and `{slug}` (`{owner}`, `{repo}` too): the pinned folder of one release |
+| `repos` | at least one key mapped to a repository (or folder) of releases published by hls.webcli.app, tagged `<name>/v<N>` |
+
+More, including uploading a video from the editor: [Video](#video-1).
+
+#### `content`
+
+```json
+"content": { "base": "https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}", "ref": "HEAD" }
+```
+
+Switches on [serving fresh content before the Pages build finishes](#publish-latency-not-waiting-for-github-pages).
+
+| Key | Value |
+|---|---|
+| `base` | required. An `http(s)` URL template that **ends in `/{path}`** and contains `{owner}` and `{repo}` (`{ref}` too). It is the only place a host is named for this feature: change it here and every page and `404.html` follows on the next build. It must serve the repository's files as they are at the branch head, with CORS open to any origin (GitHub's raw host does) |
+| `ref` | optional. A branch name or `HEAD`; default `HEAD` |
+
+It needs `repo` (it says which repository to read) and is refused without it. In Settings it is the
+checkbox *Show new and edited posts to readers before the GitHub Pages build finishes* and, under it,
+*Where the live copy is read from* (blank means the default above). A new blog has it on.
+
+#### `order`
+
+Ordering is a property of the blog, set by its owner. Newest first is the default, not the rule: a blog stream, a
+course, a tutorial series and a shorts collection are the same software with different sequences.
+
+```json
+"order": { "by": "date",                  "dir": "desc" }
+"order": { "by": "title",                 "dir": "asc" }
+"order": { "by": "frontmatter:episode",   "dir": "asc" }
+"order": { "by": "manual", "list": "order.json", "unlisted": "append-by-date" }
+```
+
+| Key | Value |
+|---|---|
+| `by` | `date` (the post's authored `date`), `title`, `manual`, or `frontmatter:<field>` (any frontmatter key, e.g. `frontmatter:episode`) |
+| `dir` | `asc` or `desc`. Default `desc` for `date`, `asc` for the others. Not allowed with `manual`: the list is the order |
+| `list` | `manual` only. A `.json` file at the top of the blog; default `order.json` |
+| `unlisted` | `manual` only. What to do with a published post that is in no list; the only value is `append-by-date` (also the default) |
+
+There is no `tiebreak` key, and giving one is refused. **Posts that tie are always ordered by slug, ascending**, in every
+mode (including descending ones and the appended part of a manual order), because two posts that share a date and
+are ordered by an unstable sort would make the generated HTML differ from run to run, and CI's
+regenerate-and-diff would then fail for a reason that looks like a generator bug. Nothing here depends on a locale:
+`title` compares case-insensitively by code unit, then as written, then by slug.
+
+**`manual`: a list, never a position in the posts.** The list is a plain file:
+
+```json
+{ "order": ["intro", "shapes", "molecule-shapes", "vsepr", "review"] }
+```
+
+A post that carried `position: 7` would make an insertion between 6 and 7 renumber every file after it, and make two
+people sequencing at once collide. A list makes an insertion a one-line change and keeps a post ignorant of where it sits.
+It is also why a reorder control is only ever an edit to this file.
+
+* **Drafts may be in the list.** Sequencing unpublished material is the normal case for a course. The list is the
+  *authored* sequence; the generated sequence is the list filtered to published posts.
+* A slug with no `posts/<slug>.md` behind it is refused (`unknown-slug-in-order`); the same slug twice is refused
+  (`duplicate-slug-in-order`); a list that is not `{"order": [slugs]}`, or that does not exist, is refused
+  (`bad-order-list`). Each of those is a typo, not an intention.
+* **A published post that is in no list is appended, oldest first, and reported.** It is never dropped, because a post
+  that exists and appears nowhere is the failure nobody notices. The build warns
+  (`order: 2 published post(s) are not in order.json and were appended by date: …`) and the editor's pre-flight says it
+  before anything is sent.
+
+**`frontmatter:<field>`.** Every published post must have the field (`missing-order-field`, one refusal per post).
+If every value is a number (`3`, `-1`, `0.5`) they sort as numbers; if none is, as text; **a field that is some of each is
+refused** (`mixed-order-field-types`), never coerced: sorting `10` before `2` looks right on five posts and is found at
+fifty. A list value is refused (`bad-order-field`).
+
+**What the order drives.** The index, the previous/next navigation on every page, and the feed's document order:
+
+* **Previous / next** are generated into each page at publish from this order, over the **published subset**: a draft in
+  the list is skipped, never linked (a link to a draft is a 404 from a page that otherwise looks right). The first post has
+  no previous link and the last no next link: absent, not disabled. Each page also carries `<link rel="prev">` and
+  `<link rel="next">` in its head, and the visible controls (`nav.post-nav`, or WordPress's own `nav.post-navigation` under
+  the `wordpress-classic` contract). "Previous" is the one before in the sequence, so in a newest-first blog it is the
+  newer post.
+* **`index/posts.json`** records the resolved sequence, not just the setting:
+  `{ "version": 2, "generator", "order": { the resolved setting }, "sequence": ["slug", …], "posts": [ … in that order ] }`.
+  The editor, the `/blog/` reader and the live renderer read `sequence` and **never sort for themselves**, so no two sorters
+  can disagree and the window before a build settles never shows a different order from the one that settles.
+* **A reader's sort is not the blog's order.** The post list in the editor and in `/blog/` has a *Sort* control (blog order,
+  newest, oldest, title A–Z). It reorders that list for the reader's session and changes nothing else: not the sequence, not
+  any page's previous/next, not an address (it adds no query string; and every generated index carries
+  `<link rel="canonical">` to the unsorted index, so a sorted address could never be a duplicate page).
+* **The feed cannot honour a manual order.** Atom and RSS are date-ordered media: items are written in the sequence's
+  document order, but every feed reader **re-sorts by the published date** whatever order they arrive in, so for a course
+  the feed's order is simply not the course's order, and there is no fix inside the format. The one honest workaround
+  exists because a post's `date` is authored rather than taken from commits: a course that wants its feed in sequence
+  sets `date` in sequence. That is a real option, not a repair, since it ties publication dates to curriculum order, which
+  the owner should choose deliberately. (The feed's `<updated>` is its newest post's date, whatever the order.)
+
+In Settings, *Post order* edits `by`, `dir`, the field and the list file; only what differs from the default is written.
+
+#### Pinned themes and extensions
+
+A theme or extension is `{ repo, ref, sha256, name, version, licence }` where `ref` is a release tag or a
+commit (a branch is refused) and `sha256` covers its files. A theme may also carry `contract`
+(`blog-webcli-v1` or `wordpress-classic`: which markup it styles) and `base` (an `https` template with `{ref}` and
+`{path}` to fetch from; default `https://cdn.jsdelivr.net/gh/{owner}/{repo}@{ref}/{path}`). An extension may
+carry `kind` (`build`, or `embed` which frames only the pinned assets it declares) and `hooks`
+(`post:markdown`, `post:html`, `index:html`). Use the Themes and Extensions screens or
+`blog-webcli theme pin` / `ext add` rather than writing these by hand: they compute the hash. See
+[Pinning](#pinning).
+
+#### Defaults
+
+| Setting | Applies when | Value |
+|---|---|---|
+| images | `assets` is absent and `repo` is set | `<repo>/images` (a blog at `me/site/blog` gives `me/site/images`), CDN `https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}` |
+| videos | `video` is absent and `repo` is set | `<repo>/videos`, player `https://strataeditor.dev/player/`, CDN `https://cdn.jsdelivr.net/gh/{owner}/{repo}@{tag}/{slug}/` |
+| theme | `theme` is absent | the built-in `default` (GPL-3.0-only, recorded in `licences.json`) |
+| `content.ref` | `content` has no `ref` | `HEAD` |
+| address | creating a blog | GitHub Pages' own answer; `https://<owner>.github.io/<repo>` until it is on |
+
+A default is **not written into `blog.json`**; it is used only while the section is absent, so an author who
+enters nothing keeps a `blog.json` that says nothing, and an author who writes a section keeps exactly what they wrote.
+
+#### Editing it
+
+* **In the editor:** *Settings* edits the title, description, author, media repositories and their URL templates,
+  `content`, and `customize`. `domain` is shown read-only, the theme and extensions have their own screens, and
+  `repo`, `cover` and any key it does not know are edited by hand (they are carried through untouched). *Save settings…* shows the usual pre-flight and commits `blog.json` together with every
+  regenerated page, in one commit. Keys the form does not know are carried through; blank fields are removed.
+* **By hand or in CI:** edit the file, then `node cli/blog.js build` and commit; `check` fails the build when the
+  committed pages differ from what `blog.json` would generate.
+
+### Post frontmatter
+
+```
+---
+slug: static-hls-in-git
+title: Static HLS in git
+date: 2026-11-05
+status: published
+author: Ada Example
+tags: [video, git]
+cover: asset:images/hls-cover.png
+description: Optional; defaults to the first paragraph.
+---
+```
+
+| Key | Required | Value |
+|---|---|---|
+| `slug` | yes | lowercase letters, digits and single hyphens; must equal the file name; set once and never changed (it is the URL). `posts`, `index`, `feed`, `assets`, `static`, `node_modules` and `p` are reserved, as is the first folder of any media folder inside the blog |
+| `title` | yes | text; change it freely |
+| `date` | yes | a real `YYYY-MM-DD`; posts are ordered by it, not by commit time |
+| `status` | yes | `draft` (in no index, page or feed) or `published` |
+| `author` | no | text; the blog's `author` if left out |
+| `tags` | no | a list of non-empty text, `[a, b]` or one `- item` per line |
+| `cover` | no | an `asset:` reference, or `auto` (first image, else first video's poster, else the blog `cover`) |
+| `description` | no | text; the first paragraph if left out |
+
+Frontmatter is a small YAML subset (scalars, inline and block lists, comments). Edits touch one key at a time,
+so a round trip never rewrites what you wrote.
+
+### Where the browser keeps things
+
+The editor stores only these, in the browser it runs in: the fine-grained token
+(`blog.webcli.token`, in `sessionStorage` for the tab, or `localStorage` if you tick *Remember*); a list of the
+times of your recent publishes per repository (`blog.webcli.builds:<repo>`, `localStorage`, used for the Pages
+build-limit warning); and nothing else. A published blog's pages keep one `sessionStorage` flag per page
+(`webcli-checked:…`) so a page checks the live copy once per session. See [Token permissions](#token-permissions) for what the
+token needs.
 
 ## Settings screen
 
@@ -544,6 +827,57 @@ serve a new tag, so the player may not load a just-published video straight away
 browser, [test/e2e/release.e2e.mjs](test/e2e/release.e2e.mjs) and
 [test/e2e/upload-video.e2e.mjs](test/e2e/upload-video.e2e.mjs).
 
+## Publish latency: not waiting for GitHub Pages
+
+A GitHub Pages deploy takes from about twenty seconds to several minutes after a push, and there is no way
+to skip it. Two things are slow: the build itself (the author waits) and the CDN cache after it (a returning
+reader waits). The generated HTML exists for crawlers and link previews, which do not mind. People do. So a
+blog can serve people from the repository itself until the build catches up. It is off until `blog.json` says
+where the repository's live copy is read from (Settings → *Publishing speed*, on by default for a new blog):
+
+```json
+"content": { "base": "https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}", "ref": "HEAD" }
+```
+
+A template that ends in `/{path}`; no host is named anywhere else, so moving it is a settings change and a
+regeneration. With it, the generator adds to every page what it was built from
+(`x-generator` = `blog-webcli@<version>`, `x-content-sha256` = the digest of the post's markdown, `x-content-base`),
+one same-origin script, `webcli-live.js`, and a `404.html`. The script is the generator's own renderer,
+bundled (`npm run build:live` writes [lib/live-source.js](lib/live-source.js); CI fails if it is stale), so
+there is one implementation, not two.
+
+* **A post that exists** (`lib/live.js`, *checkPage*): the page asks the live copy for its own markdown, hashes it
+  and compares. Equal: nothing happens. Different: the page is rebuilt in place, silently, with the same code
+  the next build runs (a test holds the two byte-identical for every post in the corpus, with a pinned theme and
+  an extension too). One file request, no API, no credentials, once per page per session.
+* **A post that has no page yet** (`404.html`): GitHub Pages answers an unknown path with the site's own 404 page
+  and its script runs. It reads the live `index/posts.json`; a slug that is published there and whose file
+  says `status: published` is fetched and drawn at its address, with `<meta name="robots" content="noindex">`
+  (the HTTP status is still 404). A draft is never drawn: it is not in the index, and the file is checked too.
+* **The cache.** Reading a file "freshly" is harder than it sounds: GitHub's raw host keeps a copy for five
+  minutes and **ignores both a `?t=` query and a `Cache-Control: no-cache` request header** (verified; the
+  query is kept anyway for hosts that honour it). What it does key on is the exact path, and `posts/x.md`
+  and `%70osts/x.md` are the same file under RFC 3986. So each request spells its path with a random choice of
+  percent-encoded letters (`varyPath`), which reads from the origin almost every time. A request that happens
+  to repeat a recent spelling is as stale as that cache, never staler.
+* **A page and its script from different builds**: recorded in `data-webcli-versions` on `<html>` and in the
+  console. A script older than the page that loaded it rebuilds nothing.
+* **The editor** polls `GET /repos/{owner}/{repo}/pages/builds/latest` after a publish and shows *committed →
+  building → live (0:34)*, withholds **Copy link** until GitHub says the build is live, and shows a failed
+  build's own error. (It needs the token's *Pages: Read-only*; without it the panel says so and offers no link.)
+* **The build limit.** Pages builds about ten times an hour and then quietly stops. The editor counts its own
+  publishes in the trailing hour and warns in the pre-flight from the one that would be the eighth, and says
+  plainly at ten. For a blog that renders fresh content itself, the warning adds that readers still see
+  what was published.
+
+What this does not do: link previews (Slack, iMessage, social cards) and search engines read the static HTML
+with no JavaScript, so they wait for the build; the editor says so. The *index* page is not refreshed
+(a new post is reachable by its own address, not yet listed). A blog in a **folder** of a repository gets the
+checks but no `404.html` (the repository's 404 page is not the folder's to write), so a brand-new post still
+waits for the build there. A blog that uses an *embed* extension keeps its pages as built (the frames it may
+show are not recorded in `blog.json`). A page has no `x-source-commit`: it is committed together with its source,
+so the commit that holds it cannot be named inside it.
+
 ## CLI
 
 ```
@@ -560,7 +894,8 @@ node cli/blog.js licences [dir]                            every licence the blo
 node cli/serve.js [dir] [port] static server for local preview
 ```
 
-`build` and `check` fetch a pinned theme (as data) to regenerate; they **never execute extension
+`build` and `check` read `order.json` (the file `blog.json`'s `order.list` names) when the blog is ordered by hand, and print
+the build's warnings, including the posts that are in no list. They fetch a pinned theme (as data) to regenerate; they **never execute extension
 code**, they use the recorded `extension-outputs.json`.
 
 CI: copy [templates/blog-check.yml](templates/blog-check.yml) into the blog repo.
@@ -637,7 +972,8 @@ upload, and nothing is uploaded until you confirm.
 `slug-collision` · `unresolved-asset` · `provider-url` · `unsafe-url` · `lossy-round-trip` ·
 `draft-in-publish` · `classic-token` · `unpinned-ref` · `pin-mismatch` · `bad-theme` · `bad-extension` ·
 `no-licence` · `bad-licence` · `not-in-directory` · `extension-output-missing` · `extension-failed` ·
-`unsafe-extension-output` · `bad-release`. A build that is refused writes nothing.
+`unsafe-extension-output` · `bad-release` · `unknown-slug-in-order` · `duplicate-slug-in-order` · `bad-order-list` ·
+`missing-order-field` · `mixed-order-field-types` · `bad-order-field`. A build that is refused writes nothing.
 
 ## Gates
 
@@ -656,7 +992,7 @@ upload, and nothing is uploaded until you confirm.
 | B9 drafts in no index, page or feed | `test/gates.test.js`, `test/app.test.js` |
 | B10 renaming a title does not change the URL | `test/gates.test.js` |
 | B11 ledger reads zero uploaded after render-and-browse | `test/app.test.js` |
-| X1 no third-party code executes when reading a published blog | `test/x1.test.js` (pages: no script/handler/foreign stylesheet; import-graph scan of the reader and generator for evaluators, Workers and dynamic import; CSPs), `test/e2e/themes.e2e.mjs` (the reader contacts neither the theme nor the extension repository) |
+| X1 no third-party code executes when reading a published blog | `test/x1.test.js`, `test/live.test.js` (a page has no script/handler/foreign stylesheet, or, for a blog that ships the live script, exactly one same-origin module and no inline script; import-graph scan of the reader and generator for evaluators, Workers and dynamic import; CSPs), `test/e2e/themes.e2e.mjs` (the reader contacts neither the theme nor the extension repository) |
 | X2 build extensions run in a Worker with no DOM, no network, no credentials | `test/e2e/sandbox.e2e.mjs` (real Chrome: hostile extensions, an attacker server that must see nothing, the frame CSP alone, a runaway loop killed) |
 | X3 embeds are `sandbox="allow-scripts"` without `allow-same-origin` | `test/packs.test.js` (sanitizer), `test/packs-app.test.js`, `test/x1.test.js` |
 | X4 themes and extensions pinned by ref and hash; a branch is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/cli-packs.test.js` |
@@ -664,6 +1000,26 @@ upload, and nothing is uploaded until you confirm.
 | X6 WordPress ingestion: directory only; records source, licence, what was dropped | `test/wp-import.test.js` (and a real import of `twentytwentyone`) |
 | X7 `class_contract` changes the emitted markup; a classic theme styles a generated page unmodified | `test/packs.test.js`, `test/packs-app.test.js` |
 | X8 every licence a blog depends on is visible in one place | `test/packs.test.js`, `test/e2e/themes.e2e.mjs` |
+| O1 `order` is read from `blog.json`; absent, it is `date desc`, unchanged | `test/order.test.js` |
+| O2 manual order lives in one list; no post carries a position | `test/order.test.js` |
+| O3 the tiebreak is the slug in every mode; regenerating (in any input order) is byte-identical | `test/order.test.js` |
+| O4 prev/next follows the order over the published subset; drafts skipped; ends absent | `test/order.test.js`, `test/e2e/order.e2e.mjs` |
+| O5 the index carries the resolved sequence; the client consumes it and never sorts | `test/order.test.js` |
+| O6 a reader sort changes no URL and no prev/next; the index has a canonical | `test/order.test.js`, `test/e2e/order.e2e.mjs` |
+| O7 an unknown or duplicated slug in the list is refused | `test/order.test.js` |
+| O8 mixed-type frontmatter order values are refused, not coerced | `test/order.test.js` |
+| O9 a published post missing from the manual list is appended by date and reported | `test/order.test.js`, `test/e2e/order.e2e.mjs` (the pre-flight) |
+| O10 the feed's inability to carry manual order is documented in the schema | `test/order.test.js` (the README section) |
+| L1 an edited post shows current content within one page load, no build wait | `test/live.test.js`, `test/e2e/live.e2e.mjs` (real Chrome) |
+| L2 a new post renders at its final URL before the build, via `404.html` | `test/live.test.js`, `test/e2e/live.e2e.mjs` |
+| L3 a draft never soft-renders, at its URL or in the index | `test/live.test.js`, `test/e2e/live.e2e.mjs` |
+| L4 soft-rendered pages carry `noindex` | `test/live.test.js`, `test/e2e/live.e2e.mjs` |
+| L5 generator and client render are byte-identical for every corpus post | `test/live.test.js`, `cli/build-live.js --check` |
+| L6 the freshness check makes no authenticated or API call | `test/live.test.js`, `test/e2e/live.e2e.mjs` (the content host's own request log) |
+| L7 one check per page per session | `test/live.test.js`, `test/e2e/live.e2e.mjs` (ten-page browse, then again) |
+| L8 the editor shows committed / building / live / failed and withholds Copy link until live | `test/deploy.test.js`, `test/e2e/deploy.e2e.mjs` |
+| L9 no provider hostname built into the generator or script; the content base is `blog.json`'s | `test/live.test.js` |
+| L10 the build-rate warning fires before the limit | `test/deploy.test.js`, `test/e2e/deploy.e2e.mjs` |
 | X9 a theme repository with no entry in any list works by address | `test/packs-app.test.js`, `test/cli-packs.test.js` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not

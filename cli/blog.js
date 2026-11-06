@@ -30,6 +30,7 @@ import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
 import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs } from '../lib/customize.js';
+import { resolveOrder } from '../lib/order.js';
 
 const exists = (p) => fs.access(p).then(() => true, () => false);
 
@@ -48,25 +49,34 @@ async function load(dir) {
   const lock = (await exists(lp)) ? JSON.parse(await fs.readFile(lp, 'utf8')) : {};
   const op = path.join(dir, 'extension-outputs.json');
   const outputs = parseOutputsFile((await exists(op)) ? await fs.readFile(op, 'utf8') : null);
-  return { blog, posts, lock, outputs };
+  // a manual order is an authored list beside blog.json (blog.json says which file)
+  let orderList = null;
+  try {
+    const order = resolveOrder(validateBlog(blog));
+    const listPath = order.by === 'manual' ? path.join(dir, order.list) : null;
+    if (listPath && (await exists(listPath))) orderList = await fs.readFile(listPath, 'utf8');
+  } catch {
+    /* an invalid blog.json is refused, with its reason, where the site is generated */
+  }
+  return { blog, posts, lock, outputs, orderList };
 }
 
 // Anonymous GitHub reads, for fetching a pinned theme or extension as data.
 const github = () => new GitHub(createNet((...a) => globalThis.fetch(...a)));
 
 async function generate(dir) {
-  const { blog, posts, lock, outputs } = await load(dir);
+  const { blog, posts, lock, outputs, orderList } = await load(dir);
   const validated = validateBlog(blog);
   let packs = { theme: null, extensions: [] };
   if ((validated.theme && typeof validated.theme === 'object') || (validated.extensions || []).length) {
     console.log('fetching the pinned theme and extensions (as data) …');
     packs = await loadPacks(github(), validated);
   }
-  return buildSite({ blog, posts, lock, ...packs, outputs });
+  return buildSite({ blog, posts, lock, ...packs, outputs, orderList });
 }
 
 // Generated files that exist only while a theme or extensions are in use.
-const OPTIONAL = ['theme.css', 'extension-outputs.json'];
+const OPTIONAL = ['theme.css', 'extension-outputs.json', '404.html', 'webcli-live.js'];
 
 async function staleDirs(dir, expected) {
   const out = [];

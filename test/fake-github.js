@@ -8,7 +8,7 @@ const bytesOf = (c) => (typeof c === 'string' ? enc.encode(c) : c);
 // tags: { repo: [tag names] }; aliases: { repo: { 'v1.0.0': 'main' } } makes a tag or sha resolve to a branch's content.
 // pages: { repo: 'https://…/' } = Pages is on, built, and says so; 'building:https://…/' = on but not deployed yet;
 // 'forbidden' = on, but the token may not read it.
-export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {} } = {}) {
+export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds = {} } = {}) {
   const state = {};
   let n = 0;
   const fakeSha = (label) => gitBlobSha(enc.encode(`${label}${++n}`));
@@ -63,6 +63,12 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {} } = {}) 
     const b = body ? JSON.parse(body) : null;
 
     if (!rest.length) return json({ default_branch: 'main', permissions: { push: true }, has_pages: `${o}/${r}` in pages });
+    // builds: { 'owner/repo': () => the latest Pages build object, null (none yet) or 'forbidden' }
+    if (rest[0] === 'pages' && rest[1] === 'builds' && rest[2] === 'latest') {
+      const b = typeof builds[`${o}/${r}`] === 'function' ? builds[`${o}/${r}`](S) : builds[`${o}/${r}`];
+      if (b === 'forbidden') return json({ message: 'Resource not accessible by personal access token' }, 403);
+      return b ? json(b) : notFound();
+    }
     if (rest[0] === 'pages') {
       const p = pages[`${o}/${r}`];
       if (!p) return notFound();

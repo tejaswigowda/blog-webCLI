@@ -68,8 +68,9 @@ test('X1: a generated page has no script, no event handler, no foreign styleshee
         assert.ok(!/allow-same-origin|allow-top-navigation|allow-popups|allow-forms|srcdoc/i.test(m[0]), `${where}: a frame with extra privileges`);
         assert.match(m[0], /\ssrc="https:\/\//, `${where}: a frame that is not https`);
       }
-      // the only <meta> are the ones the generator writes; the only <link> are canonical and the feed
-      for (const m of html.matchAll(/<link\b[^>]*>/gi)) assert.match(m[0], /rel="(?:canonical|alternate)"/, `${where}: ${m[0]}`);
+      // the only <meta> are the ones the generator writes; the only <link> are canonical, the feed, and prev/next to
+      // another page of the same blog (a relative address, so it cannot name another site)
+      for (const m of html.matchAll(/<link\b[^>]*>/gi)) assert.match(m[0], /rel="(?:canonical|alternate)"|rel="(?:prev|next)" href="\.\.\/[a-z0-9-]+\/"/, `${where}: ${m[0]}`);
     }
     // the stylesheet itself loads nothing but https assets and small inline data
     for (const m of (result.files['index.html'].match(/<style>[\s\S]*?<\/style>/) || [''])[0].matchAll(/url\(\s*["']?([^"')]+)/g)) assert.match(m[1], /^(https:\/\/|data:image\/|#)/, `${name}: url(${m[1].slice(0, 50)})`);

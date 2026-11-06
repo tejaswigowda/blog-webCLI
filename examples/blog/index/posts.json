@@ -1,6 +1,14 @@
 {
-  "version": 1,
+  "version": 2,
   "generator": "blog-webcli",
+  "order": {
+    "by": "date",
+    "dir": "desc"
+  },
+  "sequence": [
+    "static-hls-in-git",
+    "markdown-is-the-format"
+  ],
   "posts": [
     {
       "slug": "static-hls-in-git",

@@ -4,7 +4,7 @@ import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
 import { describePlan, executePlan, loadBlog, loadIndex, loadPost, planInit } from '../app/site.js';
 import { buildSite, validateBlog } from '../lib/blog.js';
-import { defaultDomain, defaultTitle, makeBlogJson } from '../lib/init.js';
+import { DEFAULT_CONTENT_BASE, defaultDomain, defaultTitle, makeBlogJson } from '../lib/init.js';
 import { fakeGitHub } from './fake-github.js';
 
 const FIELDS = { title: 'My Notes', description: 'Things I learned', author: 'Ada' };
@@ -26,7 +26,8 @@ test('defaults: Pages address and title come from the repository reference', () 
 
 test('makeBlogJson: minimal by default; sections only for what was asked for; always valid', () => {
   const bare = makeBlogJson('me/notes', FIELDS);
-  assert.deepEqual(Object.keys(bare), ['title', 'description', 'author', 'domain', 'repo', 'theme']);
+  assert.deepEqual(Object.keys(bare), ['title', 'description', 'author', 'domain', 'repo', 'theme', 'content']);
+  assert.equal(bare.content.base, DEFAULT_CONTENT_BASE, 'a new blog says where its live copy is read from');
   assert.doesNotThrow(() => validateBlog(bare));
   const full = makeBlogJson('me/site/blog', { ...FIELDS, images: 'me/site/images', video: 'me/site' });
   assert.deepEqual(full.assets.repos, { images: 'me/site/images' });
@@ -39,9 +40,9 @@ test('create: blog.json and the generated empty site in one commit; the app then
   const { server, net, authed, anon } = await world();
   const plan = await planInit(authed, { repo: 'me/notes', branch: 'main', fields: FIELDS });
   assert.equal(net.ledger.uploaded.bytes, 0, 'planning uploads nothing');
-  assert.deepEqual(plan.changes.map((c) => c.path).sort(), ['.nojekyll', 'blog.json', 'feed.xml', 'index.html', 'index/posts.json', 'licences.json']);
+  assert.deepEqual(plan.changes.map((c) => c.path).sort(), ['.nojekyll', '404.html', 'blog.json', 'feed.xml', 'index.html', 'index/posts.json', 'licences.json', 'webcli-live.js']);
   assert.ok(plan.changes.every((c) => c.action === 'add'));
-  assert.match(describePlan(plan)[0], /^6 files, [\d.]+ (B|KB), to github\.com\/me\/notes \(main\)$/);
+  assert.match(describePlan(plan)[0], /^8 files, [\d.]+ (B|KB), to github\.com\/me\/notes \(main\)$/);
 
   const receipt = await executePlan(authed, plan);
   assert.equal(receipt.commits.length, 1);
