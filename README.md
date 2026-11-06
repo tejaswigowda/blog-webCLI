@@ -708,6 +708,12 @@ every named import, so a renamed export cannot silently break the browser-only m
 * Read counts bytes fetched by this app; images the browser loads from the asset CDN are
   not routed through it.
 * `vendor/quill/` is Quill 2.0.3 (BSD-3), vendored so the app loads no third-party script.
+* `vendor/moment/` is moment.js 2.31.0 (MIT), vendored for the same reason. The app (not the generated
+  pages) shows a post's date as words: *Today*, *Yesterday*, *3 days ago*, *Oct 12*, *Oct 12, 2025*,
+  with the full date on hover. A date is a calendar day, so it is compared by day, not by the hour,
+  and a new post's default date is the reader's local day, not UTC's. Generated pages, the index and
+  the feed keep the ISO date, so a published page does not change with the clock and CI still
+  regenerates it byte for byte.
 * `vendor/hls/` is hls-webCLI's encoder (GPL-3.0), vendored unedited and hash-checked. Encoding a
   video needs WebCodecs (recent Chrome, Edge or Safari) and holds the video and the encoded files
   in memory, so the input is limited to 1 GB and a release to 300 MB. It takes the encoder's own

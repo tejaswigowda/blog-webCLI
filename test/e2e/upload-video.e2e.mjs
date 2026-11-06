@@ -77,7 +77,7 @@ test('video: upload an MP4, encode it in the browser, publish the release, embed
     await clickText(page, '#top button', 'Sign in');
     await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
     await clickText(page, 'dialog button', 'Sign in');
-    await until(page, "document.querySelector('#top').innerText.includes('Signed in as tester')");
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
     await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
     await until(page, "document.querySelector('.ql-editor')");
 
@@ -180,7 +180,7 @@ test('video: every rung that fits is offered; unticking one leaves it out of the
     await clickText(page, '#top button', 'Sign in');
     await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
     await clickText(page, 'dialog button', 'Sign in');
-    await until(page, "document.querySelector('#top').innerText.includes('Signed in as tester')");
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
     await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
     await until(page, "document.querySelector('.ql-editor')");
     await page.evaluate("document.querySelector('.ql-video').click(); 0");
@@ -229,7 +229,7 @@ test('video: a browser that cannot decode AAC is told so when the file is picked
     await clickText(page, '#top button', 'Sign in');
     await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
     await clickText(page, 'dialog button', 'Sign in');
-    await until(page, "document.querySelector('#top').innerText.includes('Signed in as tester')");
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
     // a browser that cannot do AAC (the VS Code / Electron browser can encode it but not decode it; both end the same way)
     await page.evaluate("AudioEncoder.isConfigSupported = async () => ({ supported: false }); 0");
     await page.evaluate("location.hash = '#repo=example/blog&new'; 0");

@@ -78,7 +78,7 @@ test('themes and extensions: chosen by address, run in the sandbox, read by a re
     await click(page, '#top button', 'Sign in');
     await page.evaluate(`document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0`);
     await click(page, 'dialog button', 'Sign in');
-    await until(page, "document.querySelector('#top').innerText.includes('Signed in as tester')");
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
 
     // the theme, by address (it is in no list)
     await page.evaluate("location.hash = '#repo=example/blog&themes'; 0");

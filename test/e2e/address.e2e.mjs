@@ -52,7 +52,7 @@ const addressField = (page) => page.evaluate(`(() => {
   const label = [...document.querySelectorAll('#view label')].find((l) => l.textContent.startsWith('Address the blog is served at'));
   const box = label.parentElement;
   const input = box.querySelector('input');
-  return { value: input.value, readOnly: input.readOnly, editedByTyping: null, note: box.innerText.replace(label.textContent, '').trim(), hasWarning: !!box.querySelector('.err'), links: [...box.querySelectorAll('a')].map((a) => a.getAttribute('href')) };
+  return { value: input.value, readOnly: input.readOnly, editedByTyping: null, note: box.innerText.replace(label.textContent, '').trim(), hasWarning: !!box.querySelector('.err'), links: [...box.querySelectorAll('button[data-href]')].map((a) => a.dataset.href) };
 })()`);
 const open = (page, hash, ready) => page.evaluate(`location.hash = ${JSON.stringify(hash)}; 0`).then(() => until(page, ready));
 
@@ -66,7 +66,7 @@ test('address: read-only, GitHub\'s when it says one, a clear warning when Pages
     await clickText(page, '#top button', 'Sign in');
     await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
     await clickText(page, 'dialog button', 'Sign in');
-    await until(page, "document.querySelector('#top').innerText.includes('Signed in as tester')");
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
 
     // ---- Pages off: shown, not editable, and said plainly ----
     await open(page, '#repo=example/blog&settings', "document.querySelector('#view form')");
@@ -98,12 +98,12 @@ test('address: read-only, GitHub\'s when it says one, a clear warning when Pages
     assert.match(locked.note, /Pages: Read-only/);
 
     // ---- View blog: the GitHub Pages site when GitHub is serving one, else the reader ----
-    const viewBlog = (repo) => open(page, `#repo=${repo}`, "[...document.querySelectorAll('#view a.btn')].some((a) => a.textContent === 'View blog')").then(async () => {
+    const viewBlog = (repo) => open(page, `#repo=${repo}`, "[...document.querySelectorAll('#view button')].some((a) => a.textContent === 'View blog')").then(async () => {
       await new Promise((r) => setTimeout(r, 600)); // the address is asked for after the page is drawn
-      return page.evaluate("(() => { const a = [...document.querySelectorAll('#view a.btn')].find((x) => x.textContent === 'View blog'); return { href: a.getAttribute('href'), title: a.title, target: a.target }; })()");
+      return page.evaluate("(() => { const a = [...document.querySelectorAll('#view button')].find((x) => x.textContent === 'View blog'); return { href: a.dataset.href, title: a.title, tag: a.tagName }; })()");
     });
     const live = await viewBlog('example/live');
-    assert.deepEqual([live.href, live.target, live.title], ['https://notes.example.com/', '_blank', 'Opens the GitHub Pages site'], 'Pages is on and built: its link, a custom domain included');
+    assert.deepEqual([live.href, live.tag, live.title], ['https://notes.example.com/', 'BUTTON', 'Opens the GitHub Pages site'], 'Pages is on and built: its link, a custom domain included');
     const off2 = await viewBlog('example/blog');
     assert.equal(off2.href, 'blog/#repo=example/blog', 'Pages off: the reader');
     assert.match(off2.title, /reader/);

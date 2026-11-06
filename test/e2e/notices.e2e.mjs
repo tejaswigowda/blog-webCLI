@@ -65,7 +65,7 @@ test('notices: an indicator while it works, toasts for the result, readable abov
     await clickText(page, '#top button', 'Sign in');
     await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
     await clickText(page, 'dialog button', 'Sign in');
-    await until(page, "document.querySelector('#top').innerText.includes('Signed in as tester')");
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
     await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
     await until(page, "document.querySelector('.ql-editor')");
 
@@ -103,7 +103,7 @@ test('notices: an indicator while it works, toasts for the result, readable abov
     await until(page, "document.querySelector('.toast.success')");
     assert.match(await page.evaluate("document.querySelector('.toast.success .toast-title').innerText"), /^Draft saved$/);
     assert.equal(await page.evaluate("document.querySelector('.toast.success').closest('dialog')"), null, 'with the dialog closed it is back in the page');
-    assert.ok(await page.evaluate("document.querySelector('.toast.success a').href.includes('/commit/') || document.querySelector('.toast.success a').textContent.includes('example/blog@')"), 'it names the commit');
+    assert.ok(await page.evaluate("document.querySelector('.toast.success button[data-href]').dataset.href.includes('/commit/') || document.querySelector('.toast.success button[data-href]').textContent.includes('example/blog@')"), 'it names the commit');
     assert.equal(await page.evaluate("document.querySelector('.activity').hidden"), true);
     assert.ok(Object.keys(await page.evaluate("window.__fake.files('example/blog')")).includes('posts/notices.md'));
 

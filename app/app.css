@@ -25,7 +25,7 @@ h1{font-size:1.6rem;letter-spacing:-.02em}
 .gh-link:hover{color:var(--fg);border-color:var(--accent);background:var(--surface3)}
 @media (max-width:1100px){.badge-local{display:none}}
 @media (max-width:700px){.gh-link span{display:none}.gh-link{padding:5px 9px}#top form{max-width:none}}
-#view{max-width:64rem;margin:0 auto;padding:1.25rem 1.5rem 3rem}
+#view{max-width:80rem;margin:0 auto;padding:1.25rem 1.5rem 3rem}
 
 /* controls */
 input,select,textarea{font:inherit;font-size:.9rem;color:var(--fg);background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:7px 10px;outline:none}
@@ -60,7 +60,7 @@ article.post code{background:var(--code);padding:.1em .3em;border-radius:3px}
 article.post pre code{background:none;padding:0}
 article.post blockquote{margin:1em 0;padding:.1em 1em;border-left:3px solid var(--rule);color:var(--muted)}
 .unresolved{color:var(--muted);font-style:italic}
-#ledger{max-width:64rem;margin:0 auto;padding:.75rem 1.5rem 2rem;border-top:1px solid var(--rule);font-size:.8rem;color:var(--muted)}
+#ledger{max-width:80rem;margin:0 auto;padding:.75rem 1.5rem 2rem;border-top:1px solid var(--rule);font-size:.8rem;color:var(--muted)}
 #ledger summary{cursor:pointer}
 #ledger .up-zero{color:var(--ok)}
 #ledger .up-some{color:var(--amber);font-weight:600}
@@ -171,3 +171,47 @@ progress::-moz-progress-bar{background:var(--accent);border-radius:3px}
 .card{background:var(--panel);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;margin:1rem 0}
 .card-header{padding:11px 16px;border-bottom:1px solid var(--rule);font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;justify-content:space-between;gap:.5rem}
 .card-body{padding:16px}
+
+/* two columns on bigger screens: the work on the left, what you decide and send on the right */
+.cols{display:grid;gap:1.25rem;align-items:start}
+.cols>*{min-width:0}
+.cols .side .card{margin-top:0}
+.side .row{flex-direction:column;gap:.6rem}
+.side .row>div{min-width:0}
+.side .actions{margin:.75rem 0 0}
+@media (min-width:1000px){
+  .cols{grid-template-columns:minmax(0,1fr) minmax(0,23rem)}
+  .cols .side{position:sticky;top:1rem;max-height:calc(100vh - 2rem);overflow:auto}
+  ul.posts{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (min-width:1000px){fieldset{margin-top:0}}
+#view>div>h1,#view>div>p{max-width:none}
+article.post-view,#view article.post{max-width:46rem}
+
+/* a button that reads as a link: navigation is done with buttons */
+button.link{display:inline;padding:0;border:0;border-radius:0;background:none;color:var(--link);font:inherit;font-weight:inherit;text-decoration:underline;text-align:left;white-space:normal;cursor:pointer}
+button.link:hover:not(:disabled){background:none;color:var(--fg)}
+ul.posts h3 button.link{font-weight:700}
+#top .brand{padding:0;border:0;background:none;color:var(--fg)}
+#top .brand:hover:not(:disabled){background:none}
+.toast-links button.link{display:block}
+
+/* the whole card is the click target: the title button's hit area is stretched over it */
+ul.posts li.card-link{position:relative;cursor:pointer;transition:border-color .15s,background .15s}
+ul.posts li.card-link:hover{background:var(--surface2)}
+ul.posts li.card-link:focus-within{border-color:var(--accent-h)}
+ul.posts li.card-link h3 button.link::after{content:"";position:absolute;inset:0;border-radius:var(--r)}
+ul.posts li.card-link h3 button.link:focus{outline:none}
+ul.posts li.card-link:hover h3 button.link{color:var(--fg)}
+ul.posts li.card-link h3 button.link{text-decoration:none}
+
+/* icons */
+.icon{width:1.05em;height:1.05em;flex:none;vertical-align:-.18em}
+button .icon{width:15px;height:15px}
+button.link .icon{margin-right:.3em}
+.signed{display:inline-flex;align-items:center;gap:.4rem;color:var(--fg);font-size:.85rem}
+.signed>.icon{width:26px;height:26px;padding:5px;border-radius:50%;background:var(--surface3);color:var(--accent-h)}
+.signed .who{font-weight:600}
+button.icon-btn{padding:6px;border-radius:7px}
+.toast-icon .icon{width:.95rem;height:.95rem;stroke-width:2.5;vertical-align:0}
+.toast-icon{color:#0d0f1a}

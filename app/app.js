@@ -10,6 +10,8 @@ import { licenceRecords } from '../lib/licences.js';
 import { createEditor, setAssetResolver, setVideoResolver } from './editor.js';
 import { Refusal } from '../lib/errors.js';
 import { describeError, progressLine, toast, working } from './ui.js';
+import { describeDate, loadMoment, today } from './dates.js';
+import { icon } from './icons.js';
 import { mdToDelta, deltaToMarkdownChecked } from '../lib/markdown.js';
 import { SLUG_RE, joinFile, newFront, parseMeta, setMeta, splitFile } from '../lib/frontmatter.js';
 import { parsePost } from '../lib/blog.js';
@@ -39,15 +41,20 @@ const view = $('#view');
 function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') el.className = v;
+    if (k === 'icon') el.dataset.icon = v;
+    else if (k === 'class') el.className = v;
     else if (k === 'value') el.value = v;
     else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
     else if (v === true) el.setAttribute(k, '');
     else if (v !== false && v != null) el.setAttribute(k, v);
   }
+  if (el.dataset.icon) el.append(icon(el.dataset.icon));
   el.append(...kids.flat().filter((k) => k != null && k !== false));
   return el;
 }
+
+// change a button's words and keep its icon (textContent = would drop it)
+const relabel = (btn, text) => btn.replaceChildren(...[btn.dataset.icon && icon(btn.dataset.icon), text].filter(Boolean));
 
 // The address a blog is served at is GitHub's to say (its Pages settings), so it is shown, never
 // typed: a read-only field and what to do when GitHub says it is not served yet.
@@ -55,12 +62,12 @@ function addressView(repo, found, saved) {
   const input = h('input', { value: found && found.exact ? found.address : saved || (found && found.address) || defaultDomain(repo), readonly: true, 'aria-readonly': 'true' });
   const plain = parseRepoRef(repo).repo;
   const pagesLink = (found && found.settingsUrl) || `https://github.com/${plain}/settings/pages`;
-  const ext = (href, text) => h('a', { href, target: '_blank', rel: 'noopener' }, text);
+  const ext = (href, text) => outbound(text, href, { class: 'link' });
   let note;
   if (!found) note = h('div', { class: 'hint' }, 'GitHub could not be asked just now. Used for links, the feed and og:url.');
   else if (found.exact) note = h('div', { class: 'hint' }, 'From this repository\'s GitHub Pages settings, so it is not edited here. To change it (a custom domain, HTTPS) ', ext(pagesLink, 'open the Pages settings'), '. Used for links, the feed and og:url.');
   else if (found.live) note = h('div', { class: 'hint' }, 'GitHub Pages is on, but this token cannot read its address, so the one saved in blog.json is shown. Give the token "Pages: Read-only" to have it read from GitHub.');
-  else note = h('div', { class: 'err' }, h('b', {}, 'GitHub Pages is not enabled for this repository'), `Nothing is served at this address yet (${plain}). Turn it on under `, ext(pagesLink, 'Settings → Pages'), ' (Deploy from a branch → your default branch, / (root)). Until then the blog is readable at ', h('a', { href: `blog/${link(repo)}`, target: '_blank', rel: 'noopener' }, 'its reader page'), '.');
+  else note = h('div', { class: 'err' }, h('b', {}, 'GitHub Pages is not enabled for this repository'), `Nothing is served at this address yet (${plain}). Turn it on under `, ext(pagesLink, 'Settings → Pages'), ' (Deploy from a branch → your default branch, / (root)). Until then the blog is readable at ', ext(`blog/${link(repo)}`, 'its reader page'), '.');
   return { input, note };
 }
 
@@ -75,6 +82,18 @@ function sent(receipt, opts = {}) {
     ...(receipt.pull ? [{ href: receipt.pull.url, text: `Pull request #${receipt.pull.number}` }] : []),
   ];
   return toast({ kind: 'success', title: opts.title || (receipt.pull ? 'Pull request opened' : 'Sent'), message: opts.message || '', links, action: opts.action });
+}
+
+// Navigation is done with buttons: they go to a place in this app (the hash) or open another site.
+const go_ = (hash) => () => { location.hash = hash; };
+const nav = (label, hash, attrs = {}) => h('button', { type: 'button', ...attrs, onclick: go_(hash) }, label);
+const openTab = (url) => window.open(url, '_blank', 'noopener');
+const outbound = (label, url, attrs = {}) => h('button', { type: 'button', ...attrs, 'data-href': url, onclick: (e) => openTab(e.currentTarget.dataset.href) }, label);
+
+// A post's date as words ("Yesterday", "3 days ago", "Oct 12"); the full date is in the tooltip.
+function dateEl(iso, { long = false } = {}) {
+  const d = describeDate(iso);
+  return h('time', { datetime: iso, title: d.full }, long ? (d.relative && d.full !== d.relative ? `${d.full} · ${d.relative}` : d.full) : d.label);
 }
 
 const noted = (message) => toast({ kind: 'info', message });
@@ -93,19 +112,19 @@ const parseHash = () => {
 };
 const link = (repo, extra = '') => `#repo=${repo}${extra}`;
 
-function renderTop(repo) {
+function renderTop(repo, ref) {
   const input = h('input', { name: 'repo', placeholder: 'owner/blog or owner/repo/folder', value: repo || '', 'aria-label': 'Repository' });
-  const form = h('form', { onsubmit: (e) => { e.preventDefault(); try { location.hash = link(parseRepo(input.value)); } catch (err) { view.replaceChildren(errBox(err)); } } }, input, h('button', {}, 'Open'));
+  const form = h('form', { onsubmit: (e) => { e.preventDefault(); try { location.hash = link(parseRepo(input.value)); } catch (err) { view.replaceChildren(errBox(err)); } } }, input, h('button', { icon: 'arrow-right' }, 'Open'));
   const auth = gh.token
-    ? h('span', { class: 'signed' }, login ? `Signed in as ${login} · ` : 'Signed in · ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); signOut(); } }, 'Sign out'))
-    : h('button', { type: 'button', class: 'primary', onclick: () => signInDialog() }, 'Sign in to edit');
+    ? h('span', { class: 'signed', title: login ? `Signed in as ${login}` : 'Signed in' }, icon('user'), h('span', { class: 'who' }, login || 'Signed in'), h('button', { type: 'button', class: 'icon-btn', icon: 'log-out', title: 'Sign out', 'aria-label': 'Sign out', onclick: () => signOut() }))
+    : h('button', { type: 'button', class: 'primary', icon: 'log-in', onclick: () => signInDialog() }, 'Sign in to edit');
   $('#top').replaceChildren(
-    h('a', { class: 'brand', href: '#' }, 'blog webCLI'),
+    nav('blog webCLI', repo ? link(repo, ref ? `&ref=${ref}` : '') : '', { class: 'brand', title: repo ? `Back to ${repo}` : 'Home' }),
     h('span', { class: 'pill' }, 'git-native'),
     h('span', { class: 'badge-local', title: 'The editor commits straight to GitHub from this page. There is no server in between.' }, 'No server in between'),
     form,
     auth,
-    h('a', { class: 'gh-link', href: 'https://github.com/tejaswigowda/blog-webCLI', target: '_blank', rel: 'noopener' }, h('span', {}, 'Fork on GitHub')),
+    outbound('Fork on GitHub', 'https://github.com/tejaswigowda/blog-webCLI', { class: 'gh-link' }),
   );
 }
 
@@ -138,11 +157,11 @@ function signInDialog() {
   const msg = h('div');
   dlg.replaceChildren(
     h('h2', {}, 'Sign in with a fine-grained token'),
-    h('p', {}, 'Create a ', h('a', { href: 'https://github.com/settings/personal-access-tokens/new', target: '_blank', rel: 'noopener' }, 'fine-grained personal access token'), ' limited to your blog repository and your asset repositories, with ', h('b', {}, 'Contents: read & write'), ' and ', h('b', {}, 'Pull requests: write'), '. Classic tokens are refused: they can write to every repository you own.'),
+    h('p', {}, 'Create a ', outbound('fine-grained personal access token', 'https://github.com/settings/personal-access-tokens/new', { class: 'link' }), ' limited to your blog repository and your asset repositories, with ', h('b', {}, 'Contents: read & write'), ' and ', h('b', {}, 'Pull requests: write'), '. Classic tokens are refused: they can write to every repository you own.'),
     tok,
     h('p', {}, h('label', {}, remember, ' Remember on this device (localStorage). Otherwise the token lives only for this tab.')),
     msg,
-    h('div', { class: 'actions' }, h('button', { class: 'primary', onclick: async () => {
+    h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'log-in', onclick: async () => {
       try {
         const t = tok.value.trim();
         assertToken(t);
@@ -155,7 +174,7 @@ function signInDialog() {
         gh.token = null;
         msg.replaceChildren(errBox(e.status === 401 ? new Error('GitHub rejected that token.') : e));
       }
-    } }, 'Sign in'), h('button', { onclick: () => dlg.close() }, 'Cancel')),
+    } }, 'Sign in'), h('button', { icon: 'x', onclick: () => dlg.close() }, 'Cancel')),
   );
   dlg.showModal();
 }
@@ -166,14 +185,14 @@ let seq = 0;
 async function route() {
   const mine = ++seq;
   const r = parseHash();
-  renderTop(r.repo);
+  renderTop(r.repo, r.ref);
   renderLedger(net.ledger);
   document.title = 'blog.webcli.app';
   view.replaceChildren(progressLine('Loading…'));
   try {
     if (!r.repo) return home();
     const repo = parseRepo(r.repo);
-    if (gh.token && !login) gh.whoami().then((u) => { login = u.login; renderTop(r.repo); }, () => {});
+    if (gh.token && !login) gh.whoami().then((u) => { login = u.login; renderTop(r.repo, r.ref); }, () => {});
     if (!cache || cache.repo !== repo || cache.ref !== r.ref) cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
     if (mine !== seq) return;
     let node;
@@ -192,7 +211,7 @@ async function route() {
       if (mine === seq) view.replaceChildren(node);
       return;
     }
-    view.replaceChildren(e instanceof NotFound ? h('p', {}, 'No such post. ', h('a', { href: link(r.repo) }, 'Back to the blog')) : errBox(e));
+    view.replaceChildren(e instanceof NotFound ? h('div', {}, h('p', {}, 'No such post.'), nav('Back to the blog', link(r.repo))) : errBox(e));
   }
 }
 
@@ -238,7 +257,7 @@ async function createBlogView(repo, r) {
     video: h('input', { placeholder: "blank: this repository's videos folder, or me/renders" }),
   };
   const field = (label, el, hint) => h('div', {}, h('label', {}, label), el, hint && hint.nodeType ? hint : hint ? h('div', { class: 'hint' }, hint) : null);
-  const go = h('button', { class: 'primary' }, 'Create blog…');
+  const go = h('button', { class: 'primary', icon: 'plus' }, 'Create blog…');
   go.addEventListener('click', async () => {
     go.disabled = true;
     try {
@@ -293,7 +312,7 @@ async function settingsView(repo, r) {
   } catch {
     /* the preview falls back to a sample */
   }
-  if (!entries.length) entries = [{ slug: 'sample', title: 'A sample post', date: new Date().toISOString().slice(0, 10), tags: ['sample'], excerpt: 'The first lines of a post appear here, as the list shows them.' }];
+  if (!entries.length) entries = [{ slug: 'sample', title: 'A sample post', date: today(), tags: ['sample'], excerpt: 'The first lines of a post appear here, as the list shows them.' }];
 
   // A pinned theme is applied to the preview too, with its markup contract.
   let themePack = null;
@@ -388,7 +407,7 @@ async function settingsView(repo, r) {
   form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(redraw, 120); });
   form.addEventListener('change', () => { clearTimeout(timer); timer = setTimeout(redraw, 0); });
 
-  const save = h('button', { class: 'primary' }, 'Save settings…');
+  const save = h('button', { class: 'primary', icon: 'save' }, 'Save settings…');
   save.disabled = !canPush;
   save.addEventListener('click', async () => {
     save.disabled = true;
@@ -413,21 +432,18 @@ async function settingsView(repo, r) {
     }
   });
 
+  const themeBox = section('Theme, extensions and licences',
+      h('p', {}, `Theme: ${current.theme && typeof current.theme === 'object' ? `${current.theme.name} ${current.theme.version} (${current.theme.licence})` : 'default'} · Extensions: ${(current.extensions || []).length ? current.extensions.map((e) => `${e.name} ${e.version}`).join(', ') : 'none'}`),
+      h('div', { class: 'actions' }, nav('Choose a theme', link(repo, '&themes'), { icon: 'droplet' }), nav('Extensions', link(repo, '&extensions'), { icon: 'box' }), nav('Licences', link(repo, '&licences'), { icon: 'shield' })));
+
   const node = h(
     'div',
     {},
-    h('p', {}, h('a', { href: link(repo) }, `← ${current.title}`)),
+    h('p', {}, nav(current.title, link(repo), { icon: 'arrow-left' })),
     h('h1', {}, 'Blog settings'),
     h('p', { class: 'muted' }, `Saved to ${at(folder, 'blog.json')} in ${plain}. Posts are never touched; every generated page is regenerated from the new settings.`),
     canPush ? null : h('div', { class: 'err' }, `This token cannot write to ${plain}.`),
-    section('Theme, extensions and licences',
-      h('p', {}, `Theme: ${current.theme && typeof current.theme === 'object' ? `${current.theme.name} ${current.theme.version} (${current.theme.licence})` : 'default'} · Extensions: ${(current.extensions || []).length ? current.extensions.map((e) => `${e.name} ${e.version}`).join(', ') : 'none'}`),
-      h('div', { class: 'actions' }, h('a', { class: 'btn', href: link(repo, '&themes') }, 'Choose a theme'), h('a', { class: 'btn', href: link(repo, '&extensions') }, 'Extensions'), h('a', { class: 'btn', href: link(repo, '&licences') }, 'Licences'))),
-    h('h3', {}, 'Preview'),
-    preview,
-    msg,
-    form,
-    h('div', { class: 'actions' }, save),
+    h('div', { class: 'cols' }, form, h('div', { class: 'side' }, themeBox, h('div', { class: 'card' }, h('div', { class: 'card-header' }, 'Preview'), h('div', { class: 'card-body' }, preview, msg)), h('div', { class: 'actions' }, save))),
   );
   queueMicrotask(redraw);
   return node;
@@ -500,7 +516,7 @@ async function themesView(repo, r) {
   };
   const t = blog.theme && typeof blog.theme === 'object' ? blog.theme : null;
   const input = h('input', { placeholder: 'owner/theme-repo@v1.0.0   (or owner/repo/folder@v1.0.0)', style: 'width:100%' });
-  const go = h('button', { class: 'primary' }, 'Use this theme…');
+  const go = h('button', { class: 'primary', icon: 'check' }, 'Use this theme…');
   go.addEventListener('click', () => { try { use(parseAddress(input.value), go); } catch (e) { fail(e); } });
   go.disabled = !canPush;
   const builtin = h('button', {}, 'Use the default theme');
@@ -509,7 +525,7 @@ async function themesView(repo, r) {
   return h(
     'div',
     {},
-    h('p', {}, h('a', { href: link(repo, '&settings') }, '← Settings')),
+    h('p', {}, nav('Settings', link(repo, '&settings'), { icon: 'arrow-left' })),
     h('h1', {}, 'Theme'),
     h('p', {}, t ? h('span', {}, 'Current: ', h('b', {}, `${t.name} ${t.version}`), ` — ${t.licence} — ${t.repo}@${t.ref}`) : 'Current: the default theme.'),
     h('p', { class: 'hint' }, 'A theme is a repository (theme.json + CSS). It is pinned to a tag or commit and a sha256, so it cannot change under your published pages. Its CSS is baked into the generated pages; readers load nothing from the theme repository.'),
@@ -519,7 +535,7 @@ async function themesView(repo, r) {
     h('div', { class: 'actions' }, go, builtin),
     h('h3', {}, 'Built in'),
     listed.length
-      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', {}, 'Use…'); b.disabled = !canPush; b.addEventListener('click', () => { try { use(parseAddress(`${e.repo}@${e.ref}`), b); } catch (err) { fail(err); } }); return h('li', {}, e.screenshot && /^https:\/\//.test(e.screenshot) ? h('img', { src: e.screenshot, alt: '', style: 'max-width:12rem;float:right;margin-left:1rem' }) : null, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.description ? h('p', {}, String(e.description).slice(0, 200)) : null, b); }))
+      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', { icon: 'check' }, 'Use…'); b.disabled = !canPush; b.addEventListener('click', () => { try { use(parseAddress(`${e.repo}@${e.ref}`), b); } catch (err) { fail(err); } }); return h('li', {}, e.screenshot && /^https:\/\//.test(e.screenshot) ? h('img', { src: e.screenshot, alt: '', style: 'max-width:12rem;float:right;margin-left:1rem' }) : null, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.description ? h('p', {}, String(e.description).slice(0, 200)) : null, b); }))
       :       h('p', { class: 'muted' }, 'The built-in list could not be read. Any theme repository still works by its address.'),
   );
 }
@@ -541,26 +557,26 @@ async function extensionsView(repo, r) {
     }
   };
   const input = h('input', { placeholder: 'owner/extension-repo@v1.0.0', style: 'width:100%' });
-  const add = h('button', { class: 'primary' }, 'Add this extension…');
+  const add = h('button', { class: 'primary', icon: 'plus' }, 'Add this extension…');
   add.disabled = !canPush;
   add.addEventListener('click', () => { try { act({ add: parseAddress(input.value) }, add); } catch (e) { fail(e); } });
   const current = blog.extensions || [];
   return h(
     'div',
     {},
-    h('p', {}, h('a', { href: link(repo, '&settings') }, '← Settings')),
+    h('p', {}, nav('Settings', link(repo, '&settings'), { icon: 'arrow-left' })),
     h('h1', {}, 'Extensions'),
     h('p', { class: 'hint' }, 'An extension is code, so it runs only when you publish, in a sandbox with no DOM, no network and no access to your token. What it returns is committed with your pages; the published blog contains no extension code, and readers run none.'),
     h('h3', {}, 'In use'),
     current.length
-      ? h('ul', { class: 'posts' }, current.map((e) => { const b = h('button', {}, 'Remove…'); b.disabled = !canPush; b.addEventListener('click', () => act({ remove: e.repo }, b)); return h('li', {}, h('h3', {}, `${e.name} ${e.version}`), h('div', { class: 'muted' }, `${e.licence} · ${e.repo}@${e.ref}${e.hooks ? ` · ${e.hooks.join(', ')}` : ''}`), b); }))
+      ? h('ul', { class: 'posts' }, current.map((e) => { const b = h('button', { icon: 'x' }, 'Remove…'); b.disabled = !canPush; b.addEventListener('click', () => act({ remove: e.repo }, b)); return h('li', {}, h('h3', {}, `${e.name} ${e.version}`), h('div', { class: 'muted' }, `${e.licence} · ${e.repo}@${e.ref}${e.hooks ? ` · ${e.hooks.join(', ')}` : ''}`), b); }))
       : h('p', { class: 'muted' }, 'None.'),
     h('h3', {}, 'By address'),
     input,
     h('div', { class: 'actions' }, add),
     h('h3', {}, 'Built in'),
     listed.length
-      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', {}, 'Add…'); b.disabled = !canPush; b.addEventListener('click', () => { try { act({ add: parseAddress(`${e.repo}@${e.ref}`) }, b); } catch (err) { fail(err); } }); return h('li', {}, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.description ? h('p', {}, String(e.description).slice(0, 200)) : null, b); }))
+      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', { icon: 'plus' }, 'Add…'); b.disabled = !canPush; b.addEventListener('click', () => { try { act({ add: parseAddress(`${e.repo}@${e.ref}`) }, b); } catch (err) { fail(err); } }); return h('li', {}, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.description ? h('p', {}, String(e.description).slice(0, 200)) : null, b); }))
       :       h('p', { class: 'muted' }, 'The built-in list could not be read. Any extension repository still works by its address.'),
   );
 }
@@ -571,7 +587,7 @@ function licencesView(repo, r) {
   return h(
     'div',
     {},
-    h('p', {}, h('a', { href: link(repo, '&settings') }, '← Settings')),
+    h('p', {}, nav('Settings', link(repo, '&settings'), { icon: 'arrow-left' })),
     h('h1', {}, 'What is in this site'),
     h('p', { class: 'muted' }, 'Every theme and extension this blog depends on, with its licence. Recorded in blog.json, written to licences.json, and stamped into each generated page as a comment.'),
     h('table', { style: 'width:100%;border-collapse:collapse' }, h('thead', {}, h('tr', {}, ['Kind', 'Name', 'Version', 'Licence', 'Pinned to'].map((t) => h('th', { style: 'text-align:left;border-bottom:1px solid var(--rule);padding:.3rem' }, t)))), h('tbody', {}, rows.map((x) => h('tr', {}, [x.kind, x.name, x.version || '', x.licence, x.repo ? `${x.repo}@${x.ref}` : 'built in'].map((t) => h('td', { style: 'padding:.3rem;border-bottom:1px solid var(--rule)' }, String(t))))))),
@@ -587,18 +603,18 @@ async function listView(repo, r) {
   const entries = await loadIndex(gh, repo, r.ref);
   const wrap = h('div', {}, h('h1', {}, blog.title), h('p', { class: 'muted' }, blog.description));
   // View blog opens the GitHub Pages site when GitHub is serving one, else the reader (which needs no Pages)
-  const viewBlog = h('a', { class: 'btn', href: `blog/${link(repo, r.ref ? `&ref=${r.ref}` : '')}`, target: '_blank', rel: 'noopener', title: 'Opens the reader: GitHub Pages is not serving this blog' }, 'View blog');
-  if (gh.token) wrap.append(h('div', { class: 'actions' }, h('button', { class: 'primary', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { onclick: () => (location.hash = link(repo, '&settings')) }, 'Settings'), viewBlog, h('button', { onclick: (e) => showDrafts(e.target, repo, r.ref, wrap) }, 'Show drafts')));
+  const viewBlog = outbound('View blog', `blog/${link(repo, r.ref ? `&ref=${r.ref}` : '')}`, { icon: 'external-link', title: 'Opens the reader: GitHub Pages is not serving this blog' });
+  if (gh.token) wrap.append(h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'sliders', onclick: () => (location.hash = link(repo, '&settings')) }, 'Settings'), viewBlog, h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, wrap) }, 'Show drafts')));
   if (gh.token) {
     detectAddress(gh, repo).then((found) => {
       if (found.live && found.exact && found.built) {
-        viewBlog.href = `${found.address}/`;
+        viewBlog.dataset.href = `${found.address}/`;
         viewBlog.title = 'Opens the GitHub Pages site';
       }
     }).catch(() => {});
   }
   wrap.append(
-    h('ul', { class: 'posts' }, entries.map((e) => h('li', {}, h('h3', {}, h('a', { href: link(repo, `&post=${e.slug}${r.ref ? `&ref=${r.ref}` : ''}`) }, e.title)), h('div', { class: 'muted' }, e.date, (e.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))), e.excerpt ? h('p', {}, e.excerpt) : null))),
+    h('ul', { class: 'posts' }, entries.map((e) => h('li', { class: 'card-link' }, h('h3', {}, nav(e.title, link(repo, `&post=${e.slug}${r.ref ? `&ref=${r.ref}` : ''}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(e.date), (e.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))), e.excerpt ? h('p', {}, e.excerpt) : null))),
   );
   if (!entries.length) wrap.append(h('p', { class: 'muted' }, 'No published posts yet.'));
   return wrap;
@@ -611,7 +627,7 @@ async function showDrafts(btn, repo, ref, wrap) {
   for (const n of await listPostFiles(gh, repo, ref)) {
     try {
       const m = parseMeta(splitFile(await gh.readText(slugRepo, at(folder, `posts/${n}`), ref), n).front, n);
-      if (m.status === 'draft') out.append(h('li', {}, h('h3', {}, h('a', { href: link(repo, `&edit=${m.slug}`) }, `${m.title} (draft)`))));
+      if (m.status === 'draft') out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(`${m.title} (draft)`, link(repo, `&edit=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(m.date))));
     } catch {
       /* skip unreadable */
     }
@@ -628,11 +644,11 @@ async function postView(repo, r) {
   return h(
     'div',
     {},
-    h('p', {}, h('a', { href: link(repo) }, `← ${blog.title}`)),
+    h('p', {}, nav(blog.title, link(repo), { icon: 'arrow-left' })),
     h('h1', {}, post.meta.title),
-    h('p', { class: 'muted' }, post.meta.date, post.meta.author ? ` · ${post.meta.author}` : '', (post.meta.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))),
+    h('p', { class: 'muted' }, dateEl(post.meta.date, { long: true }), post.meta.author ? ` · ${post.meta.author}` : '', (post.meta.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))),
     body,
-    h('div', { class: 'actions' }, h('button', { onclick: () => (location.hash = link(repo, `&correct=${post.slug}`)) }, 'Suggest a correction'), gh.token ? h('button', { onclick: () => (location.hash = link(repo, `&edit=${post.slug}`)) }, 'Edit') : null),
+    h('div', { class: 'actions' }, h('button', { icon: 'message', onclick: () => (location.hash = link(repo, `&correct=${post.slug}`)) }, 'Suggest a correction'), gh.token ? h('button', { icon: 'edit', onclick: () => (location.hash = link(repo, `&edit=${post.slug}`)) }, 'Edit') : null),
   );
 }
 
@@ -666,7 +682,7 @@ async function editorView(repo, r) {
     }
   });
 
-  const m = existing ? existing.post.meta : { status: 'draft', date: new Date().toISOString().slice(0, 10) };
+  const m = existing ? existing.post.meta : { status: 'draft', date: today() };
   const f = {
     title: h('input', { value: m.title || '', placeholder: 'Title', disabled: correcting }),
     slug: h('input', { value: m.slug || '', placeholder: 'set once, never changes', disabled: !isNew }),
@@ -676,8 +692,13 @@ async function editorView(repo, r) {
     cover: h('input', { value: m.cover || '', placeholder: 'asset:images/cover.png, or auto', disabled: correcting, style: 'flex:1' }),
     description: h('input', { value: m.description || '', placeholder: 'Optional; defaults to the first paragraph', disabled: correcting }),
   };
-  const coverUpload = h('button', { type: 'button', disabled: correcting, onclick: () => chooseImage((ref) => { f.cover.value = ref; }) }, 'Upload…');
-  const coverAuto = h('button', { type: 'button', disabled: correcting, onclick: () => { f.cover.value = 'auto'; } }, 'Auto');
+  const dateNote = h('div', { class: 'hint' });
+  const showDate = () => { const d = describeDate(f.date.value); dateNote.textContent = d.relative ? `${d.full} · ${d.relative}` : d.full; };
+  f.date.addEventListener('input', showDate);
+  f.date.addEventListener('change', showDate);
+  showDate();
+  const coverUpload = h('button', { type: 'button', icon: 'upload', disabled: correcting, onclick: () => chooseImage((ref) => { f.cover.value = ref; }) }, 'Upload…');
+  const coverAuto = h('button', { type: 'button', icon: 'zap', disabled: correcting, onclick: () => { f.cover.value = 'auto'; } }, 'Auto');
   setVideoResolver((ref) => {
     try {
       return videoEmbedUrl(ref, blog);
@@ -690,8 +711,13 @@ async function editorView(repo, r) {
   f.title.addEventListener('input', () => { if (isNew && !slugTouched) f.slug.value = slugify(f.title.value); });
   const field = (label, el, hint) => h('div', {}, h('label', {}, label), el, hint ? h('div', { class: 'hint' }, hint) : null);
   const note = h('textarea', { rows: 2, placeholder: 'What did you correct, and why?', style: 'width:100%', 'aria-label': 'Correction note' });
-  const go = h('button', { class: 'primary' }, correcting ? 'Propose correction (pull request)' : 'Publish');
-  const refreshLabel = () => { if (!correcting) go.textContent = f.status.value === 'published' ? 'Publish' : 'Save draft'; };
+  const go = h('button', { class: 'primary', icon: 'send' }, correcting ? 'Propose correction (pull request)' : 'Publish');
+  const refreshLabel = () => {
+    if (correcting) return;
+    const published = f.status.value === 'published';
+    go.dataset.icon = published ? 'send' : 'save';
+    relabel(go, published ? 'Publish' : 'Save draft');
+  };
   f.status.addEventListener('change', refreshLabel);
   refreshLabel();
 
@@ -699,15 +725,21 @@ async function editorView(repo, r) {
   const node = h(
     'div',
     {},
-    h('p', {}, h('a', { href: existing ? link(repo, `&post=${existing.post.slug}`) : link(repo) }, '← Back')),
+    h('p', {}, nav('Back', existing ? link(repo, `&post=${existing.post.slug}`) : link(repo), { icon: 'arrow-left' })),
     h('h1', {}, correcting ? `Correct: ${m.title}` : isNew ? 'New post' : `Edit: ${m.title}`),
-    h('div', { class: 'row' }, field('Title', f.title), field('Slug (the URL — never changes)', f.slug)),
-    h('div', { class: 'row' }, field('Cover', h('div', { style: 'display:flex;gap:.4rem' }, f.cover, coverUpload, coverAuto), 'Upload an image, or auto: the post\'s first image, else the poster of its first video, else the blog\'s cover. It is the preview when the post is shared.'), field('Description', f.description)),
-    editorEl,
-    h('p', { class: 'hint' }, 'The toolbar offers only what markdown can express. Images are uploaded to the assets repository at publish time, not before.'),
-    correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', h('a', { href: `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `posts/${r.post}.md`)}`, target: '_blank', rel: 'noopener' }, 'Propose the change on GitHub instead'), ' — it forks and opens the pull request for you.')) : null,
-    h('div', { class: 'row' }, field('Date', f.date), field('Tags', f.tags), field('Status', f.status)),
-    h('div', { class: 'actions' }, go),
+    h('div', { class: 'cols' },
+      h('div', {},
+        h('div', { class: 'row' }, field('Title', f.title), field('Slug (the URL — never changes)', f.slug)),
+        h('div', { class: 'row' }, field('Cover', h('div', { style: 'display:flex;gap:.4rem' }, f.cover, coverUpload, coverAuto), 'Upload an image, or auto: the post\'s first image, else the poster of its first video, else the blog\'s cover. It is the preview when the post is shared.'), field('Description', f.description)),
+        editorEl,
+        h('p', { class: 'hint' }, 'The toolbar offers only what markdown can express. Images are uploaded to the assets repository at publish time, not before.'),
+      ),
+      h('div', { class: 'side' }, h('div', { class: 'card' }, h('div', { class: 'card-header' }, correcting ? 'Propose' : 'Publish'), h('div', { class: 'card-body' },
+        correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', outbound('Propose the change on GitHub instead', `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `posts/${r.post}.md`)}`, { class: 'link' }), ' — it forks and opens the pull request for you.')) : null,
+        h('div', { class: 'row' }, field('Date', f.date, dateNote), field('Tags', f.tags), field('Status', f.status)),
+        h('div', { class: 'actions' }, go),
+      ))),
+    ),
   );
   // The Quill container must be in the document before Quill measures it.
   view.replaceChildren(node);
@@ -876,7 +908,7 @@ function videoCombobox(blog, { entries, onEmbed, onUpload, onCancel, onOpenChang
   const toggle = h('button', { type: 'button', class: 'combo-toggle', tabindex: '-1', 'aria-label': 'Show all videos' }, '▾');
   const list = h('ul', { class: 'combo-list', id: 'video-options', role: 'listbox' });
   list.hidden = true;
-  const embedBtn = h('button', { class: 'primary', disabled: true }, 'Embed');
+  const embedBtn = h('button', { class: 'primary', icon: 'film', disabled: true }, 'Embed');
   const preview = h('div', { class: 'combo-preview' });
   const note = h('div', { class: 'hint' });
 
@@ -911,7 +943,7 @@ function videoCombobox(blog, { entries, onEmbed, onUpload, onCancel, onOpenChang
     dirty = false;
     input.value = e ? label(e) : '';
     embedBtn.disabled = !e;
-    embedBtn.textContent = e && e.unpublished ? 'Publish and embed' : 'Embed';
+    relabel(embedBtn, e && e.unpublished ? 'Publish and embed' : 'Embed');
     drawPreview();
   };
 
@@ -945,7 +977,7 @@ function videoCombobox(blog, { entries, onEmbed, onUpload, onCancel, onOpenChang
     query = input.value;
     dirty = true;
     active = 0;
-    if (chosen && input.value !== label(chosen)) { chosen = null; embedBtn.disabled = true; embedBtn.textContent = 'Embed'; drawPreview(); }
+    if (chosen && input.value !== label(chosen)) { chosen = null; embedBtn.disabled = true; relabel(embedBtn, 'Embed'); drawPreview(); }
     drawList();
     setOpen(true);
   });
@@ -973,7 +1005,7 @@ function videoCombobox(blog, { entries, onEmbed, onUpload, onCancel, onOpenChang
     h('div', { class: 'combo-row' }, h('div', { class: 'combo' }, input, toggle, list), embedBtn),
     note,
     preview,
-    h('div', { class: 'actions' }, h('button', { onclick: onUpload }, 'Upload a video…'), h('button', { onclick: onCancel }, 'Cancel')),
+    h('div', { class: 'actions' }, h('button', { icon: 'upload', onclick: onUpload }, 'Upload a video…'), h('button', { icon: 'x', onclick: onCancel }, 'Cancel')),
   );
   return {
     root,
@@ -1079,7 +1111,7 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
   const confirm = (list, plan, summary = null) => {
     const rows = plan.changes.slice(0, 25).map((c) => h('div', {}, `${c.action.padEnd(6)} ${c.path}${c.delete ? '' : `  ${fmtBytes(c.size)}`}`));
     if (plan.changes.length > 25) rows.push(h('div', { class: 'muted' }, `… and ${plan.changes.length - 25} more`));
-    const go = h('button', { class: 'primary' }, plan.kind === 'tag' ? `Create tag ${plan.tag}` : 'Commit, push and tag');
+    const go = h('button', { class: 'primary', icon: 'git-commit' }, plan.kind === 'tag' ? `Create tag ${plan.tag}` : 'Commit, push and tag');
     go.addEventListener('click', async () => {
       go.disabled = true;
       gh.onWait = (s) => status.replaceChildren(progressLine(`GitHub limits how fast files can be created; continuing in ${s} s…`));
@@ -1113,7 +1145,7 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
     const estimate = h('p', { class: 'hint' });
     const bar = h('progress', { max: 1, value: 0, style: 'width:100%' });
     const barText = h('div', { class: 'hint' });
-    const go = h('button', { class: 'primary', disabled: true }, 'Encode and review…');
+    const go = h('button', { class: 'primary', icon: 'zap', disabled: true }, 'Encode and review…');
     const stop = h('button', {}, 'Cancel encoding');
     const progress = h('div', {}, bar, barText, stop);
     progress.hidden = true;
@@ -1244,7 +1276,7 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
     )));
   }
 
-  root.append(h('div', { class: 'actions' }, h('button', { onclick: back }, '← Embed a video')));
+  root.append(h('div', { class: 'actions' }, h('button', { icon: 'arrow-left', onclick: back }, 'Embed a video')));
   draw();
   return root;
 }
@@ -1275,7 +1307,7 @@ function confirmPlan(plan) {
       h('div', { class: 'files' }, [...plan.assetGroups.flatMap((g) => g.files.map((x) => ({ ...x, repo: g.repo }))), ...plan.changes.map((c) => ({ ...c, repo: plan.repo }))].map((c) => h('div', {}, `${c.action.padEnd(6)} ${c.repo}/${c.path}  ${fmtBytes(c.size)}`))),
       plan.licences ? h('div', {}, h('h3', {}, 'Licences this blog will depend on'), h('div', { class: 'files' }, plan.licences.map((l) => h('div', {}, `${l.kind.padEnd(10)} ${l.name} ${l.version || ''}  ${l.licence}${l.repo ? `  ${l.repo}@${l.ref}` : '  (built in)'}`)))) : null,
       h('p', { class: 'hint' }, plan.mode === 'pr' ? 'This opens a pull request; the default branch is not changed.' : 'Nothing has been uploaded yet.'),
-      h('div', { class: 'actions' }, h('button', { class: 'primary', onclick: () => done(true) }, plan.mode === 'pr' ? 'Open pull request' : 'Commit and push'), h('button', { onclick: () => done(false) }, 'Cancel')),
+      h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'git-commit', onclick: () => done(true) }, plan.mode === 'pr' ? 'Open pull request' : 'Commit and push'), h('button', { icon: 'x', onclick: () => done(false) }, 'Cancel')),
     ].filter(Boolean));
     dlg.addEventListener('cancel', () => done(false), { once: true }); // Esc (see chooseVideo for why not 'close')
     dlg.showModal();
@@ -1283,4 +1315,5 @@ function confirmPlan(plan) {
 }
 
 addEventListener('hashchange', route);
-route();
+// the dates need moment; if it cannot load they are shown as written
+loadMoment().catch(() => {}).then(route);

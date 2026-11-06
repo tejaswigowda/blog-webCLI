@@ -64,7 +64,7 @@ async function open(page) {
   await clickText(page, '#top button', 'Sign in');
   await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
   await clickText(page, 'dialog button', 'Sign in');
-  await until(page, "document.querySelector('#top').innerText.includes('Signed in as tester')");
+  await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
   await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
   await until(page, "document.querySelector('.ql-editor')");
 }
@@ -80,16 +80,16 @@ test('cover: upload an image for it, or choose auto; both are saved as the post 
     const text = await page.evaluate("document.querySelector('#view').innerText");
     assert.match(text, /Upload an image, or auto: the post's first image, else the poster of its first video, else the blog's cover/);
 
-    // Date, Tags and Status sit below the content, directly above the Save/Publish button
+    // Date, Tags and Status come after the content and sit directly above the Save/Publish button
+    // (in the right-hand column on a wide screen, below the editor on a narrow one)
     const order = await page.evaluate(`(() => {
-      const kids = [...document.querySelector('#view > div').children];
-      const at = (pred) => kids.findIndex(pred);
-      const editor = at((e) => e.querySelector && (e.id === 'editor' || e.querySelector('.ql-editor')));
-      const row = at((e) => e.classList.contains('row') && /Date/.test(e.innerText) && /Status/.test(e.innerText));
-      const buttons = at((e) => e.classList.contains('actions') && /Save draft|Publish/.test(e.innerText));
-      return { editor, row, buttons, rows: kids.length };
+      const editor = document.querySelector('#editor');
+      const row = [...document.querySelectorAll('#view .row')].find((e) => /Date/.test(e.innerText) && /Status/.test(e.innerText));
+      const buttons = [...document.querySelectorAll('#view .actions')].find((e) => /Save draft|Publish/.test(e.innerText));
+      const after = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return { rowAfterEditor: after(editor, row), buttonsAfterRow: after(row, buttons), adjacent: row.nextElementSibling === buttons };
     })()`);
-    assert.ok(order.editor >= 0 && order.row > order.editor && order.buttons === order.row + 1, JSON.stringify(order));
+    assert.deepEqual(order, { rowAfterEditor: true, buttonsAfterRow: true, adjacent: true });
 
     // Auto writes the word
     await clickText(page, '#view button', 'Auto');

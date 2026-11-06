@@ -66,7 +66,7 @@ async function signedIn(blogJson) {
   await page.evaluate("[...document.querySelectorAll('#top button')].find((b) => b.textContent.trim().startsWith('Sign in')).click(); 0");
   await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
   await page.evaluate("[...document.querySelectorAll('dialog button')].find((b) => b.textContent.trim().startsWith('Sign in')).click(); 0");
-  await until(page, "document.querySelector('#top').innerText.includes('Signed in as tester')");
+  await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
   return { page, close: () => { chrome.close(); web.close(); } };
 }
 const blogJson = (extra = {}) => JSON.stringify({ title: 'T', description: 'd', author: 'A', domain: 'https://example.github.io/blog', theme: 'default', ...extra });
@@ -102,8 +102,8 @@ test('images: a blog that does not say where it lives explains what to do, keeps
     assert.match(msg, /no images repository yet/);
     assert.match(msg, /me\/images/);
     assert.match(msg, /example\/blog\/images/, 'it suggests keeping them in this repository, as a folder');
-    const settings = await page.evaluate("(() => { const a = document.querySelector('.toast.error a'); return [a.getAttribute('href'), a.target, a.rel]; })()");
-    assert.deepEqual(settings, ['#repo=example/blog&settings', '_blank', 'noopener']);
+    const settings = await page.evaluate("(() => { const a = document.querySelector('.toast.error button[data-href]'); return [a.dataset.href, a.tagName]; })()");
+    assert.deepEqual(settings, ['#repo=example/blog&settings', 'BUTTON']);
     assert.equal(await page.evaluate("document.querySelector('.ql-editor img')"), null, 'nothing was inserted');
     assert.match(await page.evaluate("document.querySelector('.ql-editor').innerText"), /words I have written/, 'the post is still there');
 

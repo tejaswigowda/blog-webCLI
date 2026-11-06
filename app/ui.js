@@ -3,6 +3,7 @@
 // notices live inside the dialog while one is open (then they can still be read and dismissed) and in
 // the page otherwise.
 import { Refusal } from '../lib/errors.js';
+import { icon } from './icons.js';
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -55,13 +56,13 @@ export function describeError(e) {
 export function toast({ kind = 'info', title = '', message = '', links = [], action = null, timeout } = {}) {
   ensure();
   const ms = timeout === undefined ? DEFAULT_TIMEOUT[kind] : timeout;
-  const icon = { success: '✓', error: '!', info: 'i' }[kind] || 'i';
+  const glyph = icon({ success: 'check', error: 'alert-circle', info: 'info' }[kind] || 'info');
   const node = el('div', { class: `toast ${kind}`, role: kind === 'error' ? 'alert' : 'status' },
-    el('span', { class: 'toast-icon', 'aria-hidden': 'true' }, icon),
+    el('span', { class: 'toast-icon', 'aria-hidden': 'true' }, glyph),
     el('div', { class: 'toast-body' },
       title ? el('div', { class: 'toast-title' }, title) : null,
       message ? el('div', { class: 'toast-message' }, message) : null,
-      links.length ? el('div', { class: 'toast-links' }, links.map((l) => el('a', { href: l.href, target: '_blank', rel: 'noopener' }, l.text))) : null,
+      links.length ? el('div', { class: 'toast-links' }, links.map((l) => el('button', { type: 'button', class: 'link', 'data-href': l.href, onclick: () => window.open(l.href, '_blank', 'noopener') }, l.text))) : null,
       action ? el('div', { class: 'toast-actions' }, el('button', { class: 'primary', type: 'button', onclick: () => { close(); action.onClick(); } }, action.label)) : null),
     el('button', { class: 'toast-close', type: 'button', 'aria-label': 'Dismiss', onclick: () => close() }, '×'));
   let timer = null;
