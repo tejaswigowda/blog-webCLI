@@ -469,6 +469,9 @@ async function settingsView(repo, r) {
     shadow.innerHTML = `<style>${forShadow(themeCss(next, themePack))}</style><div class="pv ${esc(body.bodyClass)}" style="pointer-events:none">${body.html}</div>`;
   };
 
+  // The live preview sits with the form, where the settings are; the colours sit in the side panel, beside the theme.
+  const previewCard = h('div', { class: 'card' }, h('div', { class: 'card-header' }, 'Preview'), h('div', { class: 'card-body' }, preview, msg));
+  const colorsBox = section('Colors', h('div', { class: 'colors' }, h('span', {}), h('b', {}, 'Light'), h('b', {}, 'Dark'), ...colorRows), h('div', { class: 'hint' }, 'Leave blank for the default. A colour with no dark value keeps the default dark palette.'));
   const form = h(
     'form',
     { onsubmit: (e) => e.preventDefault() },
@@ -490,7 +493,7 @@ async function settingsView(repo, r) {
       h('div', { class: 'hint' }, 'GitHub Pages takes from seconds to minutes to publish what you commit. With this on, each page checks the repository itself (one small file request, no account, no API) and shows the current text, and a post that has no page yet is drawn at its address. Search engines and link previews still wait for the build.'),
       h('details', {}, h('summary', {}, 'Where the live copy is read from'), h('div', { class: 'row' }, field('Content URL', input('contentBase', { placeholder: DEFAULT_CONTENT_BASE }), 'A template ending in /{path}, using {owner} and {repo}. Blank: the default.'))),
     ),
-    section('Colors', h('div', { class: 'colors' }, h('span', {}), h('b', {}, 'Light'), h('b', {}, 'Dark'), ...colorRows), h('div', { class: 'hint' }, 'Leave blank for the default. A colour with no dark value keeps the default dark palette.')),
+    previewCard,
     section(
       'Type and layout',
       h('div', { class: 'row' }, field('Body font', select('font', fontOpts)), field('Heading font', select('headingFont', fontOpts))),
@@ -545,7 +548,7 @@ async function settingsView(repo, r) {
     h('h1', {}, 'Blog settings'),
     h('p', { class: 'muted' }, `Saved to ${at(folder, 'blog.json')} in ${plain}. Posts are never touched; every generated page is regenerated from the new settings.`),
     canPush ? null : h('div', { class: 'err' }, `This token cannot write to ${plain}.`),
-    h('div', { class: 'cols' }, form, h('div', { class: 'side' }, themeBox, h('div', { class: 'card' }, h('div', { class: 'card-header' }, 'Preview'), h('div', { class: 'card-body' }, preview, msg)), h('div', { class: 'actions' }, save))),
+    h('div', { class: 'cols' }, form, h('div', { class: 'side' }, themeBox, colorsBox, h('div', { class: 'actions' }, save))),
   );
   queueMicrotask(redraw);
   return node;

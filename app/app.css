@@ -234,3 +234,10 @@ button.icon-btn{padding:6px;border-radius:7px}
 /* a reader's sort of the post list */
 .sortbar{display:inline-flex;align-items:center;gap:.5rem;margin:.25rem 0 .5rem;font-size:.8rem;color:var(--muted)}
 .sortbar select{padding:4px 8px;font-size:.82rem}
+
+/* the colour grid in the narrower side panel: each colour's name on its own line, Light and Dark side by side */
+.side .colors{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.side .colors .cc{min-width:0}
+.side .colors .cc input[type=color]{flex:none}
+.side .colors>span{grid-column:1/-1;margin-top:.35rem}
+.side .colors>span:empty{display:none}
