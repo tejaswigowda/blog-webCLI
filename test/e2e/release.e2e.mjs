@@ -110,7 +110,7 @@ test('embed: a searchable dropdown with Embed beside it; an unpublished render f
     await until(page, "!document.querySelector('dialog[open]')");
     await until(page, "document.querySelector('.ql-editor iframe[data-video]')");
     assert.equal(await lastEmbed(page), 'video:videos/clip@v1');
-    assert.match(await page.evaluate("document.querySelector('#view .ok').innerText"), /Created clip\/v1\./);
+    assert.match(await page.evaluate("document.querySelector('.toast.success .toast-title').innerText"), /^Created clip\/v1/);
     assert.deepEqual(await page.evaluate("Object.keys(window.__fake.state['example/blog'].tagRefs)"), ['clip/v1']);
 
     // ---- more videos: versions, and another untagged folder ----

@@ -620,6 +620,13 @@ upload, and nothing is uploaded until you confirm.
   until you publish; *read* covers listing and rendering. Before sending, a pre-flight
   states the act — *4 files, 1.2 MB, to github.com/me/blog (main)* — and a receipt with the
   commit follows. Images are uploaded to their own repo first; that commit becomes the pin.
+* **Progress and results**: work that takes longer than a moment (building the pre-flight,
+  committing, running an extension, listing videos) shows a spinner at the top of the page and
+  marks the button you pressed. Outcomes arrive as toasts at the bottom right: a success toast
+  links the commit or pull request; "nothing to change" is a quiet note; an error names the
+  refusal code (or "Something went wrong") and stays until you dismiss it. While a dialog is
+  open the toasts appear inside it, so they can still be read and closed. Problems with a form
+  field, and a page that cannot load, stay where they are, next to what they are about.
 * **Corrections**: "Suggest a correction" opens the editor on the post body; submitting opens
   a pull request on a new branch (default branch untouched). Without write access the app
   links to GitHub's own fork-and-edit page.

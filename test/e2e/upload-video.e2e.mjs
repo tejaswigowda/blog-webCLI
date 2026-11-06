@@ -124,7 +124,7 @@ test('video: upload an MP4, encode it in the browser, publish the release, embed
     await until(page, "!document.querySelector('dialog[open]')", 60000);
     await until(page, "document.querySelector('.ql-editor iframe[data-video]')");
     assert.equal(await page.evaluate("document.querySelector('.ql-editor iframe[data-video]').getAttribute('data-video')"), 'video:videos/harbour-walk@v1');
-    assert.match(await page.evaluate("document.querySelector('#view .ok').innerText"), /Created harbour-walk\/v1\./);
+    assert.match(await page.evaluate("document.querySelector('.toast.success .toast-title').innerText"), /^Created harbour-walk\/v1/);
 
     // ---- what was published is a playable HLS stream ----
     const published = await page.evaluate(`(() => {

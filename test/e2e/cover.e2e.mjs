@@ -50,7 +50,7 @@ const until = async (page, expr, ms = 15000) => {
   const t0 = Date.now();
   for (;;) {
     if (await page.evaluate(`Boolean(${expr})`)) return;
-    if (Date.now() - t0 > ms) throw new Error(`timed out waiting for: ${expr}\n--- page says:\n${await page.evaluate("(document.querySelector('#view .err') || document.querySelector('#view .ok') || {}).innerText || '(nothing)'")}`);
+    if (Date.now() - t0 > ms) throw new Error(`timed out waiting for: ${expr}\n--- page says:\n${await page.evaluate("(document.querySelector('.toast.error') || document.querySelector('.toast.success') || {}).innerText || '(nothing)'")}`);
     await new Promise((r) => setTimeout(r, 150));
   }
 };
@@ -100,7 +100,7 @@ test('cover: upload an image for it, or choose auto; both are saved as the post 
     await until(page, "document.querySelector('#view input[placeholder^=\"asset:images/cover.png\"]').value.startsWith('asset:images/')");
     const ref = await coverValue(page);
     assert.match(ref, /^asset:images\/[0-9a-f]{10}-cat-pic\.png$/);
-    assert.equal(await page.evaluate("document.querySelector('#view .err')"), null);
+    assert.equal(await page.evaluate("document.querySelector('.toast.error')"), null);
 
     // saving commits the image to the images folder and the post to the blog, naming it logically
     await setValue(page, '#view input[placeholder=Title]', 'Covered');
@@ -111,9 +111,10 @@ test('cover: upload an image for it, or choose auto; both are saved as the post 
     assert.match(review, new RegExp(`add\\s+example/blog/${ref.slice('asset:'.length).replace(/[./]/g, '\\$&')}`), 'the image is in the files to send');
     assert.ok(!/\bnull\b/.test(review), 'no stray "null" in the pre-flight');
     assert.match(review, /posts\/covered\.md/);
+    await page.evaluate("document.querySelectorAll('.toast').forEach((t) => t.remove()); 0"); // so the next toast is this commit's
     await clickText(page, 'dialog button', 'Commit and push');
     await until(page, "!document.querySelector('dialog[open]')", 30000);
-    await until(page, "document.querySelector('#view .ok')");
+    await until(page, "document.querySelector('.toast.success')");
 
     const saved = await page.evaluate("window.__fake.files('example/blog')");
     assert.ok(saved[ref.slice('asset:'.length)], 'the image is in the repository');
@@ -132,9 +133,10 @@ test('cover: upload an image for it, or choose auto; both are saved as the post 
     await page.evaluate("(() => { const s = [...document.querySelectorAll('#view select')].find((x) => [...x.options].some((o) => o.value === 'published')); s.value = 'published'; s.dispatchEvent(new Event('change')); })()");
     await clickText(page, '#view button', 'Publish');
     await until(page, "document.querySelector('dialog[open] .preflight')");
+    await page.evaluate("document.querySelectorAll('.toast').forEach((t) => t.remove()); 0"); // so the next toast is this commit's
     await clickText(page, 'dialog button', 'Commit and push');
     await until(page, "!document.querySelector('dialog[open]')", 30000);
-    await until(page, "document.querySelector('#view .ok')");
+    await until(page, "document.querySelector('.toast.success')");
     const after = await page.evaluate("window.__fake.files('example/blog')");
     assert.match(after['posts/automatic.md'], /\ncover: auto\n/);
     const og = /<meta property="og:image" content="([^"]*)"/.exec(after['automatic/index.html']);

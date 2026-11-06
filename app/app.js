@@ -9,6 +9,7 @@ import { audioDecodable, encodeToRelease, estimateBytes, inspectUpload, nameProb
 import { licenceRecords } from '../lib/licences.js';
 import { createEditor, setAssetResolver, setVideoResolver } from './editor.js';
 import { Refusal } from '../lib/errors.js';
+import { describeError, progressLine, toast, working } from './ui.js';
 import { mdToDelta, deltaToMarkdownChecked } from '../lib/markdown.js';
 import { SLUG_RE, joinFile, newFront, parseMeta, setMeta, splitFile } from '../lib/frontmatter.js';
 import { parsePost } from '../lib/blog.js';
@@ -62,6 +63,21 @@ function addressView(repo, found, saved) {
   else note = h('div', { class: 'err' }, h('b', {}, 'GitHub Pages is not enabled for this repository'), `Nothing is served at this address yet (${plain}). Turn it on under `, ext(pagesLink, 'Settings → Pages'), ' (Deploy from a branch → your default branch, / (root)). Until then the blog is readable at ', h('a', { href: `blog/${link(repo)}`, target: '_blank', rel: 'noopener' }, 'its reader page'), '.');
   return { input, note };
 }
+
+function fail(e) {
+  const d = describeError(e);
+  return toast({ kind: 'error', title: d.title, message: d.message });
+}
+
+function sent(receipt, opts = {}) {
+  const links = [
+    ...receipt.commits.map((c) => ({ href: c.url, text: `${c.files} file${c.files === 1 ? '' : 's'} → ${c.repo}@${c.branch} (${c.sha.slice(0, 8)})` })),
+    ...(receipt.pull ? [{ href: receipt.pull.url, text: `Pull request #${receipt.pull.number}` }] : []),
+  ];
+  return toast({ kind: 'success', title: opts.title || (receipt.pull ? 'Pull request opened' : 'Sent'), message: opts.message || '', links, action: opts.action });
+}
+
+const noted = (message) => toast({ kind: 'info', message });
 
 function errBox(e) {
   if (e instanceof Refusal) return h('div', { class: 'err' }, h('b', {}, `Refused: ${e.code}`), e.detail);
@@ -146,7 +162,7 @@ async function route() {
   renderTop(r.repo);
   renderLedger(net.ledger);
   document.title = 'blog.webcli.app';
-  view.replaceChildren(h('p', { class: 'muted' }, 'Loading…'));
+  view.replaceChildren(progressLine('Loading…'));
   try {
     if (!r.repo) return home();
     const repo = parseRepo(r.repo);
@@ -215,19 +231,17 @@ async function createBlogView(repo, r) {
     video: h('input', { placeholder: "blank: this repository's videos folder, or me/renders" }),
   };
   const field = (label, el, hint) => h('div', {}, h('label', {}, label), el, hint && hint.nodeType ? hint : hint ? h('div', { class: 'hint' }, hint) : null);
-  const status = h('div');
   const go = h('button', { class: 'primary' }, 'Create blog…');
   go.addEventListener('click', async () => {
     go.disabled = true;
-    status.replaceChildren();
     try {
       const fields = Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.value]));
-      const plan = await planInit(gh, { repo, branch, fields, runner });
+      const plan = await working('Preparing the blog…', () => planInit(gh, { repo, branch, fields, runner }), { button: go });
       if (!(await confirmPlan(plan))) return;
-      const receipt = await executePlan(gh, plan);
-      status.replaceChildren(receiptBox(receipt), h('div', { class: 'actions' }, h('button', { class: 'primary', onclick: () => { cache = null; route(); } }, 'Open the blog')));
+      const receipt = await working('Committing…', () => executePlan(gh, plan), { button: go });
+      sent(receipt, { title: 'Blog created', action: { label: 'Open the blog', onClick: () => { cache = null; route(); } } });
     } catch (e) {
-      status.replaceChildren(errBox(e.status === 409 ? new Error(`${plain} is empty, and GitHub needs one commit before anything else can be written. Add a README on GitHub, then try again.`) : e));
+      fail(e.status === 409 ? new Error(`${plain} is empty, and GitHub needs one commit before anything else can be written. Add a README on GitHub, then try again.`) : e);
     } finally {
       go.disabled = false;
     }
@@ -242,7 +256,6 @@ async function createBlogView(repo, r) {
     h('div', { class: 'row' }, field('Address the blog is served at', f.domain, addr.note)),
     h('div', { class: 'row' }, field('Images repository', f.images, 'Left blank, images go in an images folder of this repository. Or owner/name, owner/name/folder.'), field('Video repository', f.video, 'Left blank, videos are taken from a videos folder of this repository: releases published with hls.webcli.app.')),
     h('div', { class: 'actions' }, go),
-    status,
   );
 }
 
@@ -312,7 +325,6 @@ async function settingsView(repo, r) {
   const preview = h('div', { id: 'preview' });
   const shadow = preview.attachShadow({ mode: 'open' });
   const msg = h('div', { class: 'hint' });
-  const status = h('div');
 
   const collect = () => {
     const out = {};
@@ -373,20 +385,22 @@ async function settingsView(repo, r) {
   save.disabled = !canPush;
   save.addEventListener('click', async () => {
     save.disabled = true;
-    status.replaceChildren();
     try {
-      const plan = await planSettings(gh, { repo, branch, form: collect(), runner });
+      const plan = await working('Preparing the changes…', () => planSettings(gh, { repo, branch, form: collect(), runner }), { button: save });
       if (plan.unchanged) {
-        status.replaceChildren(h('div', { class: 'ok' }, 'Nothing to save: the repository already has these settings.'));
+        noted('Nothing to save: the repository already has these settings.');
         return;
       }
       if (!(await confirmPlan(plan))) return;
-      const receipt = await executePlan(gh, plan);
-      cache = null;
-      cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
-      status.replaceChildren(receiptBox(receipt), h('p', { class: 'hint' }, 'blog.json and every generated page were updated together.'));
+      const receipt = await working('Committing…', async () => {
+        const rc = await executePlan(gh, plan);
+        cache = null;
+        cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
+        return rc;
+      }, { button: save });
+      sent(receipt, { title: 'Settings saved', message: 'blog.json and every generated page were updated together.' });
     } catch (e) {
-      status.replaceChildren(errBox(e));
+      fail(e);
     } finally {
       save.disabled = !canPush;
     }
@@ -407,7 +421,6 @@ async function settingsView(repo, r) {
     msg,
     form,
     h('div', { class: 'actions' }, save),
-    status,
   );
   queueMicrotask(redraw);
   return node;
@@ -441,16 +454,19 @@ function needSignIn(what) {
   return h('div', {}, h('h2', {}, `Sign in to change ${what}`), h('p', {}, 'This is saved to blog.json, so it needs a fine-grained token.'), h('button', { class: 'primary', onclick: () => signInDialog() }, 'Sign in'));
 }
 
-async function commitPlan(plan, status, repo, r) {
+async function commitPlan(plan, repo, r, button) {
   if (plan.unchanged) {
-    status.replaceChildren(h('div', { class: 'ok' }, 'Nothing to change: the repository already matches.'));
+    noted('Nothing to change: the repository already matches.');
     return;
   }
   if (!(await confirmPlan(plan))) return;
-  const receipt = await executePlan(gh, plan);
-  cache = null;
-  cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
-  status.replaceChildren(receiptBox(receipt), h('p', { class: 'hint' }, 'blog.json and every generated page were updated together.'));
+  const receipt = await working('Committing…', async () => {
+    const rc = await executePlan(gh, plan);
+    cache = null;
+    cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
+    return rc;
+  }, { button });
+  sent(receipt, { title: 'Saved', message: 'blog.json and every generated page were updated together.' });
 }
 
 async function packContext(repo, r) {
@@ -463,16 +479,14 @@ async function themesView(repo, r) {
   if (!gh.token) return needSignIn('the theme');
   const { blog } = cache;
   const { branch, canPush } = await packContext(repo, r);
-  const status = h('div');
   const listed = await readList('themes.json', 'themes');
   const use = async (spec, btn) => {
     btn.disabled = true;
-    status.replaceChildren();
     try {
-      const plan = await planTheme(gh, { repo, branch, use: spec, runner });
-      await commitPlan(plan, status, repo, r);
+      const plan = await working('Preparing the theme…', () => planTheme(gh, { repo, branch, use: spec, runner }), { button: btn });
+      await commitPlan(plan, repo, r, btn);
     } catch (e) {
-      status.replaceChildren(errBox(e));
+      fail(e);
     } finally {
       btn.disabled = !canPush;
     }
@@ -480,7 +494,7 @@ async function themesView(repo, r) {
   const t = blog.theme && typeof blog.theme === 'object' ? blog.theme : null;
   const input = h('input', { placeholder: 'owner/theme-repo@v1.0.0   (or owner/repo/folder@v1.0.0)', style: 'width:100%' });
   const go = h('button', { class: 'primary' }, 'Use this theme…');
-  go.addEventListener('click', () => { try { use(parseAddress(input.value), go); } catch (e) { status.replaceChildren(errBox(e)); } });
+  go.addEventListener('click', () => { try { use(parseAddress(input.value), go); } catch (e) { fail(e); } });
   go.disabled = !canPush;
   const builtin = h('button', {}, 'Use the default theme');
   builtin.disabled = !canPush || !t;
@@ -498,9 +512,8 @@ async function themesView(repo, r) {
     h('div', { class: 'actions' }, go, builtin),
     h('h3', {}, 'Built in'),
     listed.length
-      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', {}, 'Use…'); b.disabled = !canPush; b.addEventListener('click', () => { try { use(parseAddress(`${e.repo}@${e.ref}`), b); } catch (err) { status.replaceChildren(errBox(err)); } }); return h('li', {}, e.screenshot && /^https:\/\//.test(e.screenshot) ? h('img', { src: e.screenshot, alt: '', style: 'max-width:12rem;float:right;margin-left:1rem' }) : null, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.description ? h('p', {}, String(e.description).slice(0, 200)) : null, b); }))
-      : h('p', { class: 'muted' }, 'The built-in list could not be read. Any theme repository still works by its address.'),
-    status,
+      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', {}, 'Use…'); b.disabled = !canPush; b.addEventListener('click', () => { try { use(parseAddress(`${e.repo}@${e.ref}`), b); } catch (err) { fail(err); } }); return h('li', {}, e.screenshot && /^https:\/\//.test(e.screenshot) ? h('img', { src: e.screenshot, alt: '', style: 'max-width:12rem;float:right;margin-left:1rem' }) : null, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.description ? h('p', {}, String(e.description).slice(0, 200)) : null, b); }))
+      :       h('p', { class: 'muted' }, 'The built-in list could not be read. Any theme repository still works by its address.'),
   );
 }
 
@@ -508,15 +521,14 @@ async function extensionsView(repo, r) {
   if (!gh.token) return needSignIn('extensions');
   const { blog } = cache;
   const { branch, canPush } = await packContext(repo, r);
-  const status = h('div');
   const listed = await readList('extensions.json', 'extensions');
   const act = async (args, btn) => {
     btn.disabled = true;
-    status.replaceChildren(h('p', { class: 'hint' }, 'Running in the sandbox…'));
     try {
-      await commitPlan(await planExtension(gh, { repo, branch, ...args, runner }), status, repo, r);
+      const plan = await working('Running the extension in the sandbox…', () => planExtension(gh, { repo, branch, ...args, runner }), { button: btn });
+      await commitPlan(plan, repo, r, btn);
     } catch (e) {
-      status.replaceChildren(errBox(e));
+      fail(e);
     } finally {
       btn.disabled = !canPush;
     }
@@ -524,7 +536,7 @@ async function extensionsView(repo, r) {
   const input = h('input', { placeholder: 'owner/extension-repo@v1.0.0', style: 'width:100%' });
   const add = h('button', { class: 'primary' }, 'Add this extension…');
   add.disabled = !canPush;
-  add.addEventListener('click', () => { try { act({ add: parseAddress(input.value) }, add); } catch (e) { status.replaceChildren(errBox(e)); } });
+  add.addEventListener('click', () => { try { act({ add: parseAddress(input.value) }, add); } catch (e) { fail(e); } });
   const current = blog.extensions || [];
   return h(
     'div',
@@ -541,9 +553,8 @@ async function extensionsView(repo, r) {
     h('div', { class: 'actions' }, add),
     h('h3', {}, 'Built in'),
     listed.length
-      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', {}, 'Add…'); b.disabled = !canPush; b.addEventListener('click', () => { try { act({ add: parseAddress(`${e.repo}@${e.ref}`) }, b); } catch (err) { status.replaceChildren(errBox(err)); } }); return h('li', {}, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.description ? h('p', {}, String(e.description).slice(0, 200)) : null, b); }))
-      : h('p', { class: 'muted' }, 'The built-in list could not be read. Any extension repository still works by its address.'),
-    status,
+      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', {}, 'Add…'); b.disabled = !canPush; b.addEventListener('click', () => { try { act({ add: parseAddress(`${e.repo}@${e.ref}`) }, b); } catch (err) { fail(err); } }); return h('li', {}, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.description ? h('p', {}, String(e.description).slice(0, 200)) : null, b); }))
+      :       h('p', { class: 'muted' }, 'The built-in list could not be read. Any extension repository still works by its address.'),
   );
 }
 
@@ -636,7 +647,6 @@ async function editorView(repo, r) {
   let existing = isNew ? null : await loadPost(gh, repo, r.post, branch, cache, { allowDraft: true });
   let { blog } = cache;
   const staged = new Map();
-  const status = h('div');
   const canPush = !!(info.permissions && info.permissions.push);
 
   setAssetResolver((ref) => {
@@ -691,7 +701,6 @@ async function editorView(repo, r) {
     correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', h('a', { href: `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `posts/${r.post}.md`)}`, target: '_blank', rel: 'noopener' }, 'Propose the change on GitHub instead'), ' — it forks and opens the pull request for you.')) : null,
     h('div', { class: 'row' }, field('Date', f.date), field('Tags', f.tags), field('Status', f.status)),
     h('div', { class: 'actions' }, go),
-    status,
   );
   // The Quill container must be in the document before Quill measures it.
   view.replaceChildren(node);
@@ -701,7 +710,10 @@ async function editorView(repo, r) {
 
   // Stage an image for upload at publish, in the images repository. Returns its asset reference, or
   // null when there is nowhere to put it (the explanation is already shown).
+  let noImages = null;
   async function stageImage(file) {
+    if (noImages) noImages.close();
+    noImages = null;
     if (file.size > 20 * 1024 * 1024) throw new Error('Images over 20 MB are not accepted; binaries should be reasonable.');
     const repoKeys = () => Object.keys((blog.assets && blog.assets.repos) || {});
     if (!repoKeys().length) {
@@ -712,7 +724,12 @@ async function editorView(repo, r) {
     const keys = repoKeys();
     if (!keys.length) {
       const sample = `${plainRepo}/images`;
-      status.replaceChildren(h('div', { class: 'err' }, h('b', {}, 'This blog has no images repository yet'), 'Images are binaries, so they are kept in a repository (or a folder of one) that you do not have to clone to edit text. Name one in Settings, for example ', h('code', {}, 'me/images'), ' or ', h('code', {}, sample), ' to keep them in this repository. ', h('a', { href: link(repo, '&settings'), target: '_blank', rel: 'noopener' }, 'Open Settings in a new tab'), ', save, then choose the image again: what you have written here is not lost.'));
+      noImages = toast({
+        kind: 'error',
+        title: 'This blog has no images repository yet',
+        message: `Images are binaries, so they are kept in a repository (or a folder of one) that you do not have to clone to edit text. Name one in Settings, for example me/images or ${sample} to keep them in this repository, save, then choose the image again: what you have written here is not lost.`,
+        links: [{ href: link(repo, '&settings'), text: 'Open Settings in a new tab' }],
+      });
       return null;
     }
     const key = keys.includes('images') ? 'images' : keys[0];
@@ -730,12 +747,11 @@ async function editorView(repo, r) {
       const file = input.files[0];
       if (!file) return;
       try {
-        const ref = await stageImage(file);
+        const ref = await working('Preparing the image…', () => stageImage(file));
         if (!ref) return;
         use(ref);
-        status.replaceChildren();
       } catch (e) {
-        status.replaceChildren(errBox(e));
+        fail(e);
       }
     });
     input.click();
@@ -752,15 +768,15 @@ async function editorView(repo, r) {
   async function pickVideo() {
     try {
       if (!blog.video) throw new Error('blog.json has no "video" section, so there are no video repositories to embed from.');
-      const releases = await listVideoReleases(gh, blog);
+      const releases = await working('Looking for videos…', () => listVideoReleases(gh, blog));
       const choice = await chooseVideo(releases, blog);
       if (!choice) return;
       const range = insertionPoint(quill);
       quill.insertEmbed(range.index, 'video', choice.ref, 'user');
       quill.setSelection(range.index + 1);
-      status.replaceChildren(choice.receipt ? releaseReceipt(choice.receipt) : '');
+      if (choice.receipt) releaseReceipt(choice.receipt);
     } catch (e) {
-      status.replaceChildren(errBox(e));
+      fail(e);
     }
   }
 
@@ -789,32 +805,31 @@ async function editorView(repo, r) {
 
   go.addEventListener('click', async () => {
     go.disabled = true;
-    status.replaceChildren();
     try {
       const { slug, text, md } = buildText();
       const used = new Set([...text.matchAll(/asset:([^\s)\]]+)/g)].map((x) => x[1]));
-      const plan = await planChange(gh, { repo, branch, slug, text, staged: [...staged.values()].filter((s) => used.has(`${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner });
+      const plan = await working('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, staged: [...staged.values()].filter((s) => used.has(`${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
       if (!plan.changes.length && !plan.assetGroups.length) {
-        status.replaceChildren(h('div', { class: 'ok' }, 'Nothing to publish: the repository already matches.'));
+        noted('Nothing to publish: the repository already matches.');
         return;
       }
       if (!(await confirmPlan(plan))) return;
-      const receipt = await executePlan(gh, plan, { pullBody: note.value.trim() });
-      status.replaceChildren(receiptBox(receipt));
+      const receipt = await working('Committing…', () => executePlan(gh, plan, { pullBody: note.value.trim() }), { button: go });
+      sent(receipt, { title: correcting ? 'Correction proposed' : f.status.value === 'published' ? 'Published' : 'Draft saved' });
       const path = `posts/${slug}.md`;
       existing = { post: parsePost({ path, text }) };
       isNew = false;
       f.slug.disabled = true;
       if (!correcting) {
         cache = null;
-        cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
+        cache = { repo, ref: r.ref, ...(await working('Refreshing the blog…', () => loadBlog(gh, repo, r.ref))) };
         staged.clear();
       }
       // What you see is what is stored.
       quill.setContents(mdToDelta(md).ops, 'silent');
       if (!correcting) history.replaceState(null, '', link(repo, `&edit=${slug}`));
     } catch (e) {
-      status.replaceChildren(errBox(e));
+      fail(e);
     } finally {
       go.disabled = correcting && !canPush;
     }
@@ -1040,12 +1055,16 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
   const root = h('div', {}, h('h2', {}, mode === 'video' ? 'Upload a video' : 'Publish and embed'), intro, body, status);
   const keys = Object.keys(blog.video.repos);
 
+  let failed = false; // the last run() ended in an error (already shown as a toast)
   const run = async (label, fn) => {
-    status.replaceChildren(...(label ? [h('p', { class: 'hint' }, label)] : []));
+    failed = false;
+    status.replaceChildren(...(label ? [progressLine(label)] : []));
     try {
       return await fn();
     } catch (e) {
-      status.replaceChildren(errBox(e));
+      status.replaceChildren();
+      failed = true;
+      fail(e);
       return null;
     }
   };
@@ -1056,8 +1075,8 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
     const go = h('button', { class: 'primary' }, plan.kind === 'tag' ? `Create tag ${plan.tag}` : 'Commit, push and tag');
     go.addEventListener('click', async () => {
       go.disabled = true;
-      gh.onWait = (s) => status.replaceChildren(h('p', { class: 'hint' }, `GitHub limits how fast files can be created; continuing in ${s} s…`));
-      const receipt = await run(plan.kind === 'tag' ? 'Tagging…' : `Uploading ${plan.files} file${plan.files === 1 ? '' : 's'}…`, () => executeRelease(gh, plan, { onProgress: (done, total) => status.replaceChildren(h('p', { class: 'hint' }, `Uploading file ${Math.min(done + 1, total)} of ${total}…`)) }));
+      gh.onWait = (s) => status.replaceChildren(progressLine(`GitHub limits how fast files can be created; continuing in ${s} s…`));
+      const receipt = await run(plan.kind === 'tag' ? 'Tagging…' : `Uploading ${plan.files} file${plan.files === 1 ? '' : 's'}…`, () => executeRelease(gh, plan, { onProgress: (done, total) => status.replaceChildren(progressLine(`Uploading file ${Math.min(done + 1, total)} of ${total}…`)) }));
       gh.onWait = null;
       if (!receipt) {
         go.disabled = false;
@@ -1125,7 +1144,7 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
       try {
         if (!webCodecsAvailable()) throw new Error('This browser has no WebCodecs (VideoDecoder, VideoEncoder), so it cannot encode video. Use a recent Chrome, Edge or Safari, or make the render with hls.webcli.app and create a release from it.');
         if (file.size > 1024 * 1048576) throw new Error(`${fmtBytes(file.size)} is too large to encode in a browser tab. Trim it first.`);
-        status.replaceChildren(h('p', { class: 'hint' }, 'Reading the video…'));
+        status.replaceChildren(progressLine('Reading the video…'));
         bytes = new Uint8Array(await file.arrayBuffer());
         const seen = inspectUpload(bytes);
         status.replaceChildren();
@@ -1158,7 +1177,8 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
         name.value = slugFromFilename(file.name);
         refresh();
       } catch (e) {
-        status.replaceChildren(errBox(e));
+        status.replaceChildren();
+        fail(e);
       }
     });
 
@@ -1182,7 +1202,7 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
         status.replaceChildren();
         confirm(list, result.plan, result.summary);
       } else {
-        status.replaceChildren(...(status.childNodes.length ? [...status.childNodes] : [h('p', { class: 'hint' }, 'Cancelled. Nothing was uploaded.')]));
+        status.replaceChildren(...(failed ? [] : [h('p', { class: 'hint' }, 'Cancelled. Nothing was uploaded.')]));
         refresh();
       }
     });
@@ -1191,7 +1211,7 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
   };
 
   async function draw() {
-    body.replaceChildren(h('p', { class: 'hint' }, mode === 'tag' ? 'Checking the repository…' : 'Looking in the video repository…'));
+    body.replaceChildren(progressLine(mode === 'tag' ? 'Checking the repository…' : 'Looking in the video repository…'));
     let lists;
     try {
       lists = await videoRepositories(gh, blog);
@@ -1223,7 +1243,12 @@ function releaseView(blog, { back, created, mode = 'video', target = null }) {
 }
 
 function releaseReceipt(r) {
-  return h('div', { class: 'ok' }, h('b', {}, `Created ${r.tag}.`), ' ', r.commit ? h('a', { href: r.commit.url, target: '_blank', rel: 'noopener' }, `commit ${r.commit.sha.slice(0, 7)}`) : null, r.commit ? ' · ' : '', h('a', { href: r.tagUrl, target: '_blank', rel: 'noopener' }, 'tag'), h('div', { class: 'hint' }, 'The CDN can take a few minutes to serve a new tag, so the player may not load it straight away.'));
+  return toast({
+    kind: 'success',
+    title: `Created ${r.tag}`,
+    message: 'The CDN can take a few minutes to serve a new tag, so the player may not load it straight away.',
+    links: [...(r.commit ? [{ href: r.commit.url, text: `commit ${r.commit.sha.slice(0, 7)}` }] : []), { href: r.tagUrl, text: 'tag' }],
+  });
 }
 
 function confirmPlan(plan) {
@@ -1248,16 +1273,6 @@ function confirmPlan(plan) {
     dlg.addEventListener('cancel', () => done(false), { once: true }); // Esc (see chooseVideo for why not 'close')
     dlg.showModal();
   });
-}
-
-function receiptBox(receipt) {
-  return h(
-    'div',
-    { class: 'ok' },
-    h('b', {}, 'Sent.'),
-    receipt.commits.map((c) => h('div', {}, `${c.files} file${c.files === 1 ? '' : 's'} → ${c.repo}@${c.branch} `, h('a', { href: c.url, target: '_blank', rel: 'noopener' }, c.sha.slice(0, 8)))),
-    receipt.pull ? h('div', {}, 'Pull request: ', h('a', { href: receipt.pull.url, target: '_blank', rel: 'noopener' }, `#${receipt.pull.number}`)) : null,
-  );
 }
 
 addEventListener('hashchange', route);

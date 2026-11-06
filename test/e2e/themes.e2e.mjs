@@ -93,8 +93,9 @@ test('themes and extensions: chosen by address, run in the sandbox, read by a re
     const dialog = await page.evaluate("document.querySelector('dialog').innerText");
     assert.match(dialog, /Licences this blog will depend on/);
     assert.match(dialog, /theme\s+Classic Sample 1\.2\.0\s+GPL-2\.0-or-later\s+me\/classic@v1\.0\.0/);
+    await page.evaluate("document.querySelectorAll('.toast').forEach((t) => t.remove()); 0"); // so the next toast is this commit's
     await click(page, 'dialog button', 'Commit and push');
-    await until(page, "document.querySelector('#view .ok')");
+    await until(page, "document.querySelector('.toast.success')");
     let state = JSON.parse(await page.evaluate("JSON.stringify(window.__fake.files('example/blog'))"));
     assert.equal(JSON.parse(state['blog.json']).theme.contract, 'wordpress-classic');
     assert.ok(state['index.html'].includes('<body class="home blog">') && state['theme.css'].includes('.entry-title'));
@@ -107,8 +108,9 @@ test('themes and extensions: chosen by address, run in the sandbox, read by a re
     await until(page, "document.querySelector('dialog[open] .preflight')", 30000);
     assert.match(await page.evaluate("document.querySelector('dialog').innerText"), /extension-outputs\.json/);
     assert.equal(await page.evaluate("document.querySelector('iframe[sandbox]').getAttribute('sandbox')"), 'allow-scripts', 'the extension ran in a frame with allow-scripts only');
+    await page.evaluate("document.querySelectorAll('.toast').forEach((t) => t.remove()); 0"); // so the next toast is this commit's
     await click(page, 'dialog button', 'Commit and push');
-    await until(page, "document.querySelector('#view .ok')");
+    await until(page, "document.querySelector('.toast.success')");
     state = JSON.parse(await page.evaluate("JSON.stringify(window.__fake.files('example/blog'))"));
     assert.match(state['static-hls-in-git/index.html'], /<p class="reading-time">\d+ min read<\/p>/);
     assert.equal(Object.keys(JSON.parse(state['extension-outputs.json']).outputs).length, 2);

@@ -78,7 +78,7 @@ test('images: a blog that says where it lives needs nothing configured; the Sett
     await until(page, "document.querySelector('.ql-editor')");
     await page.evaluate("document.querySelector('.ql-image').click(); 0");
     await until(page, "document.querySelector('.ql-editor img')");
-    assert.equal(await page.evaluate("document.querySelector('#view .err')"), null, 'no complaint: images default to this repository');
+    assert.equal(await page.evaluate("document.querySelector('.toast.error')"), null, 'no complaint: images default to this repository');
 
     await page.evaluate("location.hash = '#repo=example/blog&settings'; 0");
     await until(page, "document.querySelector('#view input[placeholder^=\"blank:\"]')");
@@ -97,12 +97,12 @@ test('images: a blog that does not say where it lives explains what to do, keeps
     await page.evaluate("document.querySelector('.ql-editor').focus(); document.execCommand('insertText', false, 'words I have written'); 0");
 
     await page.evaluate("document.querySelector('.ql-image').click(); 0");
-    await until(page, "document.querySelector('#view .err')");
-    const msg = await page.evaluate("document.querySelector('#view .err').innerText");
+    await until(page, "document.querySelector('.toast.error')");
+    const msg = await page.evaluate("document.querySelector('.toast.error .toast-body').innerText");
     assert.match(msg, /no images repository yet/);
     assert.match(msg, /me\/images/);
     assert.match(msg, /example\/blog\/images/, 'it suggests keeping them in this repository, as a folder');
-    const settings = await page.evaluate("(() => { const a = document.querySelector('#view .err a'); return [a.getAttribute('href'), a.target, a.rel]; })()");
+    const settings = await page.evaluate("(() => { const a = document.querySelector('.toast.error a'); return [a.getAttribute('href'), a.target, a.rel]; })()");
     assert.deepEqual(settings, ['#repo=example/blog&settings', '_blank', 'noopener']);
     assert.equal(await page.evaluate("document.querySelector('.ql-editor img')"), null, 'nothing was inserted');
     assert.match(await page.evaluate("document.querySelector('.ql-editor').innerText"), /words I have written/, 'the post is still there');
@@ -118,7 +118,7 @@ test('images: a blog that does not say where it lives explains what to do, keeps
     await page.evaluate("document.querySelector('.ql-image').click(); 0");
     await until(page, "document.querySelector('.ql-editor img')");
     assert.match(await page.evaluate("document.querySelector('#view').innerText"), /words I have written/);
-    assert.equal(await page.evaluate("document.querySelector('#view .err')"), null, 'the explanation is cleared once an image goes in');
+    await until(page, "!document.querySelector('.toast.error')"); // it fades out
   } finally {
     close();
   }
