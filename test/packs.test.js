@@ -252,7 +252,7 @@ test('X7: class_contract changes the markup, and a classic theme styles a genera
 
   // the shape WordPress themes expect
   for (const piece of ['<body class="post-template-default single single-post postid-', '<div id="page" class="site">', '<header id="masthead" class="site-header has-title-and-tagline has-menu">', '<main id="main" class="site-main">', 'class="entry-title"', '<div class="entry-content">', '<ul id="primary-menu-list" class="menu-wrapper menu">', 'class="entry-header alignwide"', '<footer id="colophon" class="site-footer default-max-width">', 'hentry']) assert.ok(post.includes(piece), `post: ${piece}`);
-  for (const piece of ['<body class="home blog">', '<h1 class="site-title">', 'class="entry-summary"', '<h2 class="entry-title"><a href="static-hls-in-git/" rel="bookmark">']) assert.ok(index.includes(piece), `index: ${piece}`);
+  for (const piece of ['<body class="home blog">', '<h1 class="site-title">', 'class="entry-summary entry-content"', '<h2 class="entry-title default-max-width"><a href="static-hls-in-git/" rel="bookmark">']) assert.ok(index.includes(piece), `index: ${piece}`);
   assert.ok(!post.includes('class="wrap"'), 'the native wrapper is not emitted');
   // content blocks carry WordPress block classes
   for (const piece of ['class="wp-block-heading"', 'class="wp-block-quote"', 'class="wp-block-code"', 'class="wp-block-list"', 'class="wp-block-image size-large"', 'class="wp-block-embed is-type-video']) assert.ok(post.includes(piece), `content: ${piece}`);
@@ -272,7 +272,7 @@ test('X7: list options still apply under the classic contract', async () => {
   blog.theme = tp;
   blog.customize.list = { excerpts: false, dates: false, tags: false };
   const index = buildSite({ ...(await exampleInput({ theme: tp, customize: blog.customize })), theme }).files['index.html'];
-  assert.ok(!index.includes('class="entry-summary"') && !index.includes('class="entry-meta"') && !index.includes('class="tags-links"') && !index.includes('class="posted-on"'));
+  assert.ok(!index.includes('class="entry-summary entry-content"') && !index.includes('class="entry-meta"') && !index.includes('class="tags-links"') && !index.includes('class="posted-on"'));
 });
 
 // ---------- X8: licences in one place ----------
