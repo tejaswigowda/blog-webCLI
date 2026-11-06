@@ -103,8 +103,8 @@ dead end the app offers a short form (title, description, author, and optionally
 and a video repo (the address the blog is served at is shown but not asked for, see below); left blank, both default to folders of
 the blog's own repository). *Create blog…* shows the usual
 pre-flight and commits, in one commit, `blog.json` plus the generated site (`index.html`,
-`feed.xml`, `index/posts.json`, `.nojekyll`), so the generated-output check passes from the
-first commit. Posts already in the folder are indexed, not lost; if they cannot be published
+`feed.xml`, `index/posts.json`, `sitemap.xml`, `404.html`, the search page, `.nojekyll`), so the generated-output check passes from the
+first commit. A new blog has the live copy and search switched on (`content` and `"search": true` in its `blog.json`); everything else is opt-in. Posts already in the folder are indexed, not lost; if they cannot be published
 as they are (for example an image that is not pinned) the creation is refused with the reason.
 An existing `blog.json` is never replaced. The repository itself must already exist and have
 one commit (GitHub cannot write to an empty one); the app tells you when it does not.
@@ -136,6 +136,10 @@ CSP, and the same egress ledger (always 0 B uploaded). It takes the blog from th
   this app are followed directly; any other host gets a "this link points to another site"
   confirmation, so the page cannot be used as an open redirect. Only `https:` is accepted.
 * Posts link to *Suggest a correction* (the editor, which opens a pull request) and *Static page*.
+* The list starts in the blog's own order; a **Sort** control (blog order, newest, oldest, title) re-sorts it for the reader
+  alone. It is styled as a small control whatever the theme does to form fields, and sits in the theme's content column.
+  Tag, author, archive and search pages, comments and the subscribe form are the generated site's: the reader shows posts only
+  (see [Site features](#site-features) and [Known limits](#known-limits)).
 
 ## The address the blog is served at
 
@@ -242,9 +246,9 @@ four keys are required, and the real file is plain JSON (no comments):
 | `content` | no | the live copy that makes publishing feel instant: [below](#content) | off: pages carry no script and there is no `404.html` |
 | `order` | no | how posts are sequenced: [below](#order) | newest first (`date`, `desc`) |
 | `search` | no | `true` adds a [search page](#site-features) | off |
-| `pagination` | no | `{ "size": N }`: [pages of the index](#pagination) | one list |
-| `seo` | no | `twitter`, `sitemap`, `robots`: [below](#seo) | a sitemap, and a robots.txt at the root of a host |
-| `comments`, `analytics` | no | a script from an address you name, [below](#comments-and-analytics) | none |
+| `pagination` | no | `{ "size": N }`: [pages of the index](#search-pagination-seo) | one list |
+| `seo` | no | `twitter`, `sitemap`, `robots`: [below](#search-pagination-seo) | a sitemap, and a robots.txt at the root of a host |
+| `comments`, `analytics` | no | a script from an address you name, [below](#comments-analytics) | none |
 | `subscribe` | no | an email form that posts to an address you name, [below](#subscribe) | none |
 | `customize` | no | colours, fonts, width, header, footer, list layout, CSS: see [Customization](#customization) | the default look |
 
@@ -459,7 +463,8 @@ enters nothing keeps a `blog.json` that says nothing, and an author who writes a
 #### Editing it
 
 * **In the editor:** *Settings* edits the title, description, author, media repositories and their URL templates,
-  `content`, and `customize`. `domain` is shown read-only, the theme and extensions have their own screens, and
+  `content`, `order`, the reader features (`search`, `pagination`, `subscribe`, `seo`, `comments`, `analytics`) and `customize`.
+  `domain` is shown read-only, the theme and extensions have their own screens, and
   `repo`, `cover` and any key it does not know are edited by hand (they are carried through untouched). *Save settings…* shows the usual pre-flight and commits `blog.json` together with every
   regenerated page, in one commit. Keys the form does not know are carried through; blank fields are removed.
 * **By hand or in CI:** edit the file, then `node cli/blog.js build` and commit; `check` fails the build when the
@@ -941,7 +946,7 @@ share image, canonical address and `noindex` per post.
 **Header menu.** Every page's header lists, after your own `customize.header.links`: pages with a `menu` position,
 *Archive*, *Tags* (when any post has a tag), *Search* (when on), and *Feed*.
 
-**Comments, analytics, subscribe.** [Opt-in](#comments-and-analytics) embeds you point at an address; see above.
+**Comments, analytics, subscribe.** [Opt-in](#comments-analytics) embeds you point at an address; see above.
 
 **Standalone pages.** `pages/<slug>.md`: see [Post frontmatter](#post-frontmatter). The editor lists them under
 *Pages* on the blog's start screen, and *New page* opens the same editor without date, tags or author.
@@ -1092,9 +1097,14 @@ upload, and nothing is uploaded until you confirm.
   refusal code (or "Something went wrong") and stays until you dismiss it. While a dialog is
   open the toasts appear inside it, so they can still be read and closed. Problems with a form
   field, and a page that cannot load, stay where they are, next to what they are about.
-* **Corrections**: "Suggest a correction" opens the editor on the post body; submitting opens
+* **Corrections**: "Suggest a correction" opens the editor on the post body (or, for a standalone page, `#…&correctpage=slug`); submitting opens
   a pull request on a new branch (default branch untouched). Without write access the app
   links to GitHub's own fork-and-edit page.
+* **The editor**: *New post* and *New page* open the same editor (Quill, restricted to what markdown can express). A post
+  has title, slug, cover, description, date, tags, author and status; a page has a menu position instead of date, tags and
+  author. *Search and sharing* (collapsed) holds the search title, share image, canonical address and `noindex`. *Pages* on
+  the blog's start screen lists the standalone pages. *Settings* has the live preview in the form column and the colours in the side panel with the theme box;
+  on a wide screen the side panel scrolls with the page.
 
 ## Refusals
 
@@ -1172,7 +1182,7 @@ every named import, so a renamed export cannot silently break the browser-only m
 * The search index, tag pages, archive and sitemap are as of the last build; only post pages are refreshed from the live copy.
 * The `/blog/` reader (the no-Pages view) does not show tag, author, archive or search pages, comments, the subscribe form or
   standalone pages: those are the generated site's.
-* Comments and analytics are third-party scripts on your readers' pages (see [above](#comments-and-analytics)); the generator
+* Comments and analytics are third-party scripts on your readers' pages (see [above](#comments-analytics)); the generator
   cannot vouch for them, only pin them with `integrity`.
 * Two tags that share an address (`C++`, `c`) share a page, and the first alphabetically names it; nothing refuses it.
 * `index/posts.json` now records each post's `author`, and the standalone `pages`; readers that ignore unknown fields are unaffected.

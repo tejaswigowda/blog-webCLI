@@ -182,7 +182,8 @@ progress::-moz-progress-bar{background:var(--accent);border-radius:3px}
 .side .actions{margin:.75rem 0 0}
 @media (min-width:1000px){
   .cols{grid-template-columns:minmax(0,1fr) minmax(0,23rem)}
-  .cols .side{position:sticky;top:1rem;max-height:calc(100vh - 2rem);overflow:auto}
+  .cols .side{position:sticky;top:1rem}
+  .cols .side.tall{position:static}
   ul.posts{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (min-width:1000px){fieldset{margin-top:0}}

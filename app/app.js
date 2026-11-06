@@ -468,7 +468,8 @@ async function settingsView(repo, r) {
       /* a logo that is not pinned yet shows after saving */
     }
     const body = indexBody(contract, { blog: next, entries, hrefFor: () => '#', home: '#', feed: '#', logoUrl });
-    shadow.innerHTML = `<style>${forShadow(themeCss(next, themePack))}</style><div class="pv ${esc(body.bodyClass)}" style="pointer-events:none">${body.html}</div>`;
+    // the preview is narrower than a page and cannot answer a theme's viewport rules, so its content gets a margin of its own
+    shadow.innerHTML = `<style>${forShadow(themeCss(next, themePack))}</style><style>.pv{padding:0 1.25rem 1rem;overflow-x:hidden;word-wrap:break-word}</style><div class="pv ${esc(body.bodyClass)}" style="pointer-events:none">${body.html}</div>`;
   };
 
   // The live preview sits with the form, where the settings are; the colours sit in the side panel, beside the theme.
@@ -570,7 +571,7 @@ async function settingsView(repo, r) {
     h('h1', {}, 'Blog settings'),
     h('p', { class: 'muted' }, `Saved to ${at(folder, 'blog.json')} in ${plain}. Posts are never touched; every generated page is regenerated from the new settings.`),
     canPush ? null : h('div', { class: 'err' }, `This token cannot write to ${plain}.`),
-    h('div', { class: 'cols' }, form, h('div', { class: 'side' }, themeBox, colorsBox, h('div', { class: 'actions' }, save))),
+    h('div', { class: 'cols' }, form, h('div', { class: 'side tall' }, themeBox, colorsBox, h('div', { class: 'actions' }, save))),
   );
   queueMicrotask(redraw);
   return node;

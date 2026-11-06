@@ -167,7 +167,8 @@ async function route() {
     // nothing else: the address stays as it is, and previous/next on a post do not move.
     const draw = (mode) => {
       const options = READER_SORTS.map(([k, label]) => `<option value="${esc(k)}"${k === mode ? ' selected' : ''}>${esc(label)}</option>`).join('');
-      const bar = entries.length > 1 ? `<label class="sortbar">Sort <select id="reader-sort" aria-label="Sort posts">${options}</select></label>` : '';
+      // a classic theme keeps the content in a column through its own width classes; the bar needs the same
+      const bar = entries.length > 1 ? `<label class="sortbar${contract === 'wordpress-classic' ? ' default-max-width' : ''}">Sort <select id="reader-sort" aria-label="Sort posts">${options}</select></label>` : '';
       const list = entries.length ? bar + indexList(contract, { blog, entries: readerSort(entries, mode), hrefFor: (slug) => hashFor(parsed, { post: slug }) }) : '<p class="meta">No published posts yet.</p>';
       show(indexBody(contract, { ...chrome, entries, hrefFor: (slug) => hashFor(parsed, { post: slug }), indexHtml: list }));
       const picker = document.getElementById('reader-sort');
