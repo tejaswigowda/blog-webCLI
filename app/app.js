@@ -97,9 +97,16 @@ function renderTop(repo) {
   const input = h('input', { name: 'repo', placeholder: 'owner/blog or owner/repo/folder', value: repo || '', 'aria-label': 'Repository' });
   const form = h('form', { onsubmit: (e) => { e.preventDefault(); try { location.hash = link(parseRepo(input.value)); } catch (err) { view.replaceChildren(errBox(err)); } } }, input, h('button', {}, 'Open'));
   const auth = gh.token
-    ? h('span', { class: 'muted' }, login ? `Signed in as ${login} · ` : 'Signed in · ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); signOut(); } }, 'Sign out'))
-    : h('button', { type: 'button', onclick: () => signInDialog() }, 'Sign in to edit');
-  $('#top').replaceChildren(h('a', { class: 'brand', href: '#' }, 'blog.webcli.app'), form, auth);
+    ? h('span', { class: 'signed' }, login ? `Signed in as ${login} · ` : 'Signed in · ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); signOut(); } }, 'Sign out'))
+    : h('button', { type: 'button', class: 'primary', onclick: () => signInDialog() }, 'Sign in to edit');
+  $('#top').replaceChildren(
+    h('a', { class: 'brand', href: '#' }, 'blog webCLI'),
+    h('span', { class: 'pill' }, 'git-native'),
+    h('span', { class: 'badge-local', title: 'The editor commits straight to GitHub from this page. There is no server in between.' }, 'No server in between'),
+    form,
+    auth,
+    h('a', { class: 'gh-link', href: 'https://github.com/tejaswigowda/blog-webCLI', target: '_blank', rel: 'noopener' }, h('span', {}, 'Fork on GitHub')),
+  );
 }
 
 function renderLedger(l) {
