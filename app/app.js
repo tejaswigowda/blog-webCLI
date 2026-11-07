@@ -940,7 +940,7 @@ async function editorView(repo, r) {
     }
   });
 
-  const m = existing ? existing.post.meta : { status: 'draft', date: isPageKind ? '' : today() };
+  const m = existing ? existing.post.meta : { status: 'draft', date: isPageKind ? '' : today(), cover: isPageKind ? '' : 'auto' }; // a new post's cover is its first image, else its first video's poster, else the blog's
   const f = {
     title: h('input', { value: m.title || '', placeholder: 'Title', disabled: correcting }),
     slug: h('input', { value: m.slug || '', placeholder: 'set once, never changes', disabled: !isNew }),
@@ -949,7 +949,7 @@ async function editorView(repo, r) {
     author: h('input', { value: m.author || '', placeholder: blog.author || 'Defaults to the blog\'s author', disabled: correcting }),
     menu: h('input', { type: 'number', min: 0, max: 99, value: m.menu || '', placeholder: 'not in the menu', disabled: correcting }),
     status: h('select', { disabled: correcting }, ['draft', 'published'].map((s) => h('option', { value: s, selected: s === m.status }, s))),
-    cover: h('input', { value: m.cover || '', placeholder: 'asset:images/cover.png, or auto', disabled: correcting, style: 'flex:1' }),
+    cover: h('input', { value: m.cover || '', placeholder: 'auto, or asset:images/cover.png', disabled: correcting, style: 'flex:1' }),
     description: h('input', { value: m.description || '', placeholder: 'Optional; defaults to the first paragraph', disabled: correcting }),
     seo_title: h('input', { value: m.seo_title || '', placeholder: 'Optional; defaults to the title', disabled: correcting }),
     image: h('input', { value: m.image || '', placeholder: 'asset:images/share.png (optional)', disabled: correcting, style: 'flex:1' }),

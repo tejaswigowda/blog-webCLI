@@ -19,7 +19,7 @@ Themes and extensions are separate repositories with their own licences (the bui
 app generates carry its built-in default theme, which is part of the runtime (MIT), and say so in their licence comment and in `licences.json`.
 
 ```
-blog repo     posts/*.md · pages/*.md · blog.json · [order.json] · assets.lock.json · index/posts.json · generated HTML · feed.xml · sitemap.xml
+blog repo     posts/*.md · pages/*.md · blog.json · [order.json] · assets.lock.json · index/posts.json [+ index/posts-N.json shards] · generated HTML · feed.xml · sitemap.xml
 images repo   binaries
 audio repo    binaries
 video repo    a renders repository published by hls.webcli.app (HLS releases, tagged <name>/vN)
@@ -79,6 +79,7 @@ the release tag), else the blog's `cover`. An automatic cover is the share previ
 `cover` (the chosen asset; none when it is a poster); it is not drawn on the page, where it would
 repeat what the post already shows. With nothing to pick and no blog cover, the build warns that the
 page has no `og:image`. The source keeps the word `auto`, so changing the picture changes the cover.
+The editor starts a **new post** on `cover: auto` (clear the field for no cover); existing posts and new pages are left as they are.
 
 A post never says where it sits in a sequence: that is the blog's [`order`](#order), and for a hand-kept order a separate
 list file. Previous/next links are generated from it.
@@ -1564,9 +1565,12 @@ code as for a small blog, made to cope:
 * **Sending:** text goes into the tree requests themselves in a chain of a few megabytes each, so thousands of pages are tens of
   requests, never a blob each; one commit, so the site is never half changed.
 * **Listing:** a repository whose tree GitHub will not list in one request is listed a folder at a time.
+* **Finding the head:** the branch's head is read as the ref and the commit (two small requests), not `GET /commits/<branch>`, which lists the files
+  the commit changed (a megabyte after a big regeneration); the older form is the fallback when the name is not a branch (a tag or a commit).
+* **Deleting** a post of a big blog is made the same way as publishing one ([Editing](#editing-auth-egress)).
 
 **Publishing one post** does not read or build the blog ([lib/incremental.js](lib/incremental.js)). The committed files already say what the
-rest of it is: `index/posts.json` holds every post's entry and the resolved order, so a change to one post needs that post, the posts whose
+rest of it is: the index (`index/posts.json`, and its shards on a big blog) holds every post's entry and the resolved order, so a change to one post needs that post, the posts whose
 previous/next links change (the two beside it, before and after), and the newest 50 for the feed. Everything made of the index (the listing
 pages, the tag, author and archive pages, the feed, the sitemap, the index itself) is made again from the new index **by the same functions
 the full build uses**, the search shard the post belongs to is spliced, and only the files that differ from what is committed are sent. On
@@ -1583,7 +1587,7 @@ pagination, tags, authors, cards, search shards, a sitemap and old addresses, an
 holds on the real 8,000-post blog.
 
 What it does not do: it does not send *less* when everything changes. Every settings or theme change rewrites every page (they all carry
-the title, the menu and the theme), and a new newest post shifts every pagination boundary; the cost there is only that the reading is
+the title, the menu and the theme), and a new newest post shifts every pagination boundary unless the blog uses [stable page addresses](#search-pagination-seo); the cost there is only that the reading is
 fast and the send is patient. A repository over what a browser can hold in memory (tens of thousands of long posts) is a job for the CLI.
 
 ## Known limits
@@ -1606,6 +1610,10 @@ fast and the send is patient. A repository over what a browser can hold in memor
   cannot vouch for them, only pin them with `integrity`.
 * Two tags that share an address (`C++`, `c`) share a page, and the first alphabetically names it; nothing refuses it.
 * `index/posts.json` now records each post's `author`, and the standalone `pages`; readers that ignore unknown fields are unaffected.
+* **Page addresses:** turning `pagination.stable` on or off renames every `page/N/` once; a post's own address never changes. The feed holds the
+  newest 50 posts, and on a sharded blog search results that tie are ordered newest first.
+* **Deleting** a post removes its file, page and redirects but does not rewrite links to it in other posts, and a Pages build record that says
+  *errored* is checked against the deployment before it is shown (see [Publish latency](#publish-latency-not-waiting-for-github-pages)).
 * Draft *source* is visible in a public repo; `draft` hides it from the site, not from GitHub.
 * A video has no alt text or caption of its own (Quill's video blot cannot hold one); the title
   is the release name and version. `![alt](video:…)` is refused, not dropped.

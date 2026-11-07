@@ -55,7 +55,7 @@ const until = async (page, expr, ms = 15000) => {
   }
 };
 const clickText = (page, selector, text) => page.evaluate(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.textContent.trim().startsWith(${JSON.stringify(text)})); if (!el) throw new Error('no ' + ${JSON.stringify(selector + ' ' + text)}); el.click(); return true; })()`);
-const coverValue = (page) => page.evaluate("document.querySelector('#view input[placeholder^=\"asset:images/cover.png\"]').value");
+const coverValue = (page) => page.evaluate("document.querySelector('#view input[placeholder^=\"auto, or asset\"]').value");
 const setValue = (page, selector, value) => page.evaluate(`(() => { const i = document.querySelector(${JSON.stringify(selector)}); i.value = ${JSON.stringify(value)}; i.dispatchEvent(new Event('input')); })()`);
 
 async function open(page) {
@@ -91,13 +91,17 @@ test('cover: upload an image for it, or choose auto; both are saved as the post 
     })()`);
     assert.deepEqual(order, { rowAfterEditor: true, buttonsAfterRow: true, adjacent: true });
 
+    // a new post starts on auto
+    assert.equal(await coverValue(page), 'auto');
+    await setValue(page, '#view input[placeholder^="auto, or asset"]', '');
+
     // Auto writes the word
     await clickText(page, '#view button', 'Auto');
     assert.equal(await coverValue(page), 'auto');
 
     // Upload stages the image under a logical reference: the hash, the lower-cased name
     await clickText(page, '#view button', 'Upload');
-    await until(page, "document.querySelector('#view input[placeholder^=\"asset:images/cover.png\"]').value.startsWith('asset:images/')");
+    await until(page, "document.querySelector('#view input[placeholder^=\"auto, or asset\"]').value.startsWith('asset:images/')");
     const ref = await coverValue(page);
     assert.match(ref, /^asset:images\/[0-9a-f]{10}-cat-pic\.png$/);
     assert.equal(await page.evaluate("document.querySelector('.toast.error')"), null);
@@ -125,7 +129,7 @@ test('cover: upload an image for it, or choose auto; both are saved as the post 
     await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
     await until(page, "document.querySelector('.ql-editor') && !document.querySelector('#view input[placeholder=Title]').value");
     await clickText(page, '#view button', 'Upload'); // an image in the body, then the cover is the word auto
-    await setValue(page, '#view input[placeholder^="asset:images/cover.png"]', 'auto');
+    await setValue(page, '#view input[placeholder^="auto, or asset"]', 'auto');
     await page.evaluate("document.querySelector('.ql-image').click(); 0");
     await until(page, "document.querySelector('.ql-editor img')");
     await setValue(page, '#view input[placeholder=Title]', 'Automatic');
