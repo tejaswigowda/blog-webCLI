@@ -56,7 +56,7 @@ are what crawlers and link unfurlers see. Both come from one library in [lib/](l
 ---
 slug: static-hls-in-git      # the URL; set once, never changes
 title: Static HLS in git     # change freely
-date: 2026-11-05             # authored; the index is ordered by this
+date: 2026-11-05             # authored; the index is ordered by this (or 2026-11-05T14:30: see below)
 author: Ada Example
 tags: [video, git]
 status: draft | published    # draft = in no index, page or feed
@@ -80,6 +80,14 @@ the release tag), else the blog's `cover`. An automatic cover is the share previ
 repeat what the post already shows. With nothing to pick and no blog cover, the build warns that the
 page has no `og:image`. The source keeps the word `auto`, so changing the picture changes the cover.
 The editor starts a **new post** on `cover: auto` (clear the field for no cover); existing posts and new pages are left as they are.
+
+**Date and time.** `date` is a day, or a day and the time it was written, `2026-11-05T14:30` (24-hour, no seconds, no zone: the clock you wrote
+it by). Posts are ordered by the whole value, so on a date-ordered blog the posts of one day are **newest first**; without a time they tie and fall
+back to the slug (`order` has the rule), and a post with no time is the oldest of its day. The time is for ordering and nothing else: pages,
+cards, the archive and the sitemap show or give the day, the feed gives the moment (`<published>2026-11-05T14:30:00Z</published>`, the time taken
+as UTC), and `dateFormat` never shows it. The editor has a time field beside the date: a **new post gets the time it was started**, an old post
+keeps what it had (a day with no time stays that way until you set one). An imported WordPress post has the day only.
+(`test/datetime.test.js`)
 
 A post never says where it sits in a sequence: that is the blog's [`order`](#order), and for a hand-kept order a separate
 list file. Previous/next links are generated from it.
@@ -517,6 +525,8 @@ mode (including descending ones and the appended part of a manual order), becaus
 are ordered by an unstable sort would make the generated HTML differ from run to run, and CI's
 regenerate-and-diff would then fail for a reason that looks like a generator bug. Nothing here depends on a locale:
 `title` compares case-insensitively by code unit, then as written, then by slug.
+A `date` that carries a time (`2026-11-05T14:30`, see [A post](#a-post)) is a different value from the day alone, so posts of one day that
+have times do not tie: they are in the order they were written.
 
 **`manual`: a list, never a position in the posts.** The list is a plain file:
 
@@ -1566,6 +1576,7 @@ upload, and nothing is uploaded until you confirm.
 | K7 stable page addresses: older pages are fixed runs counted from the oldest, a new post changes only the front page (index, tags, authors), every post is on exactly one page, an incremental publish sends a handful of files; the default numbering is unchanged | `test/incremental.test.js` |
 | K8 a big blog's index is a manifest plus shards that the build, the live script, the reader and the editor read back as the same index; a publish changes the manifest and one shard | `test/incremental.test.js`, `test/bulk.test.js` |
 | K9 linked stylesheet: pages link `style.css` (relative at every depth, from the root of the site on a 404) and carry no `<style>`; the file is the theme and the custom CSS; a change of CSS or colours is `blog.json` and `style.css` and no page, in the editor too; turned off, the file goes; the preview and the build agree, and the reader shows a linked blog styled in real Chrome; the default is unchanged | `test/linked-style.test.js`, `test/e2e/linked-style.e2e.mjs` |
+| K10 a date may carry a time: refused when not real; posts of one day newest first, a post with no time the oldest of its day; pages show the day, the feed the moment, the sitemap the day; a day-only blog is unchanged; a timed post published to a big blog equals a full build; a new post starts with the time | `test/datetime.test.js`, `test/e2e/cover.e2e.mjs` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves

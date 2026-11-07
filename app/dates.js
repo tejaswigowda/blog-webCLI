@@ -24,10 +24,12 @@ const RELATIVE_DAYS = 30; // beyond this a date reads better as a date than as "
 
 // today in the reader's own time zone (not UTC, which is already tomorrow in the evening in the Americas)
 export const today = () => (window.moment ? window.moment().format(ISO_DAY) : new Date().toISOString().slice(0, 10));
+// the time of day in the same zone, to order a new post among the others of its day
+export const nowTime = () => (window.moment ? window.moment().format('HH:mm') : new Date().toTimeString().slice(0, 5));
 
 // { label, full, relative } for a YYYY-MM-DD string; anything else is returned as written
 export function describeDate(iso, now = window.moment && window.moment()) {
-  const m = window.moment ? window.moment(iso, ISO_DAY, true) : null;
+  const m = window.moment ? window.moment(String(iso || '').slice(0, 10), ISO_DAY, true) : null;
   if (!m || !m.isValid()) return { label: String(iso || ''), full: String(iso || ''), relative: '' };
   const start = now.clone().startOf('day');
   const days = m.diff(start, 'days');

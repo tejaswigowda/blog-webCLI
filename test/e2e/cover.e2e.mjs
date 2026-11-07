@@ -124,6 +124,8 @@ test('cover: upload an image for it, or choose auto; both are saved as the post 
     assert.ok(saved[ref.slice('asset:'.length)], 'the image is in the repository');
     assert.match(saved['posts/covered.md'], new RegExp(`\\ncover: ${ref.replace(/[./]/g, '\\$&')}\\n`));
     assert.ok(!/jsdelivr/.test(saved['posts/covered.md']), 'no provider in the source');
+    // a new post carries the time it was started, so the posts of one day have an order
+    assert.match(saved['posts/covered.md'], /\ndate: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}\n/);
 
     // and now auto, on a published post: the share preview comes from the post itself
     await page.evaluate("location.hash = '#repo=example/blog&new'; 0");

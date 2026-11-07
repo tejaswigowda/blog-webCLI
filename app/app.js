@@ -8,7 +8,7 @@ import { licenceRecords } from '../lib/licences.js';
 import { createEditor, setAssetResolver, setVideoResolver } from './editor.js';
 import { Refusal } from '../lib/errors.js';
 import { describeError, progressLine, toast, working } from './ui.js';
-import { describeDate, loadMoment, today } from './dates.js';
+import { describeDate, loadMoment, nowTime, today } from './dates.js';
 import { icon } from './icons.js';
 import { fmtClock, pollDeploy } from '../lib/deploy.js';
 import { assessBuilds, describeBuilds, noteBuild, recentBuilds } from '../lib/buildrate.js';
@@ -945,7 +945,9 @@ async function editorView(repo, r) {
   const f = {
     title: h('input', { value: m.title || '', placeholder: 'Title', disabled: correcting }),
     slug: h('input', { value: m.slug || '', placeholder: 'set once, never changes', disabled: !isNew }),
-    date: h('input', { type: 'date', value: m.date, disabled: correcting }),
+    date: h('input', { type: 'date', value: (m.date || '').slice(0, 10), disabled: correcting }),
+    // the time orders the posts of one day (newest first); a new post gets the time it was started, an old post keeps what it had
+    time: h('input', { type: 'time', value: (m.date || '').length > 10 ? m.date.slice(11) : isNew && !isPageKind ? nowTime() : '', disabled: correcting, title: 'Orders the posts of one day; not shown on the page', 'aria-label': 'Time of day' }),
     tags: h('input', { value: (m.tags || []).join(', '), placeholder: 'video, git', disabled: correcting }),
     author: h('input', { value: m.author || '', placeholder: blog.author || 'Defaults to the blog\'s author', disabled: correcting }),
     menu: h('input', { type: 'number', min: 0, max: 99, value: m.menu || '', placeholder: 'not in the menu', disabled: correcting }),
@@ -1011,7 +1013,7 @@ async function editorView(repo, r) {
         correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', outbound('Propose the change on GitHub instead', `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `${isPageKind ? 'pages' : 'posts'}/${r.post}.md`)}`, { class: 'link' }), ' — it forks and opens the pull request for you.')) : null,
         isPageKind
           ? h('div', { class: 'row' }, field('Menu position', f.menu, 'A number puts the page in the header menu, lowest first. Leave blank to keep it out of the menu.'), field('Status', f.status))
-          : [field('Author', f.author, 'Posts by more than one author get an author page each.'), h('div', { class: 'row' }, field('Date', f.date, dateNote), field('Tags', f.tags), field('Status', f.status))],
+          : [field('Author', f.author, 'Posts by more than one author get an author page each.'), h('div', { class: 'row' }, field('Date', h('div', { style: 'display:flex;gap:.4rem' }, f.date, f.time), dateNote), field('Tags', f.tags), field('Status', f.status))],
         h('div', { class: 'actions' }, go, !isNew && !correcting && existing ? h('button', { type: 'button', class: 'danger', icon: 'trash', onclick: (e) => deleteContent(repo, { slug: existing.post.slug, kind, ref: r.ref, button: e.currentTarget }) }, `Delete ${word}`) : null),
         deploy.el,
       ))),
@@ -1110,7 +1112,7 @@ async function editorView(repo, r) {
     // a page has a menu position and nothing dated; a post has a date, tags and an author
     const vals = isPageKind
       ? { ...common, menu: f.menu.value.trim() }
-      : { ...common, date: f.date.value, tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), author: f.author.value.trim() };
+      : { ...common, date: f.date.value && f.time.value ? `${f.date.value}T${f.time.value}` : f.date.value, tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), author: f.author.value.trim() };
     const slug = existing ? existing.post.slug : f.slug.value.trim();
     if (!SLUG_RE.test(slug)) throw new Refusal('bad-frontmatter', `slug "${slug}" must be lowercase letters, digits and hyphens`);
     let front;
