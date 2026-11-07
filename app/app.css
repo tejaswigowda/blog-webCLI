@@ -100,6 +100,18 @@ fieldset legend+*{clear:both}
 label.check{display:block;font-size:.95rem;color:var(--fg);margin:.2rem 0}
 textarea{width:100%}
 textarea.mono{font:.85rem/1.5 ui-monospace,monospace}
+/* syntax-highlighted CSS box: a transparent textarea over a <pre> with the same text in colour; both must share every metric */
+.hl-wrap{position:relative}
+.hl-pre,textarea.hl-input{margin:0;width:100%;padding:7px 10px;border:1px solid var(--rule);border-radius:6px;font:.85rem/1.5 ui-monospace,monospace;letter-spacing:0;tab-size:2;white-space:pre;overflow:auto;box-sizing:border-box}
+.hl-input{height:10.5rem}
+.hl-pre{position:absolute;inset:0;pointer-events:none;background:var(--panel);color:var(--fg);scrollbar-width:none}
+.hl-pre::-webkit-scrollbar{display:none}
+.hl-input{position:relative;display:block;resize:vertical;background:transparent;color:transparent;caret-color:var(--fg);-webkit-text-fill-color:transparent}
+.hl-input::placeholder{-webkit-text-fill-color:var(--muted)}
+.hl-input::selection{background:rgba(54,101,182,.55);-webkit-text-fill-color:transparent}
+.hl-input:focus{border-color:var(--accent)}
+.tk-cm{color:#64748b;font-style:italic}.tk-st{color:#86efac}.tk-at{color:#c4b5fd}.tk-se{color:#5eead4}.tk-pr{color:#93c5fd}
+.tk-nu{color:#fbbf24}.tk-co{color:#fbbf24}.tk-fn{color:#f9a8d4}.tk-im{color:#ef4444;font-weight:600}.tk-pu{color:#94a3b8}
 details summary{cursor:pointer;margin:.5rem 0}
 details.more{margin:.25rem 0 1rem}
 

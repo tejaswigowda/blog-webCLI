@@ -28,6 +28,7 @@ import { validateBlog } from '../lib/blog.js';
 import { indexBody } from '../lib/contracts.js';
 import { loadPinnedTheme } from './packs.js';
 import { loadRegistry } from './registry-client.js';
+import { highlightedTextarea } from './highlight.js';
 import { config } from './config.js';
 import { createImportView } from './import-view.js';
 
@@ -581,7 +582,7 @@ async function settingsView(repo, r) {
       h('div', { class: 'row' }, field('Header links', area('headerLinks', 3, { placeholder: 'About | https://example.com/about' }), 'One per line: Label | https://address (up to 8); an icon may follow a second |.')),
       h('div', { class: 'row' }, field('Footer text', input('footerText', { placeholder: '© 2026 Your Name' })), field('Footer links', area('footerLinks', 3, { placeholder: 'Source | https://github.com/you/blog' }))),
     ),
-    section('Custom CSS', area('css', 6, { class: 'mono', spellcheck: 'false', placeholder: '.posts h2 { letter-spacing: .02em }' }), h('div', { class: 'hint' }, 'Rules, @media, @supports and @keyframes only. No url(), @import, @font-face or escapes: a stylesheet cannot load anything.')),
+    section('Custom CSS', highlightedTextarea(area('css', 6, { class: 'mono', spellcheck: 'false', placeholder: '.posts h2 { letter-spacing: .02em }' })), h('div', { class: 'hint' }, 'Rules, @media, @supports and @keyframes only. No url(), @import, @font-face or escapes: a stylesheet cannot load anything.')),
   );
   let timer = null;
   form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(redraw, 120); });
