@@ -10,7 +10,7 @@ const bytesOf = (c) => (typeof c === 'string' ? enc.encode(c) : c);
 // 'forbidden' = on, but the token may not read it.
 // graphql: false = GraphQL is not available to this token (404); graphqlCutoff: a blob over this many bytes comes back cut short;
 // treeLimit: a tree listing with more entries than this is "truncated", as GitHub does at 100,000.
-export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds = {}, graphql = true, graphqlCutoff = Infinity, treeLimit = Infinity } = {}) {
+export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds = {}, deployments = {}, graphql = true, graphqlCutoff = Infinity, treeLimit = Infinity } = {}) {
   const state = {};
   let n = 0;
   const fakeSha = (label) => gitBlobSha(enc.encode(`${label}${++n}`));
@@ -84,6 +84,13 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds 
 
     if (!rest.length) return json({ default_branch: 'main', permissions: { push: true }, has_pages: `${o}/${r}` in pages });
     // builds: { 'owner/repo': () => the latest Pages build object, null (none yet) or 'forbidden' }
+    // deployments: { 'owner/repo': (S, sha) => the latest status state of that commit's github-pages deployment, or null (none yet) }
+    if (rest[0] === 'deployments' && deployments[`${o}/${r}`]) {
+      const d = deployments[`${o}/${r}`](S, u.searchParams.get('sha'));
+      if (d === 'forbidden') return json({ message: 'Resource not accessible by personal access token' }, 403);
+      if (rest.length === 1) return json(d ? [{ id: 7 }] : []);
+      return json(d ? [{ state: d, created_at: new Date().toISOString() }] : []);
+    }
     if (rest[0] === 'pages' && rest[1] === 'builds' && rest[2] === 'latest') {
       const b = typeof builds[`${o}/${r}`] === 'function' ? builds[`${o}/${r}`](S) : builds[`${o}/${r}`];
       if (b === 'forbidden') return json({ message: 'Resource not accessible by personal access token' }, 403);

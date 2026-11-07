@@ -32,7 +32,8 @@ const INSTALL = `
   const dec = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
   const repos = Object.fromEntries(Object.entries(data).map(([r, f]) => [r, Object.fromEntries(Object.entries(f).map(([p, b]) => [p, dec(b)]))]));
   window.__build = null;
-  const fake = m.fakeGitHub(repos, { pages: { 'example/blog': 'https://example.github.io/blog/' }, builds: { 'example/blog': () => window.__build } });
+  window.__deployment = 'forbidden'; // the deployment of the commit: a status, null (none yet) or 'forbidden' (cannot be read)
+  const fake = m.fakeGitHub(repos, { pages: { 'example/blog': 'https://example.github.io/blog/' }, builds: { 'example/blog': () => window.__build }, deployments: { 'example/blog': () => window.__deployment } });
   await fake.ready;
   window.__fake = fake;
   const real = window.fetch.bind(window);
@@ -116,6 +117,21 @@ test('deploy: committed -> building -> live, with the link withheld until it is 
     assert.match(await text(page, '.deploy .err'), /GitHub Pages could not build the site: Page build failed: tag not closed in index\.html/);
     assert.match(await text(page, '.deploy .err'), /Readers still see the current text/);
     assert.equal(await page.evaluate("document.querySelector('.deploy button[title]').disabled"), true, 'no link to share from a failed build');
+
+    // the build record says errored but the deployment of the commit succeeds (the record is wrong): never shown as a failure
+    await setValue(page, '#view input[placeholder=Title]', 'Fast one, edited again');
+    await clickText(page, '#view button', 'Publish');
+    await until(page, "document.querySelector('dialog[open] .preflight')");
+    await page.evaluate("window.__deployment = null; 0");
+    await clickText(page, 'dialog button', 'Commit and push');
+    await until(page, "document.querySelector('.deploy .step') && !document.querySelector('.deploy .step.done + .step.done + .step.done') && !document.querySelector('.deploy .step.failed')");
+    const sha3 = await head(page);
+    await page.evaluate(`window.__build = { status: 'errored', commit: ${JSON.stringify(sha3)}, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), error: { message: 'Page build failed.' } }; 0`);
+    await new Promise((r) => setTimeout(r, 4000));
+    assert.equal(await page.evaluate("Boolean(document.querySelector('.deploy .step.failed, .deploy .err'))"), false, 'no deployment yet: still building, not failed');
+    await page.evaluate("window.__deployment = 'success'; 0");
+    await until(page, "[...document.querySelectorAll('.deploy .step')].some((s) => /^Live \\(\\d+:\\d\\d\\)$/.test(s.textContent))");
+    assert.equal(await page.evaluate("Boolean(document.querySelector('.deploy .err'))"), false);
   } finally {
     chrome.close();
     web.close();

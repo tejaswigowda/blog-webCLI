@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { STALLED_MS, deployState, fmtClock, parseBuild, pollDeploy } from '../lib/deploy.js';
+import { ERRORED_GRACE_MS, STALLED_MS, deployState, fmtClock, parseBuild, pollDeploy, reconcileErrored } from '../lib/deploy.js';
 import { SOFT_LIMIT, WARN_AT, WINDOW_MS, assessBuilds, describeBuilds, noteBuild, recentBuilds } from '../lib/buildrate.js';
 
 const SHA = 'a'.repeat(40);
@@ -114,4 +114,37 @@ test('builds are counted per repository over a trailing hour, and a broken store
   assert.deepEqual(recentBuilds(broken, 'me/blog'), []);
   assert.doesNotThrow(() => noteBuild(broken, 'me/blog'));
   assert.deepEqual(recentBuilds({ getItem: () => 'not json', setItem() {} }, 'x'), []);
+});
+
+test('deploy: an errored build record is checked against the deployment of the commit before a failure is reported', async () => {
+  const errored = { status: 'errored', commit: SHA, created_at: iso(T0 + 1000), updated_at: iso(T0 + 4000), error: { message: 'Page build failed.' } };
+  const run = async ({ deployment, giveStates = false }) => {
+    let now = T0 + 5000;
+    const states = [];
+    const out = await pollDeploy({
+      getBuild: async () => errored,
+      getDeployment: typeof deployment === 'function' ? () => deployment(now) : async () => { if (deployment === 'unreadable') throw Object.assign(new Error('no'), { status: 403 }); return deployment; },
+      sha: SHA, since: T0, onState: (s) => states.push(s.state), sleep: async (ms) => { now += ms; }, now: () => now,
+    });
+    return giveStates ? { out, states } : out;
+  };
+  // the record says errored, the deployment succeeded: live, timed by the deployment
+  assert.deepEqual(await run({ deployment: { state: 'success', at: T0 + 45000 } }), { state: 'live', seconds: 45 });
+  // no deployment yet, then in progress, then success: it is building until it is live, never failed
+  const walk = await run({ giveStates: true, deployment: (now) => (now < T0 + 20000 ? null : now < T0 + 40000 ? { state: 'in_progress' } : { state: 'success', at: now }) });
+  assert.equal(walk.out.state, 'live');
+  assert.ok(walk.states.includes('building') && !walk.states.includes('failed'), walk.states.join());
+  // a deployment that failed, or none ever, is a failure, with GitHub's own reason; none is waited for only so long
+  assert.equal((await run({ deployment: { state: 'failure' } })).error, 'Page build failed.');
+  const never = await run({ deployment: null, giveStates: true });
+  assert.equal(never.out.state, 'failed');
+  assert.ok(never.states.includes('building'), 'it waited for a deployment first');
+  // a deployment that cannot be read (the token, a private repository): the record is believed at once
+  const blind = await run({ deployment: 'unreadable', giveStates: true });
+  assert.deepEqual(blind.states, ['failed']);
+  // a built record needs no second opinion
+  let asked = 0;
+  await pollDeploy({ getBuild: async () => ({ ...errored, status: 'built' }), getDeployment: async () => { asked++; return null; }, sha: SHA, since: T0, onState: () => {}, sleep: async () => {}, now: () => T0 + 9000 });
+  assert.equal(asked, 0);
+  assert.equal(reconcileErrored({ deployment: null, since: T0, now: T0 + ERRORED_GRACE_MS }), null);
 });

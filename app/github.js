@@ -345,6 +345,16 @@ export class GitHub {
     return this.api('GET', `/repos/${repo}/pages/builds/latest`);
   }
 
+  // The GitHub Pages deployment of a commit and its latest status ({ state, at }), or null when there is none yet. The Pages build record
+  // can say "errored" for a commit whose deployment succeeds; this is the second opinion (lib/deploy.js).
+  async pagesDeployment(repo, sha) {
+    const list = await this.api('GET', `/repos/${repo}/deployments?sha=${sha}&environment=github-pages&per_page=1`);
+    if (!Array.isArray(list) || !list.length) return null;
+    const statuses = await this.api('GET', `/repos/${repo}/deployments/${list[0].id}/statuses?per_page=1`);
+    const s = Array.isArray(statuses) ? statuses[0] : null;
+    return { state: s ? s.state : 'pending', at: s ? Date.parse(s.created_at) : NaN };
+  }
+
   // The branch's head and its tree. Not GET /commits/<branch>, which lists up to 300 of the files the commit changed (a megabyte
   // after a big regeneration): the ref and the commit are two small requests.
   async headCommit(repo, branch) {

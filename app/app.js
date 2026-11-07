@@ -199,7 +199,7 @@ function deployPanel({ gh, repo, hasPages }) {
     }
     draw({ state: 'committed', seconds: 0 }, ctx);
     try {
-      await pollDeploy({ getBuild: () => gh.pagesBuild(repo), sha: ctx.sha, since: ctx.since, onState: (st) => { if (mine === run) draw(st, ctx); }, signal: { get aborted() { return mine !== run; } } });
+      await pollDeploy({ getBuild: () => gh.pagesBuild(repo), getDeployment: () => gh.pagesDeployment(repo, ctx.sha), sha: ctx.sha, since: ctx.since, onState: (st) => { if (mine === run) draw(st, ctx); }, signal: { get aborted() { return mine !== run; } } });
     } catch (e) {
       if (mine === run) draw({ state: 'unknown', reason: `Could not read the build state: ${e.message}` }, ctx);
     }

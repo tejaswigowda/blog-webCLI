@@ -1315,6 +1315,11 @@ there is one implementation, not two.
 * **The editor** polls `GET /repos/{owner}/{repo}/pages/builds/latest` after a publish and shows *committed →
   building → live (0:34)*, withholds **Copy link** until GitHub says the build is live, and shows a failed
   build's own error. (It needs the token's *Pages: Read-only*; without it the panel says so and offers no link.)
+  GitHub's build record can say *errored* within seconds (duration 0) for a commit whose deployment goes on to succeed, so an
+  errored record is checked against that commit's `github-pages` deployment (`GET /repos/{owner}/{repo}/deployments?sha=…`, then its
+  latest status) before it is reported: a successful deployment is *live*, one under way or not yet created (for up to two
+  minutes) is *building*, and only a failed or never-created deployment is shown as failed. When the deployment cannot be read
+  (a private repository needs *Deployments: Read-only*), the build record is believed, as before.
 * **The build limit.** Pages builds about ten times an hour and then quietly stops. The editor counts its own
   publishes in the trailing hour and warns in the pre-flight from the one that would be the eighth, and says
   plainly at ten. For a blog that renders fresh content itself, the warning adds that readers still see
