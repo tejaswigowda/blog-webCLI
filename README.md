@@ -320,6 +320,13 @@ CSP, and the same egress ledger (always 0 B uploaded). It takes the blog from th
 * **Same code, same date.** The preview is what the *current* generator makes. A page published by an older generator keeps its
   older look on the site until the blog is published again (Settings → Save regenerates every page).
 
+
+**It shows the blog as it is now.** With no token the reader reads files from GitHub's raw host, which keeps every address for five minutes
+(`cache-control: max-age=300`): a post published a minute ago would show in the reader (its file is new, so nothing is cached) while the lists,
+tags and archive, built from the index files already read, were the old ones. So each read spells the path differently, at random, among the
+spellings that name the same file (`%69ndex/posts.json`, `index/%70osts.json`; `lib/live.js` `varyPath`, also used by the live script), which the
+host caches separately. Checked on the real host: the plain address is a `HIT`, a varied one a `MISS`. (`test/raw-url.test.js`)
+
 ## The address the blog is served at
 
 `blog.json`'s `domain` is where GitHub Pages serves the blog: it feeds links, the feed and `og:url`.
