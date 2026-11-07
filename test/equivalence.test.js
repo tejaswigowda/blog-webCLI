@@ -17,6 +17,8 @@ import { normalise } from './normalise.js';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GOLDEN = path.join(root, 'test', 'golden');
 const enc = new TextEncoder();
+// posts the corpus holds on purpose to be refused, and the code both renderers must refuse them with
+const REFUSED = { 'lossy-fence': 'lossy-round-trip', 'html-script': 'bad-html' };
 
 // the client, as a browser would run it: its own bundle, sharing no module instance with the generator
 let client;
@@ -72,12 +74,12 @@ const slugOf = (p) => p.path.replace(/^posts\/|\.md$/g, '');
 
 test('R10: the golden corpus covers the awkward cases the work order names', async () => {
   const names = (await goldenPosts()).map(slugOf);
-  for (const need of ['nested-lists', 'fence-with-html', 'footnote-shaped', 'table-shaped', 'raw-html', 'asset-refs', 'embed', 'unicode', 'wordpress-shortcodes', 'lossy-fence']) assert.ok(names.includes(need), need);
+  for (const need of ['nested-lists', 'fence-with-html', 'footnote-shaped', 'table-shaped', 'raw-html', 'asset-refs', 'embed', 'unicode', 'wordpress-shortcodes', 'lossy-fence', 'html-script']) assert.ok(names.includes(need), need);
 });
 
 test('R10: the golden posts are canonical markdown (a refusal is the one thing the corpus holds on purpose)', async () => {
   for (const p of await goldenPosts()) {
-    if (slugOf(p) === 'lossy-fence') continue;
+    if (slugOf(p) in REFUSED) continue;
     assert.equal(parsePost(p).lossy, null, `${p.path} is canonical, so what it tests is the renderer, not the refusal`);
   }
 });
@@ -85,7 +87,7 @@ test('R10: the golden posts are canonical markdown (a refusal is the one thing t
 test('R10: generator and client output are identical after normalisation, for every post of the golden corpus', async () => {
   const { loadSite, renderFromSite } = await browserRenderer();
   const all = await goldenPosts();
-  const posts = all.filter((p) => slugOf(p) !== 'lossy-fence');
+  const posts = all.filter((p) => !(slugOf(p) in REFUSED));
   const { blog, lock } = await blogFor(posts);
   const r = buildSite({ blog, posts, lock });
   assert.deepEqual(r.errors, [], r.errors.map((e) => e.detail).join('\n'));
@@ -100,6 +102,10 @@ test('R10: generator and client output are identical after normalisation, for ev
     compared++;
   }
   assert.ok(compared >= 9, `${compared} posts compared`);
+  const tables = r.files['table-shaped/index.html'];
+  assert.match(tables, /<table><thead><tr><th align="left">Name<\/th>/);
+  assert.match(r.files['raw-html/index.html'], /<details>\n<summary>More<\/summary>/);
+  assert.doesNotMatch(r.files['raw-html/index.html'], /never shown/, 'a comment is source only');
 });
 
 test('R10: the same for every published post of the example blog and the shared test corpus', async () => {
@@ -123,7 +129,7 @@ test('R10: the same for every published post of the example blog and the shared 
 
 test('R10: an edited post (a page the live copy is newer than) is rendered as the next build would render it', async () => {
   const { loadSite, renderFromSite } = await browserRenderer();
-  const all = (await goldenPosts()).filter((p) => slugOf(p) !== 'lossy-fence');
+  const all = (await goldenPosts()).filter((p) => !(slugOf(p) in REFUSED));
   const { blog, lock } = await blogFor(all);
   const site = await loadSite(repoOf(blog, lock, all, buildSite({ blog, posts: all, lock }).files));
   const edited = all.map((p) => (slugOf(p) === 'unicode' ? { ...p, text: `${p.text}\nAnd a new paragraph, written later.\n` } : p));
@@ -132,18 +138,24 @@ test('R10: an edited post (a page the live copy is newer than) is rendered as th
   assert.equal(normalise(renderFromSite(site, { slug: 'unicode', text: post.text }).html), normalise(next.files['unicode/index.html']));
 });
 
-test('R10: a post markdown cannot express is refused by the generator and by the client, with the same code', async () => {
+test('R10: a post the generator refuses is refused by the client too, with the same code', async () => {
   const { loadSite, renderFromSite, CannotRebuild } = await browserRenderer();
-  const lossy = (await goldenPosts()).find((p) => slugOf(p) === 'lossy-fence');
-  const { blog, lock } = await blogFor([lossy]);
-  const r = buildSite({ blog, posts: [lossy], lock });
-  assert.equal(r.errors.length, 1);
-  assert.equal(r.errors[0].code, 'lossy-round-trip');
-  assert.equal(r.files['lossy-fence/index.html'], undefined, 'nothing is written for a refused post');
-  const good = (await goldenPosts()).filter((p) => slugOf(p) === 'tiny' || slugOf(p) === 'nested-lists');
-  const built = buildSite({ blog, posts: good, lock });
-  const site = await loadSite(repoOf(blog, lock, good, built.files));
-  assert.throws(() => renderFromSite(site, { slug: 'lossy-fence', text: lossy.text }), (e) => e instanceof CannotRebuild && e.reason === 'lossy-round-trip');
+  const all = await goldenPosts();
+  const good = all.filter((p) => ['tiny', 'nested-lists'].includes(slugOf(p)));
+  for (const [slug, expected] of Object.entries(REFUSED)) {
+    const refused = all.find((p) => slugOf(p) === slug);
+    const { blog, lock } = await blogFor([refused, ...good]);
+    const r = buildSite({ blog, posts: [refused], lock });
+    assert.equal(r.errors.length, 1, slug);
+    assert.equal(r.errors[0].code, expected, slug);
+    assert.equal(r.files[`${slug}/index.html`], undefined, 'nothing is written for a refused post');
+    // the live copy has an earlier, valid version of the post (so it is in the index); the edit that is refused arrives on top of it
+    const earlier = { ...refused, text: refused.text.replace(/\n\n[^]*$/, '\n\nAn earlier version.\n') };
+    const built = buildSite({ blog, posts: [earlier, ...good], lock });
+    assert.deepEqual(built.errors, [], slug);
+    const site = await loadSite(repoOf(blog, lock, [earlier, ...good], built.files));
+    assert.throws(() => renderFromSite(site, { slug, text: refused.text }), (e) => e instanceof CannotRebuild && e.reason === expected, slug);
+  }
 });
 
 test('R10: the comparison can fail: a client that renders anything differently is caught', async () => {

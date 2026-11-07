@@ -51,7 +51,7 @@ test('video: a standalone reference is a block embed with no trailing newline', 
 });
 
 test('non-canonical markdown is detected, not silently rewritten', () => {
-  for (const md of ['* star bullet\n', 'wrapped\nline\n', 'no trailing newline', '<b>html</b>\n', '| a | b |\n|---|---|\n', '#### four\n', '- a\n\n- b\n', 'x\n![](video:videos/clip@v1)\n', '![](video:videos/clip@v1)\ny\n']) {
+  for (const md of ['* star bullet\n', 'wrapped\nline\n', 'no trailing newline', '<b>html</b>  \n', '| a | b |\n|---|---|\n', '#### four\n', '- a\n\n- b\n', 'x\n![](video:videos/clip@v1)\n', '![](video:videos/clip@v1)\ny\n']) {
     assert.notEqual(deltaToMd(mdToDelta(md)), md, JSON.stringify(md));
   }
 });

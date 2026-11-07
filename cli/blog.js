@@ -81,16 +81,24 @@ async function generate(dir) {
 // Generated files that exist only while a theme, extensions or a feature are in use.
 const OPTIONAL = OPTIONAL_GENERATED;
 
-// A post's page is a folder with an index.html that carries the generator's mark. The folders the generator owns
-// outright (tags/, archive/, …) are swept by staleTrees instead.
+// A page the generator wrote is a folder with an index.html that carries the generator's mark: a post's, a page's, and the
+// redirect at an old address, which can be several folders down (2020/05/old-post/). The folders the generator owns outright
+// (tags/, archive/, …) are swept by staleTrees instead.
 async function staleDirs(dir, expected) {
   const out = [];
-  for (const ent of await fs.readdir(dir, { withFileTypes: true })) {
-    if (!ent.isDirectory() || ent.name.startsWith('.') || ['posts', 'pages', 'index', ...GENERATED_TREES].includes(ent.name)) continue;
-    const f = path.join(dir, ent.name, 'index.html');
-    if (!(await exists(f))) continue;
-    if (!expected.has(`${ent.name}/index.html`) && (await fs.readFile(f, 'utf8')).includes(GENERATED_MARK)) out.push(`${ent.name}/index.html`);
-  }
+  const walk = async (rel) => {
+    for (const ent of await fs.readdir(path.join(dir, rel), { withFileTypes: true })) {
+      if (!ent.isDirectory() || ent.name.startsWith('.') || ent.name === 'node_modules') continue;
+      if (!rel && ['posts', 'pages', 'index', ...GENERATED_TREES].includes(ent.name)) continue;
+      const r = rel ? `${rel}/${ent.name}` : ent.name;
+      const f = path.join(dir, r, 'index.html');
+      if (await exists(f)) {
+        if (!expected.has(`${r}/index.html`) && (await fs.readFile(f, 'utf8')).includes(GENERATED_MARK)) out.push(`${r}/index.html`);
+      }
+      await walk(r);
+    }
+  };
+  await walk('');
   return out;
 }
 
@@ -135,6 +143,11 @@ async function build(dir) {
   }
   for (const rel of await staleDirs(dir, expected)) {
     await fs.rm(path.dirname(path.join(dir, rel)), { recursive: true });
+    // an old address is a few folders down: the ones it leaves empty go too
+    for (let d = path.dirname(path.dirname(rel)); d && d !== '.'; d = path.dirname(d)) {
+      if ((await fs.readdir(path.join(dir, d))).length) break;
+      await fs.rmdir(path.join(dir, d));
+    }
     console.log(`removed stale ${rel}`);
   }
   for (const rel of await staleTrees(dir, expected)) {

@@ -1,5 +1,6 @@
 // Reader and publisher cores. No DOM: the UI calls these, and so do the tests.
 import { Refusal } from '../lib/errors.js';
+import { BULK_AT } from './github.js';
 import { PAGE_PATH, POST_PATH, GENERATED_TREES, OPTIONAL_GENERATED, parsePost, validateBlog } from '../lib/blog.js';
 import { buildSiteWith } from '../lib/build-async.js';
 import { parseOutputsFile } from '../lib/extensions.js';
@@ -67,6 +68,17 @@ const staleOptional = (site, tree, prefix) =>
     .sort()
     .map((f) => ({ path: prefix + f, delete: true, size: 0, action: 'delete' }));
 
+// Every post and page of the blog, as { path, text }. A big blog is read a hundred files to a request, patiently, with progress,
+// and a file already read in this session (by its blob id) is not read again: see GitHub.readMany.
+async function readPosts(gh, { repo, prefix, head, tree, paths }) {
+  const texts = await gh.readMany(repo, paths.map((path) => ({ path: prefix + path, sha: tree.get(path) })), { ref: head.sha });
+  return paths.map((path) => {
+    const text = texts.get(prefix + path);
+    if (text === undefined) throw new Refusal('missing-source', `${prefix + path} is in the repository's file list but could not be read (it may have been deleted or changed since; try again)`);
+    return { path, text };
+  });
+}
+
 // `tree` is relative to the blog's folder; `prefix` puts the changes back where they live in the repository.
 async function computeChanges(gh, { blogText, others, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head, runner }) {
   const posts = [...others, { path: newPost.path, text: newPost.text }];
@@ -85,6 +97,11 @@ async function computeChanges(gh, { blogText, others, newPost, lock, lockChanged
     for (const e of [...(prevIndex.posts || []), ...(prevIndex.pages || [])]) {
       const p = `${e.slug}/index.html`;
       if (!now.has(e.slug) && tree.has(p)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
+    }
+    // an old address that is no longer listed, or whose page is gone, loses its redirect
+    for (const r of prevIndex.redirects || []) {
+      const p = `${r.from}/index.html`;
+      if (!(p in site.files) && tree.has(p)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
     }
   }
   return { site, changes };
@@ -112,7 +129,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   if (newPost.lossy) throw newPost.lossy.at(target);
 
   const otherPaths = [...tree.keys()].filter((p) => isContent(p) && p !== target);
-  const others = await Promise.all(otherPaths.map(async (path) => ({ path, text: await gh.readText(repo, prefix + path, head.sha) })));
+  const others = await readPosts(gh, { repo, prefix, head, tree, paths: otherPaths });
 
   const stagedByKey = new Map(staged.map((s) => [`${s.key}/${s.path}`, s]));
   const pending = [];
@@ -187,7 +204,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
   const blog = validateBlog(blogText);
 
   const postPaths = [...tree.keys()].filter(isContent);
-  const posts = await Promise.all(postPaths.map(async (path) => ({ path, text: await gh.readText(repo, prefix + path, head.sha) })));
+  const posts = await readPosts(gh, { repo, prefix, head, tree, paths: postPaths });
   const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
   let lockChanged = false;
   for (const ref of blogAssetRefs(blog)) {
@@ -382,14 +399,24 @@ export async function executePlan(gh, plan, { pullBody = '' } = {}) {
   const verb = plan.mode === 'pr' ? 'Correct' : plan.status === 'draft' ? 'Draft' : plan.existed ? 'Update' : 'Publish';
   const message = plan.message || `${verb}: ${plan.title}`;
   const newBranch = plan.mode === 'pr' ? `correction/${plan.slug}-${Date.now().toString(36)}` : null;
-  const c = await gh.commit(plan.repo, {
-    branch: newBranch || plan.branch,
-    parent,
-    baseTree,
-    files: changes.map((f) => (f.delete ? { path: f.path, delete: true } : { path: f.path, content: f.content })),
-    message,
-    newBranch: !!newBranch,
-  });
+  // thousands of files are a long send: wait out GitHub's limits rather than fail halfway
+  const wasPatient = gh.patient;
+  if (changes.length > BULK_AT) gh.patient = true;
+  let c;
+  try {
+    c = await gh.commit(plan.repo, {
+      branch: newBranch || plan.branch,
+      parent,
+      baseTree,
+      files: changes.map((f) => (f.delete ? { path: f.path, delete: true } : { path: f.path, content: f.content })),
+      message,
+      newBranch: !!newBranch,
+    });
+  } finally {
+    gh.patient = wasPatient;
+  }
+  // what was just written is what the next plan would read: keep it
+  if (!newBranch) for (const f of changes) if (!f.delete && isContent(f.path.slice(plan.folder ? plan.folder.length + 1 : 0))) await gh.remember(plan.repo, f.content);
   receipt.commits.push({ repo: plan.repo, branch: newBranch || plan.branch, ...c, files: changes.length });
   if (newBranch) {
     const pr = await gh.createPull(plan.repo, { title: message, head: newBranch, base: plan.branch, body: pullBody || `Proposed correction to \`${at(plan.folder, plan.path || `posts/${plan.slug}.md`)}\`.` });

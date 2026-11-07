@@ -19,7 +19,7 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
   const fresh = () => ({
     step: 1,
     sources: [], // { id, label, model, fields: { title, description, author }, folder }
-    opts: { drafts: true, library: true, comments: true },
+    opts: { drafts: true, library: true, comments: true, redirects: true },
     uploads: null, // Map(path below uploads/ -> File): a copy of the old site's uploads folder, when the person has one
     quick: false, // "Import everything": from the file to the pre-flight without stopping at each step
     results: [], // per source: { source, job, out, failed }
@@ -150,6 +150,8 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
       drafts.addEventListener('change', () => { st.opts.drafts = drafts.checked; });
       const comments = h('input', { type: 'checkbox', checked: st.opts.comments });
       comments.addEventListener('change', () => { st.opts.comments = comments.checked; });
+      const redirects = h('input', { type: 'checkbox', checked: st.opts.redirects });
+      redirects.addEventListener('change', () => { st.opts.redirects = redirects.checked; });
       const library = h('input', { type: 'checkbox', checked: st.opts.library });
       library.addEventListener('change', () => { st.opts.library = library.checked; });
       return h('div', {},
@@ -158,6 +160,7 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
           h('label', { class: 'check' }, drafts, ' Import drafts, scheduled and private posts (as drafts; nothing is published that was not)'),
           h('label', { class: 'check' }, library, ' Import every picture and file in the media library (PDFs, audio, video…), not only the ones posts use'),
           h('label', { class: 'check' }, comments, ' Keep approved comments, as a "Comments" section at the end of each post (names and dates; never emails or addresses)'),
+          h('label', { class: 'check' }, redirects, ' Keep the old addresses working: a small page at each old permalink sends readers (and search engines) to the new one. This works when the new blog is served at the same address as the old site; it adds one small file per post'),
         ),
         h('div', { class: 'actions' }, h('button', { icon: 'arrow-left', onclick: () => go(1) }, 'Back'), h('button', { class: 'primary', icon: 'arrow-right', onclick: () => { if (!valid()) return; run(); } }, 'Next: bring the pictures across')),
       );
@@ -197,7 +200,7 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
       draw();
       try {
         for (const s of st.sources) {
-          const job = planWp(s.model, { today: new Date().toISOString().slice(0, 10), includeDrafts: st.opts.drafts, includeLibrary: st.opts.library, includeComments: st.opts.comments });
+          const job = planWp(s.model, { today: new Date().toISOString().slice(0, 10), includeDrafts: st.opts.drafts, includeLibrary: st.opts.library, includeComments: st.opts.comments, redirects: st.opts.redirects });
           status.textContent = `${s.fields.title}: ${plural(job.images.length, 'picture')} to bring across…`;
           bar.max = Math.max(1, job.images.length);
           bar.value = 0;
@@ -291,6 +294,7 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
           fromLocal ? h('p', { class: 'muted' }, `${fromLocal.toLocaleString()} ${fromLocal === 1 ? 'picture or file' : 'pictures and files'} came from your uploads folder.`) : null,
           s.imagesFailed ? h('div', { class: 'caution' }, `${plural(s.imagesFailed, 'picture')} could not be brought across: ${why.slice(0, 3).join('; ')}. Where posts use them they stay linked to the old site, so nothing breaks while the old site is up. For every picture, use the command line importer (it is not limited by what a website allows): `, h('code', {}, 'node cli/blog.js import wp export.xml my-blog'), '.') : null,
           s.internalLinks ? h('p', { class: 'muted' }, `${plural(s.internalLinks, 'link')} between your posts now point at the new pages.`) : null,
+          s.redirects ? h('p', { class: 'muted' }, `${plural(s.redirects, 'old address', 'old addresses')} will redirect to the new pages.`) : null,
           byText.size ? h('details', {}, h('summary', {}, `${plural(byText.size, 'thing')} to know about`), h('ul', { class: 'notes' }, [...byText].slice(0, 100).map(([text, where]) => h('li', {}, text, h('span', { class: 'muted' }, ` — ${where.slice(0, 3).join(', ')}${where.length > 3 ? ` and ${where.length - 3} more` : ''}`))))) : h('p', { class: 'muted' }, 'Nothing was flattened or dropped.'),
         );
       });

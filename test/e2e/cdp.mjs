@@ -58,5 +58,5 @@ export async function openPage({ port }, url) {
     if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails));
     return r.result.result.value;
   };
-  return { evaluate, close: () => ws.close() };
+  return { evaluate, send, close: () => ws.close() };
 }

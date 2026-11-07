@@ -6,7 +6,8 @@ import { htmlToDelta, decodeHtml, autop, parseHtml } from '../lib/wp-html.js';
 import { planWp, sniffImage } from '../lib/wp-content.js';
 import { restBase, restModel } from '../lib/wp-rest.js';
 import { buildSite, parsePost } from '../lib/blog.js';
-import { deltaToMarkdownChecked } from '../lib/markdown.js';
+import { deltaToMarkdownChecked, mdRoundTrips } from '../lib/markdown.js';
+import { checkHtmlBlock } from '../lib/rawhtml.js';
 
 import { PNG, WXR } from './wp-fixtures.js';
 
@@ -66,12 +67,12 @@ test('html: the formatting the editor offers comes across, and comes out as mark
   assert.equal(md('<script>alert(1)</script><style>p{}</style><p>safe</p><form><input></form>').md, 'safe\n');
 });
 
-test('html: what markdown cannot hold is flattened and named, never dropped without a word', () => {
+test('html: what markdown cannot hold is flattened or kept as an HTML block, and named, never dropped without a word', () => {
   const t = md('<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table><hr><iframe src="https://www.youtube.com/embed/x"></iframe><p><a href="javascript:alert(1)">bad</a> <a href="#top">top</a></p>');
-  assert.match(t.md, /A \| B\n\n1 \| 2/);
+  assert.match(t.md, /^\| A \| B \|\n\| --- \| --- \|\n\| 1 \| 2 \|\n\n<hr>\n\n/);
   assert.match(t.md, /\[Embedded from youtube\.com\]\(https:\/\/www\.youtube\.com\/embed\/x\)/);
   assert.ok(!t.md.includes('javascript:'));
-  for (const n of ['a table was flattened to lines of text', 'a horizontal rule was dropped', 'an embedded iframe became a link', 'a link that cannot be kept was reduced to its words']) assert.ok(t.notes.includes(n), n);
+  for (const n of ['an embedded iframe became a link', 'a link that cannot be kept was reduced to its words']) assert.ok(t.notes.includes(n), n);
 });
 
 test('html: a picture linked to its own bigger copy is just the picture; images the caller refuses are named', () => {
@@ -118,7 +119,7 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   const file = (p) => out.files.find((f) => f.path === p).text;
 
   const hello = file('posts/hello-welcome.md');
-  assert.match(hello, /^---\nslug: hello-welcome\ntitle: "?Hello & welcome"?\ndate: 2024-05-02\ntags: \[News, Video Git\]\nstatus: published\ncover: asset:images\/wp\/2024\/05\/cat\.jpg\ndescription: A short excerpt\.\n---\n\n/);
+  assert.match(hello, /^---\nslug: hello-welcome\ntitle: "?Hello & welcome"?\ndate: 2024-05-02\ntags: \[News, Video Git\]\naliases: \["2024\/05\/hello-welcome"\]\nstatus: published\ncover: asset:images\/wp\/2024\/05\/cat\.jpg\ndescription: A short excerpt\.\n---\n\n/);
   assert.match(hello, /First \*\*bold\*\* and _italic_ and \[a link\]\(https:\/\/example\.com\/x\)\./);
   assert.match(hello, /\n### Small heading\n/);
   assert.match(hello, /!\[A cat\]\(asset:images\/wp\/2024\/05\/cat\.jpg\)/);
@@ -132,6 +133,8 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
 
   const second = file('posts/second-post.md');
   assert.match(second, /\nauthor: Bob Guest\n/);
+  assert.match(second, /\naliases: \["2024\/06\/second-post"\]\n/);
+  assert.ok(!/aliases:/.test(file('posts/not-ready.md')) && !/aliases:/.test(file('pages/about-us.md')), 'a plain ?p= address cannot be redirected, and a page already at /about-us/ has nothing to redirect');
   assert.match(second, /!\[\]\(asset:images\/wp\/2024\/06\/dog\.jpg\) A dog/);
   assert.match(second, /!\[A cat\]\(asset:images\/wp\/2024\/05\/cat\.jpg\)/, 'the gallery ids name library pictures');
   assert.match(second, /Text|Plain text paragraph one\./);
@@ -142,9 +145,9 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   assert.match(file('pages/about-us.md'), /^---\nslug: about-us\ntitle: About us\nstatus: published\nmenu: 1\n---\n\nWe write things\.\n$/);
   assert.match(file('pages/tags-wp.md'), /^---\nslug: tags-wp\n/, 'a slug the new blog reserves is changed, and said');
 
-  assert.deepEqual(out.summary, { posts: 2, drafts: 2, pages: 2, images: 3, files: 1, comments: 2, imagesFailed: 0, imageBytes: out.assets.reduce((n, a) => n + a.bytes.length, 0), internalLinks: 2, skipped: { product: 1 } });
+  assert.deepEqual(out.summary, { posts: 2, drafts: 2, pages: 2, images: 3, files: 1, comments: 2, imagesFailed: 0, imageBytes: out.assets.reduce((n, a) => n + a.bytes.length, 0), internalLinks: 2, redirects: 2, skipped: { product: 1 } });
   const said = (where, re) => out.notes.some((n) => n.where === where && re.test(n.text));
-  assert.ok(said('posts/hello-welcome.md', /table was flattened/) && said('posts/hello-welcome.md', /another site/) && said('posts/second-post.md', /fancy_form/));
+  assert.ok(said('posts/hello-welcome.md', /another site/) && said('posts/second-post.md', /fancy_form/));
   assert.ok(said('posts/secret.md', /private on WordPress/));
 
   // and the whole blog builds: every post parses canonically and every asset reference is pinned
@@ -286,4 +289,95 @@ test('import: a long blog is imported with pagination on, a short one without', 
   const short = planWp(model, { today: '2026-11-06' }).finish(new Map());
   assert.equal(short.blog.pageSize, undefined);
   assert.equal(makeBlogJson('me/site', { ...short.blog, domain: 'https://me.github.io/site' }).pagination, undefined);
+});
+
+test('html: a plain table becomes a markdown table, with alignment and the markup of its cells; the post is canonical', () => {
+  const r = md('<table><thead><tr><th>Name</th><th style="text-align:right">Price</th></tr></thead><tbody><tr><td><b>Apple</b> | pie</td><td align="right">3</td></tr><tr><td><a href="https://x.test/a">link</a></td><td><img src="a.png" alt="p"></td></tr></tbody></table>');
+  assert.equal(r.md, '| Name | Price |\n| --- | ---: |\n| **Apple** \\| pie | 3 |\n| [link](https://x.test/a) | ![p](a.png) |\n');
+  assert.deepEqual(r.notes, []);
+  assert.equal(mdRoundTrips(r.md).ok, true);
+  // Gutenberg's wrapper, and a caption outside the table, are only a figure around it
+  assert.match(md('<figure class="wp-block-table"><table><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table><figcaption>Sizes</figcaption></figure>').md, /^\| A \|\n\| --- \|\n\| 1 \|\n\nSizes\n$/);
+});
+
+test('html: a table markdown cannot hold is kept as an HTML block with only the tags a block may hold, and the note says so', () => {
+  const merged = md('<table class="x" style="width:100%"><tr><th colspan="2" onclick="x()">Merged</th></tr><tr><td>a<br>b</td><td><script>x()</script><img src="http://old.test/p.png" alt="p"> <a href="javascript:x()">bad</a></td></tr></table>');
+  assert.equal(merged.md, '<table>\n<tr><th colspan="2">Merged</th></tr>\n<tr><td>a<br>b</td><td><img src="http://old.test/p.png" alt="p"> bad</td></tr>\n</table>\n');
+  assert.deepEqual(merged.notes, ['a table was kept as an HTML block (it has merged cells, no header row, a caption or more than a line in a cell)']);
+  assert.equal(mdRoundTrips(merged.md).ok, true);
+  const bare = md('<table><tr><td>1</td><td>2</td></tr></table>');
+  assert.equal(bare.md, '<table>\n<tr><td>1</td><td>2</td></tr>\n</table>\n', 'no header row: not given a made-up one');
+  assert.match(md('<table><caption>Cap</caption><tr><th>A</th></tr><tr><td>1</td></tr></table>').md, /<caption>Cap<\/caption>/);
+  assert.match(md('<table><tr><th>A</th></tr><tr><td><ul><li>x</li><li>y</li></ul></td></tr></table>').md, /<td><ul><li>x<\/li><li>y<\/li><\/ul><\/td>/);
+  // whatever the importer writes, the generator accepts
+  for (const t of [merged.md, bare.md]) assert.doesNotThrow(() => checkHtmlBlock(t.trim()));
+});
+
+test('html: a horizontal rule is kept', () => {
+  assert.equal(md('<p>a</p><hr><p>b</p>').md, 'a\n\n<hr>\n\nb\n');
+});
+
+// ---------- old permalinks ----------
+const wxr = (items, link = 'https://old.example.org') => `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:excerpt="http://wordpress.org/export/1.2/excerpt/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:wp="http://wordpress.org/export/1.2/"><channel>
+<title>Site</title><link>${link}</link><description>d</description><language>en</language><wp:wxr_version>1.2</wp:wxr_version><wp:base_blog_url>${link}</wp:base_blog_url>
+${items.map((i, n) => `<item><title>${i.title || `Post ${n}`}</title><link>${i.link}</link><dc:creator>ada</dc:creator><content:encoded><![CDATA[${i.html || '<p>Text.</p>'}]]></content:encoded><wp:post_id>${n + 1}</wp:post_id><wp:post_date>2024-01-0${n + 1} 10:00:00</wp:post_date><wp:post_name>${i.slug}</wp:post_name><wp:status>publish</wp:status><wp:post_type>${i.type || 'post'}</wp:post_type></item>`).join('\n')}
+</channel></rss>`;
+const planOf = (items, opts, link) => planWp(parseWxr(wxr(items, link), { today: '2026-11-06' }), { today: '2026-11-06', ...opts });
+const aliasesOf = (out, p) => (/\naliases: \[([^\]]*)\]\n/.exec(out.files.find((f) => f.path === p).text) || [])[1];
+
+test('redirects: each post keeps its old path as an alias; a plain ?p= address, the same address, and the home page have nothing to redirect', () => {
+  const out = planOf([
+    { slug: 'one', link: 'https://old.example.org/2020/05/one/' }, { slug: 'two', link: 'https://old.example.org/blog/two.html' },
+    { slug: 'three', link: 'https://old.example.org/three/' }, { slug: 'four', link: 'https://old.example.org/?p=4' }, { slug: 'five', link: 'https://old.example.org/%E6%97%A5%E6%9C%AC/five/' },
+  ]).finish();
+  assert.equal(aliasesOf(out, 'posts/one.md'), '"2020/05/one"');
+  assert.equal(aliasesOf(out, 'posts/two.md'), 'blog/two.html');
+  assert.equal(aliasesOf(out, 'posts/three.md'), undefined, 'already at /three/');
+  assert.equal(aliasesOf(out, 'posts/four.md'), undefined);
+  assert.equal(aliasesOf(out, 'posts/five.md'), '日本/five', 'the path as people read it; the address is the same');
+  assert.equal(out.summary.redirects, 3);
+  assert.ok(out.notes.some((n) => n.where === 'permalinks' && /1 post uses a plain address/.test(n.text)));
+});
+
+test('redirects: a blog that lived in a folder keeps the paths below it; an address outside it is left alone; they can be switched off', () => {
+  const items = [{ slug: 'a', link: 'https://old.example.org/blog/2021/a/' }, { slug: 'b', link: 'https://old.example.org/elsewhere/b/' }];
+  const out = planOf(items, {}, 'https://old.example.org/blog').finish();
+  assert.equal(aliasesOf(out, 'posts/a.md'), '"2021/a"');
+  assert.equal(aliasesOf(out, 'posts/b.md'), undefined);
+  assert.equal(planOf(items, { redirects: false }, 'https://old.example.org/blog').finish().summary.redirects, 0);
+  assert.ok(!/aliases:/.test(planOf(items, { redirects: false }).finish().files[0].text));
+});
+
+test('redirects: an old address the new blog uses for something else is dropped and said, never written to collide', () => {
+  const out = planOf([
+    { slug: 'one', link: 'https://old.example.org/tags/one/' }, { slug: 'two', link: 'https://old.example.org/2020/two/' }, { slug: 'three', link: 'https://old.example.org/2020/two/' },
+    { slug: 'x', link: 'https://old.example.org/zeta/x/' }, { slug: 'zeta', link: 'https://old.example.org/zeta-old/' },
+  ]).finish();
+  assert.equal(aliasesOf(out, 'posts/one.md'), undefined, 'below tags/, which the generator owns');
+  assert.equal(aliasesOf(out, 'posts/two.md'), '"2020/two"');
+  assert.equal(aliasesOf(out, 'posts/three.md'), undefined, 'one address, one page');
+  assert.equal(aliasesOf(out, 'posts/x.md'), undefined, 'below zeta/, which is a post');
+  assert.equal(out.notes.filter((n) => /could not be kept/.test(n.text)).length, 3);
+});
+
+test('redirects: the imported blog builds, with a page at every old address that goes to the post; the index records them', () => {
+  const out = planOf([{ slug: 'one', link: 'https://old.example.org/2020/05/one/' }, { slug: 'two', link: 'https://old.example.org/2020/06/two/' }]).finish();
+  const posts = out.files.map((f) => ({ path: f.path, text: f.text }));
+  const r = buildSite({ blog: { ...out.blog, domain: 'https://new.example.org', repo: 'me/blog' }, posts, lock: {} });
+  assert.deepEqual(r.errors, []);
+  assert.match(r.files['2020/05/one/index.html'], /<link rel="canonical" href="https:\/\/new\.example\.org\/one\/">[\s\S]*url=\.\.\/\.\.\/\.\.\/one\//);
+  assert.deepEqual(JSON.parse(r.files['index/posts.json']).redirects, [{ from: '2020/05/one', slug: 'one' }, { from: '2020/06/two', slug: 'two' }]);
+});
+
+test('import: a picture that could not be downloaded stays linked to the old site inside a table and an HTML block too', () => {
+  const html = '<table><thead><tr><th>Pic</th></tr></thead><tbody><tr><td><img src="https://old.example.org/wp-content/uploads/a.png" alt="a"></td></tr></tbody></table><table><tr><td colspan="2"><img src="https://old.example.org/wp-content/uploads/b.png" alt="b"></td></tr></table>';
+  const job = planOf([{ slug: 'pics', link: 'https://old.example.org/pics/', html }]);
+  const text = job.finish(new Map()).files.find((f) => f.path === 'posts/pics.md').text;
+  assert.match(text, /\| !\[a\]\(https:\/\/old\.example\.org\/wp-content\/uploads\/a\.png\) \|/);
+  assert.match(text, /<img src="https:\/\/old\.example\.org\/wp-content\/uploads\/b\.png" alt="b">/);
+  assert.ok(!text.includes('asset:images'), 'nothing is left pointing at a file that was not copied');
+  // and when they did come across, the pins are logical references the build can resolve
+  const ok = job.finish(new Map(job.images.map((i) => [i.url, PNG])));
+  assert.match(ok.files[0].text, /asset:images\/wp\/a\.png/);
 });

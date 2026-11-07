@@ -141,6 +141,12 @@ async function preview(parsed, mine) {
   if (mine !== seq) return true;
   const ctx = { parsed, blog, file };
   showPreview(out.html, ctx);
+  if (out.redirect) {
+    // an old address: the page says "moved", and its link is already the reader's own address for the post
+    const to = document.querySelector('#reader a[href^="#"]');
+    if (to) location.replace(to.getAttribute('href'));
+    return true;
+  }
   const staticUrl = `${blog.domain}/${file.replace(/index\.html$/, '')}`;
   const isIndex = file === 'index.html';
   const draw = (mode) => {

@@ -1,3 +1,5 @@
+import { registerBlocks, wireBlocks } from './blocks.js';
+
 // Quill as a *view over markdown*. Only what markdown can express is offered; the
 // image blot keeps the logical `asset:` reference in the document and shows a
 // resolved URL on screen.
@@ -61,6 +63,7 @@ export async function loadQuill() {
         }
       }
       Quill.register('formats/video', ReleaseVideo, true);
+      registerBlocks(Quill);
       Quill.import('formats/link').PROTOCOL_WHITELIST.push('asset');
       return Quill;
     });
@@ -68,18 +71,30 @@ export async function loadQuill() {
   return loading;
 }
 
-export const FORMATS = ['header', 'bold', 'italic', 'strike', 'code', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video'];
+export const FORMATS = ['header', 'bold', 'italic', 'strike', 'code', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
 
 export async function createEditor(el, { onImage, onVideo }) {
   const Quill = await loadQuill();
-  return new Quill(el, {
+  // the table and HTML block buttons need the editor to exist, so their handlers close over it
+  const blocks = {};
+  const quill = new Quill(el, {
     theme: 'snow',
     formats: FORMATS,
     modules: {
       toolbar: {
-        container: [[{ header: [2, 3, false] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video'], ['clean']],
-        handlers: { image: onImage, video: onVideo },
+        container: [[{ header: [2, 3, false] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'mdtable', 'htmlblock'], ['clean']],
+        handlers: { image: onImage, video: onVideo, mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock() },
       },
     },
   });
+  Object.assign(blocks, wireBlocks(quill, Quill));
+  const bar = quill.getModule('toolbar').container;
+  for (const [name, title] of [['mdtable', 'Insert a table'], ['htmlblock', 'Insert an HTML block']]) {
+    const b = bar.querySelector(`.ql-${name}`);
+    if (b) {
+      b.title = title;
+      b.setAttribute('aria-label', title);
+    }
+  }
+  return quill;
 }

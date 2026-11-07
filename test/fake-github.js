@@ -8,7 +8,9 @@ const bytesOf = (c) => (typeof c === 'string' ? enc.encode(c) : c);
 // tags: { repo: [tag names] }; aliases: { repo: { 'v1.0.0': 'main' } } makes a tag or sha resolve to a branch's content.
 // pages: { repo: 'https://…/' } = Pages is on, built, and says so; 'building:https://…/' = on but not deployed yet;
 // 'forbidden' = on, but the token may not read it.
-export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds = {} } = {}) {
+// graphql: false = GraphQL is not available to this token (404); graphqlCutoff: a blob over this many bytes comes back cut short;
+// treeLimit: a tree listing with more entries than this is "truncated", as GitHub does at 100,000.
+export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds = {}, graphql = true, graphqlCutoff = Infinity, treeLimit = Infinity } = {}) {
   const state = {};
   let n = 0;
   const fakeSha = (label) => gitBlobSha(enc.encode(`${label}${++n}`));
@@ -56,6 +58,24 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds 
     }
     if (u.hostname !== 'api.github.com') return text('unexpected host ' + u.hostname, 500);
     if (parts[0] === 'user') return json({ login: 'tester' });
+    if (parts[0] === 'graphql') {
+      if (!graphql) return json({ message: 'Not Found' }, 404);
+      const q = JSON.parse(body).query;
+      const m = /repository\(owner: "([^"]+)", name: "([^"]+)"\)/.exec(q);
+      const R = m && state[`${m[1]}/${m[2]}`];
+      if (!R) return json({ data: { repository: null }, errors: [{ type: 'NOT_FOUND', message: 'Could not resolve to a Repository' }] });
+      const byId = new Map();
+      for (const t of Object.values(R.trees)) for (const e of t.values()) byId.set(e.sha, e);
+      for (const e of Object.values(R.blobs)) byId.set(e.sha, e);
+      const repository = {};
+      const asked = [...q.matchAll(/(b\d+): object\(oid: "([0-9a-f]{40})"\)/g)];
+      for (const [, alias, oid] of asked) {
+        const e = byId.get(oid);
+        repository[alias] = !e ? null : e.bytes.includes(0) ? { text: null, isTruncated: false } : e.bytes.length > graphqlCutoff ? { text: new TextDecoder().decode(e.bytes.slice(0, graphqlCutoff)), isTruncated: true } : { text: new TextDecoder().decode(e.bytes), isTruncated: false };
+      }
+      R.log.push(`POST graphql ${asked.length}`);
+      return json({ data: { repository } });
+    }
     const [, o, r, ...rest] = parts;
     const S = state[`${o}/${r}`];
     if (!S) return notFound();
@@ -103,9 +123,29 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds 
         return json(all.slice((page - 1) * per, page * per));
       }
       if (rest[1] === 'commits' && method === 'GET') return S.commits[rest[2]] ? json({ sha: rest[2], tree: { sha: S.commits[rest[2]].tree } }) : notFound();
+      if (rest[1] === 'blobs' && method === 'GET') {
+        const e = [...Object.values(S.trees).flatMap((t) => [...t.values()]), ...Object.values(S.blobs)].find((x) => x.sha === rest[2]);
+        return e ? json({ sha: e.sha, encoding: 'base64', content: btoa(String.fromCharCode(...e.bytes)) }) : notFound();
+      }
       if (rest[1] === 'trees' && method === 'GET') {
-        const t = S.trees[rest[2]];
-        return json({ truncated: false, tree: [...t].map(([path, e]) => ({ path, type: 'blob', sha: e.sha })) });
+        // a sha is a tree, or "dir:<tree>:<folder/>": a folder of one, which is how a listing one folder at a time is told apart here
+        const [, whole, enc = ''] = /^dir:([0-9a-f]+):(.*)$/.exec(rest[2]) || [null, rest[2]];
+        const folder = enc.replaceAll('|', '/');
+        const t = S.trees[whole];
+        if (!t) return notFound();
+        if (u.searchParams.get('recursive')) {
+          const all = [...t].map(([path, e]) => ({ path, type: 'blob', sha: e.sha }));
+          return json(all.length > treeLimit ? { truncated: true, tree: all.slice(0, treeLimit) } : { truncated: false, tree: all });
+        }
+        const here = new Map();
+        for (const [path, e] of t) {
+          if (!path.startsWith(folder)) continue;
+          const [first, ...more] = path.slice(folder.length).split('/');
+          if (more.length) here.set(first, { path: first, type: 'tree', sha: `dir:${whole}:${`${folder}${first}/`.replaceAll('/', '|')}` });
+          else here.set(first, { path: first, type: 'blob', sha: e.sha });
+        }
+        const list = [...here.values()];
+        return json(list.length > treeLimit ? { truncated: true, tree: list.slice(0, treeLimit) } : { truncated: false, tree: list });
       }
       if (rest[1] === 'blobs') {
         const e = await entry(b.encoding === 'utf-8' ? b.content : Uint8Array.from(atob(b.content), (c) => c.charCodeAt(0)));

@@ -1,4 +1,4 @@
-// blog-webcli import wp <export.xml | https://site> [dir] --repo owner/name[/folder] [--domain https://…] [--uploads <wp-content/uploads copy>] [--no-fetch] [--no-drafts] [--no-library] [--no-comments]
+// blog-webcli import wp <export.xml | https://site> [dir] --repo owner/name[/folder] [--domain https://…] [--uploads <wp-content/uploads copy>] [--no-fetch] [--no-drafts] [--no-library] [--no-comments] [--no-redirects]
 // The same import as the wizard, but from Node: a site's pictures can be fetched whatever its CORS policy, so this is the way to
 // bring every picture across. It writes plain files (blog.json, posts/, pages/, images/) and nothing else: no network write, no
 // commit. Push the pictures, then `pin` and `build` (the pin is the commit the pictures are in, which exists only after the push).
@@ -19,7 +19,7 @@ function parseArgs(args) {
   const pos = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === '--no-drafts' || a === '--no-library' || a === '--no-comments' || a === '--no-fetch') flags[a.slice(5)] = false;
+    if (a === '--no-drafts' || a === '--no-library' || a === '--no-comments' || a === '--no-fetch' || a === '--no-redirects') flags[a.slice(5)] = false;
     else if (a === '--repo' || a === '--domain' || a === '--uploads') flags[a.slice(2)] = args[++i];
     else if (a.startsWith('--')) throw new Refusal('import-refused', `unknown option ${a}`);
     else pos.push(a);
@@ -39,7 +39,7 @@ export async function importWordPress(args, { fetchImpl = (...a) => globalThis.f
   const net = createNet(fetchImpl);
   if (flags.fetch === false && !flags.uploads) throw new Refusal('import-refused', '--no-fetch uses only the --uploads copy, so say where it is');
   const model = /^https?:\/\//i.test(source) ? await readSite(net, source) : await readExport(await fs.readFile(source, 'utf8'));
-  const job = planWp(model, { today: todayIso(), includeDrafts: flags.drafts !== false, includeLibrary: flags.library !== false, includeComments: flags.comments !== false });
+  const job = planWp(model, { today: todayIso(), includeDrafts: flags.drafts !== false, includeLibrary: flags.library !== false, includeComments: flags.comments !== false, redirects: flags.redirects !== false });
   log(`${model.title || source}: ${model.posts.length} posts, ${model.pages.length} pages, ${model.media.length} media files; ${job.images.length} pictures to fetch`);
   let last = 0;
   // a copy of the old site's wp-content/uploads is used first: no network, and no permission needed from the old site
@@ -87,6 +87,7 @@ export async function importWordPress(args, { fetchImpl = (...a) => globalThis.f
 
   const s = out.summary;
   log(`wrote ${s.posts} posts, ${s.drafts} drafts, ${s.pages} pages, ${s.comments} comments, ${s.images} pictures and ${s.files} files (${fmtBytes(s.imageBytes)}) to ${path.resolve(dir)}`);
+  if (s.redirects) log(`${s.redirects} old addresses will keep working: each is listed as an alias of its post, and build writes a small redirect page there (--no-redirects to skip)`);
   if (s.imagesFailed) {
     log(`${s.imagesFailed} pictures and files could not be fetched and stay linked to the old site:`);
     for (const [url, why] of [...failed].slice(0, 10)) log(`  ${url}: ${why}`);

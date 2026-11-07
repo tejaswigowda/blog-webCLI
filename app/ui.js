@@ -95,28 +95,36 @@ export function toast({ kind = 'info', title = '', message = '', links = [], act
   return { close, node };
 }
 
-// Work in progress: an indicator after a short delay (instant work shows none). Returns end().
+// Work in progress: an indicator after a short delay (instant work shows none). Returns end(); end.update(label, { stop }) changes
+// what it says while the work goes on (a long job's progress), and gives it a Stop button when it can be stopped.
 const running = new Set();
 export function busy(label) {
   ensure();
-  const job = { label, timer: null };
+  const job = { label, stop: null, timer: null };
   running.add(job);
   job.timer = setTimeout(draw, ACTIVITY_DELAY);
   function draw() {
     const last = [...running].pop();
     if (!last) return;
-    activity.replaceChildren(spinner(), ' ', last.label, running.size > 1 ? ` (+${running.size - 1})` : '');
+    activity.replaceChildren(spinner(), ' ', last.label, running.size > 1 ? ` (+${running.size - 1})` : '', last.stop ? el('button', { type: 'button', class: 'activity-stop', onclick: last.stop }, 'Stop') : null);
     activity.hidden = false;
   }
-  return () => {
+  const end = () => {
     clearTimeout(job.timer);
     running.delete(job);
     if (!running.size) activity.hidden = true;
     else draw();
   };
+  end.update = (text, { stop = job.stop } = {}) => {
+    job.label = text;
+    job.stop = stop;
+    if (!activity.hidden || !job.timer) draw();
+  };
+  return end;
 }
 
 // Run fn with the indicator, and the pressed button marked busy.
+// fn is given end.update, to report progress.
 export async function working(label, fn, { button = null } = {}) {
   const end = busy(label);
   if (button) {
@@ -124,7 +132,7 @@ export async function working(label, fn, { button = null } = {}) {
     button.setAttribute('aria-busy', 'true');
   }
   try {
-    return await fn();
+    return await fn(end.update);
   } finally {
     end();
     if (button) {

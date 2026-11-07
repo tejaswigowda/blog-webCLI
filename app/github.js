@@ -27,6 +27,11 @@ export function permissionHint(status, method, path, message) {
 const API = 'https://api.github.com';
 const TREE_CHUNK = 1_500_000; // characters of file text in one tree request
 const TREE_ENTRIES = 300; // and files: GitHub times out a request that makes too much at once
+const GRAPHQL_BATCH = 100; // blobs asked for in one GraphQL request (a query costs one point of the hourly limit, whatever it holds)
+export const BULK_AT = 100; // reads or writes above which an operation is long: it waits out the rate limit, reports progress, and can be stopped
+const SHA1 = /^[0-9a-f]{40}$/;
+const stopped = (what) => new Refusal('cancelled', `Stopped. ${what}`);
+const fromBase64 = (b64) => Uint8Array.from(atob(b64.replace(/\s/g, '')), (c) => c.charCodeAt(0));
 const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
 
 export function assertToken(token) {
@@ -62,6 +67,9 @@ export class GitHub {
     this.isCancelled = null;
     this.rate = null; // { remaining, reset } from the latest response
     this.ledgers = new Map();
+    this.onProgress = null; // (what, done, total) => void, told how a long read or send is getting on
+    this.texts = new Map(); // "repo@blob sha" -> the text of a file already read: a blob never changes, so it is never read twice
+    this.noGraphql = false; // GraphQL answered like something this token cannot use: files are read one request each
   }
 
   headers(extra = {}) {
@@ -102,7 +110,7 @@ export class GitHub {
 
   async sleep(seconds) {
     for (let left = Math.ceil(seconds); left > 0; ) {
-      if (this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. What was already sent is kept, and starting again carries on from there.');
+      if (this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. Nothing is committed until every file is sent, so the branch is unchanged; what was already uploaded is remembered, and starting again carries on from there.');
       if (this.onWait) this.onWait(left);
       const tick = Math.min(5, left);
       await this.wait(tick * 1000);
@@ -112,7 +120,7 @@ export class GitHub {
 
   // Close to the hourly limit, wait for it to reset now rather than fail on the next request.
   async pace() {
-    if (this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. What was already sent is kept, and starting again carries on from there.');
+    if (this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. Nothing is committed until every file is sent, so the branch is unchanged; what was already uploaded is remembered, and starting again carries on from there.');
     const r = this.rate;
     if (!r || r.remaining > 3) return;
     this.rate = null;
@@ -156,6 +164,112 @@ export class GitHub {
     if (res.status === 404) return null;
     if (!res.ok) throw new GitHubError(res.status, res.text().slice(0, 200));
     return res.text();
+  }
+
+  // The text of many files at once. items: [{ path, sha }] (the sha is the file's git blob id, from the tree). -> Map(path -> text),
+  // a path with no readable text (gone, or binary) absent. A file already read this session is not read again. Past BULK_AT files
+  // this waits out GitHub's rate limit instead of failing, reports progress (this.onProgress) and stops when this.isCancelled says;
+  // with a token the files come a hundred to a request (GraphQL), without one from the public host, a few at a time.
+  async readMany(repo, items, { ref, concurrency = 6 } = {}) {
+    const out = new Map();
+    const todo = [];
+    for (const it of items) {
+      const hit = it.sha ? this.texts.get(`${repo}@${it.sha}`) : undefined;
+      if (hit !== undefined) out.set(it.path, hit);
+      else todo.push(it);
+    }
+    let done = out.size;
+    const say = () => this.onProgress && this.onProgress('Reading', done, items.length);
+    if (!todo.length) return out;
+    const wasPatient = this.patient;
+    if (todo.length > BULK_AT) this.patient = true;
+    const keep = (it, text) => {
+      if (text === null || text === undefined) return;
+      out.set(it.path, text);
+      if (it.sha) this.texts.set(`${repo}@${it.sha}`, text);
+    };
+    try {
+      say();
+      let rest = todo;
+      if (this.token && !this.noGraphql && todo.length > 20 && todo.every((i) => SHA1.test(i.sha || ''))) {
+        rest = await this.graphqlTexts(repo, todo, (it, text) => {
+          keep(it, text);
+          done++;
+        }, say);
+      }
+      let next = 0;
+      const worker = async () => {
+        while (next < rest.length) {
+          if (this.isCancelled && this.isCancelled()) throw stopped('Nothing was changed.');
+          const it = rest[next++];
+          keep(it, await this.readOne(repo, it, ref));
+          done++;
+          if (done % 10 === 0 || done === items.length) say();
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(concurrency, rest.length) }, worker));
+      say();
+    } finally {
+      this.patient = wasPatient;
+    }
+    return out;
+  }
+
+  // A file just written is a file already read: the next plan will not ask for it.
+  async remember(repo, text) {
+    this.texts.set(`${repo}@${await gitBlobSha(new TextEncoder().encode(text))}`, text);
+  }
+
+  // One file by its blob id (through the API, which waits out limits when asked to) or, with no token, from the public host.
+  async readOne(repo, it, ref) {
+    if (!this.token || !it.sha || !SHA1.test(it.sha)) return this.readText(repo, it.path, ref);
+    try {
+      const blob = await this.api('GET', `/repos/${repo}/git/blobs/${it.sha}`);
+      return new TextDecoder().decode(blob.encoding === 'base64' ? fromBase64(blob.content) : new TextEncoder().encode(blob.content));
+    } catch (e) {
+      if (e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  // The files GraphQL could not give (binary, cut short, not found) come back to be read the other way. A request GraphQL refuses
+  // outright ends its use for the session.
+  async graphqlTexts(repo, items, got, say) {
+    const [owner, name] = repo.split('/');
+    const rest = [];
+    for (let i = 0; i < items.length; i += GRAPHQL_BATCH) {
+      if (this.isCancelled && this.isCancelled()) throw stopped('Nothing was changed.');
+      const batch = items.slice(i, i + GRAPHQL_BATCH);
+      const query = `query { repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { ${batch.map((it, k) => `b${k}: object(oid: "${it.sha}") { ... on Blob { text isTruncated } }`).join(' ')} } }`;
+      let res;
+      for (;;) {
+        try {
+          res = await this.api('POST', '/graphql', { query });
+        } catch (e) {
+          if (e.status === 401 || e.status === 404 || e.status === 403) {
+            this.noGraphql = true;
+            return [...rest, ...items.slice(i)];
+          }
+          throw e;
+        }
+        const limited = res && res.errors && res.errors.some((x) => x.type === 'RATE_LIMITED');
+        if (!limited) break;
+        if (!this.patient) throw new GitHubError(403, 'GraphQL rate limit exceeded');
+        await this.sleep(60);
+      }
+      const repository = res && res.data && res.data.repository;
+      if (!repository) {
+        this.noGraphql = true;
+        return [...rest, ...items.slice(i)];
+      }
+      batch.forEach((it, k) => {
+        const o = repository[`b${k}`];
+        if (o && typeof o.text === 'string' && !o.isTruncated) got(it, o.text);
+        else rest.push(it);
+      });
+      say();
+    }
+    return rest;
   }
 
   // Raw bytes of a file at ref (binary-safe), or null when absent.
@@ -238,8 +352,28 @@ export class GitHub {
 
   async tree(repo, treeSha) {
     const t = await this.api('GET', `/repos/${repo}/git/trees/${treeSha}?recursive=1`);
-    if (t.truncated) throw new Error('Repository tree is too large to list in one request.');
+    if (t.truncated) return this.treeByFolders(repo, treeSha); // a very large repository: one folder at a time
     return new Map(t.tree.filter((e) => e.type === 'blob').map((e) => [e.path, e.sha]));
+  }
+
+  async treeByFolders(repo, sha, prefix = '', out = new Map()) {
+    const t = await this.api('GET', `/repos/${repo}/git/trees/${sha}`);
+    if (t.truncated) throw new Error(`The folder ${prefix || '/'} of this repository is too large to list.`);
+    const folders = [];
+    for (const e of t.tree) {
+      if (e.type === 'blob') out.set(prefix + e.path, e.sha);
+      else if (e.type === 'tree') folders.push(e);
+    }
+    let next = 0;
+    const worker = async () => {
+      while (next < folders.length) {
+        if (this.isCancelled && this.isCancelled()) throw stopped('Nothing was changed.');
+        const f = folders[next++];
+        await this.treeByFolders(repo, f.sha, `${prefix}${f.path}/`, out);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, folders.length) }, worker));
+    return out;
   }
 
   // Latest commit sha touching `path`, or null when the file does not exist.
@@ -360,10 +494,14 @@ export class GitHub {
       size += n;
     }
     let tree = { sha: baseTree };
+    let sent = 0;
     for (const [i, entriesOfChunk] of chunks.entries()) {
-      if (i > 0 && this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. What was already sent is kept, and starting again carries on from there.');
+      if (i > 0 && this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. Nothing is committed until every file is sent, so the branch is unchanged; what was already uploaded is remembered, and starting again carries on from there.');
+      if (this.onProgress && files.length > BULK_AT) this.onProgress('Sending', sent, files.length);
       tree = await this.postTree(repo, tree.sha, entriesOfChunk);
+      sent += entriesOfChunk.length;
     }
+    if (this.onProgress && files.length > BULK_AT) this.onProgress('Sending', files.length, files.length);
     if (skipIfUnchanged && tree.sha === baseTree) return { sha: parent, treeSha: tree.sha, url: `https://github.com/${repo}/commit/${parent}`, unchanged: true };
     const commit = await this.api('POST', `/repos/${repo}/git/commits`, { message, tree: tree.sha, parents: [parent] });
     if (newBranch) await this.api('POST', `/repos/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: commit.sha });

@@ -33,7 +33,9 @@
     ]
   },
   "runtimeBuiltFrom": [
+    "lib/aliases.js",
     "lib/assets.js",
+    "lib/blockrefs.js",
     "lib/blog.js",
     "lib/content.js",
     "lib/contracts.js",
@@ -58,6 +60,7 @@
     "lib/order.js",
     "lib/page.js",
     "lib/pin.js",
+    "lib/rawhtml.js",
     "lib/reporef.js",
     "lib/sanitize.js",
     "lib/search-client.js",

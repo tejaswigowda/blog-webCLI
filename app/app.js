@@ -1,5 +1,5 @@
 import { createNet, fmtBytes } from './net.js';
-import { GitHub, assertToken } from './github.js';
+import { BULK_AT, GitHub, assertToken } from './github.js';
 import { NotFound, describePlan, detectAddress, executePlan, listPageFiles, listPostFiles, listVideoReleases, loadBlog, loadIndex, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planTheme } from './site.js';
 import { createSandbox } from './sandbox.js';
 import { describeRelease, executeRelease, listReleaseFolders, planTagRelease, videoRepositories } from './release.js';
@@ -39,6 +39,29 @@ const runner = (job) => (sandbox ||= createSandbox()).runner(job);
 const KEY = 'blog.webcli.token';
 const gh = new GitHub(net, { token: sessionStorage.getItem(KEY) || localStorage.getItem(KEY), store: localStorage });
 let login = null;
+
+// A long job on a big blog: the activity line says how far it has got and when it is waiting out GitHub's limit, and Stop ends it.
+// Nothing here changes what the job does; a blog too small to need it never sees more than the label.
+const fmtWait = (s) => (s >= 90 ? `${Math.ceil(s / 60)} minutes` : `${s} s`);
+function heavy(label, fn, opts) {
+  return working(label, async (update) => {
+    const what = label.replace(/…$/, '');
+    let stopping = false;
+    const stop = () => {
+      stopping = true;
+      update(`${what} · stopping…`, { stop: null });
+    };
+    const was = { onProgress: gh.onProgress, onWait: gh.onWait, isCancelled: gh.isCancelled };
+    gh.isCancelled = () => stopping;
+    gh.onProgress = (verb, done, total) => update(`${what} · ${verb.toLowerCase()} ${done.toLocaleString()} of ${total.toLocaleString()}`, { stop: total > BULK_AT && !stopping ? stop : null });
+    gh.onWait = (seconds) => update(`${what} · waiting ${fmtWait(seconds)} for GitHub's rate limit`, { stop: stopping ? null : stop });
+    try {
+      return await fn();
+    } finally {
+      Object.assign(gh, was);
+    }
+  }, opts);
+}
 let cache = null; // { repo, ref, blog, lock }
 
 const $ = (s) => document.querySelector(s);
@@ -405,9 +428,9 @@ async function createBlogView(repo, r) {
     go.disabled = true;
     try {
       const fields = Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.value]));
-      const plan = await working('Preparing the blog…', () => planInit(gh, { repo, branch, fields, runner }), { button: go });
+      const plan = await heavy('Preparing the blog…', () => planInit(gh, { repo, branch, fields, runner }), { button: go });
       if (!(await confirmPlan(plan))) return;
-      const receipt = await working('Committing…', () => executePlan(gh, plan), { button: go });
+      const receipt = await heavy('Committing…', () => executePlan(gh, plan), { button: go });
       sent(receipt, { title: 'Blog created', action: { label: 'Open the blog', onClick: () => { cache = null; route(); } } });
     } catch (e) {
       fail(e.status === 409 ? new Error(`${plain} is empty, and GitHub needs one commit before anything else can be written. Add a README on GitHub, then try again.`) : e);
@@ -593,13 +616,13 @@ async function settingsView(repo, r) {
   save.addEventListener('click', async () => {
     save.disabled = true;
     try {
-      const plan = await working('Preparing the changes…', () => planSettings(gh, { repo, branch, form: collect(), runner }), { button: save });
+      const plan = await heavy('Preparing the changes…', () => planSettings(gh, { repo, branch, form: collect(), runner }), { button: save });
       if (plan.unchanged) {
         noted('Nothing to save: the repository already has these settings.');
         return;
       }
       if (!(await confirmPlan(plan))) return;
-      const receipt = await working('Committing…', async () => {
+      const receipt = await heavy('Committing…', async () => {
         const rc = await executePlan(gh, plan);
         cache = null;
         cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
@@ -666,7 +689,7 @@ async function commitPlan(plan, repo, r, button) {
     return;
   }
   if (!(await confirmPlan(plan))) return;
-  const receipt = await working('Committing…', async () => {
+  const receipt = await heavy('Committing…', async () => {
     const rc = await executePlan(gh, plan);
     cache = null;
     cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
@@ -690,7 +713,7 @@ async function themesView(repo, r) {
   const use = async (spec, btn) => {
     btn.disabled = true;
     try {
-      const plan = await working('Preparing the theme…', () => planTheme(gh, { repo, branch, use: spec, runner }), { button: btn });
+      const plan = await heavy('Preparing the theme…', () => planTheme(gh, { repo, branch, use: spec, runner }), { button: btn });
       await commitPlan(plan, repo, r, btn);
     } catch (e) {
       fail(e);
@@ -734,7 +757,7 @@ async function extensionsView(repo, r) {
   const act = async (args, btn) => {
     btn.disabled = true;
     try {
-      const plan = await working('Running the extension in the sandbox…', () => planExtension(gh, { repo, branch, ...args, runner }), { button: btn });
+      const plan = await heavy('Running the extension in the sandbox…', () => planExtension(gh, { repo, branch, ...args, runner }), { button: btn });
       await commitPlan(plan, repo, r, btn);
     } catch (e) {
       fail(e);
@@ -1087,13 +1110,13 @@ async function editorView(repo, r) {
       const creating = isNew;
       const { slug, text, md } = buildText();
       const used = new Set([...text.matchAll(/asset:([^\s)\]]+)/g)].map((x) => x[1]));
-      const plan = await working('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, kind, staged: [...staged.values()].filter((s) => used.has(`${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
+      const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, kind, staged: [...staged.values()].filter((s) => used.has(`${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
       if (!plan.changes.length && !plan.assetGroups.length) {
         noted('Nothing to publish: the repository already matches.');
         return;
       }
       if (!(await confirmPlan(plan))) return;
-      const receipt = await working('Committing…', () => executePlan(gh, plan, { pullBody: note.value.trim() }), { button: go });
+      const receipt = await heavy('Committing…', () => executePlan(gh, plan, { pullBody: note.value.trim() }), { button: go });
       sent(receipt, { title: correcting ? 'Correction proposed' : f.status.value === 'published' ? 'Published' : 'Draft saved' });
       const pushed = [...receipt.commits].reverse().find((c) => c.repo === plainRepo);
       if (!correcting && pushed) {

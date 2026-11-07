@@ -95,14 +95,70 @@ form the converter would write, so `md → Delta → md` is byte-identical:
 | inline | `**bold**` `_italic_` `~~strike~~` `` `code` `` `[text](url)` `![alt](asset:key/path)` |
 | lists | `-` bullets and `1.` numbers, nested with 4 spaces; a blank line between lists of different type |
 | quotes, code | `> ` quotes (`>` between paragraphs), fenced code with optional language |
+| tables | `\| a \| b \|` rows with a `\| --- \| ---: \|` delimiter row: see [Tables](#tables) |
+| HTML blocks | a line that starts with a tag, to the next blank line: see [HTML blocks](#html-blocks) |
 | escapes | `\* \_ \~ \[ \] \< \`` and a leading `\#`, `\-`, `\>`, `\+`, `1\.` are always escaped |
 
-Not offered, and refused rather than approximated: colour, underline, alignment, tables,
-raw HTML, embeds other than images and video releases. If a file is not canonical the editor refuses to open
+Not offered, and refused rather than approximated: colour, underline, text alignment, footnotes, embeds other than
+images and video releases, and any HTML that is not on the [allowlist](#html-blocks). If a file is not canonical the editor refuses to open
 it (`lossy-round-trip`) instead of rewriting it; `blog-webcli fmt` normalises it.
 
 On save the editor drops empty paragraphs and moves formatting off edge whitespace, then
 **proves** the round trip before anything is sent.
+
+### Tables
+
+```
+| Name | Qty | Note |
+| :--- | ---: | :---: |
+| **Apple** | 3 | _fresh_ |
+| a \| b | 10 | [link](https://example.com) |
+```
+
+A table is one line per row, a single space inside each pipe, and a delimiter row of `---`, `:---`, `---:` or `:---:`
+(left, right, centre; no colon is the browser's default). A cell is **one line of inline markdown**: bold, italic,
+strike, code, links and images (`asset:` references are pinned like any image), and a literal pipe is `\|`. A row with
+fewer cells than the header is padded; one with more is refused (`lossy-round-trip`), not truncated. The generator makes a
+real `<table>` with `<thead>`, the alignment as the cell's `align` attribute (which needs no class and no theme), and, for a
+WordPress-contract theme, WordPress's own `wp-block-table` figure. A table's words are counted and searched, and it is never
+taken for the excerpt.
+
+In the editor a table is a block, like a video: the **table** button inserts one, and **Edit table** on a drawn table opens a
+dialog (a grid of cells, an alignment for each column, add and remove rows and columns). The document holds
+`{ mdtable: { head, align, rows } }` only while Quill has it; what is stored is the markdown above. Cells are drawn with DOM
+calls and `textContent`: nothing typed in a cell becomes markup in the editor, which holds the token.
+
+### HTML blocks
+
+```
+<details>
+<summary>More</summary>
+<p>Hidden until opened.</p>
+</details>
+```
+
+A line that starts with an HTML tag starts a block, which runs to the next blank line: so a block keeps its tags together, and a
+blank line inside `<div>…</div>` is refused as an unclosed tag rather than guessed at. This is the one place a post's own markup
+reaches a page, so it is held to an allowlist ([lib/rawhtml.js](lib/rawhtml.js)) and is **never passed through**: the block is
+tokenised, every token is checked, and what reaches the page is re-serialised from the tokens (names lower-cased, every attribute
+value re-escaped, comments dropped).
+
+* **Tags:** `a abbr article aside b blockquote br caption center cite code col colgroup dd del details div dl dt em figcaption
+  figure h1–h6 hr i img ins kbd li mark ol p pre q s section small span strong sub summary sup table tbody td tfoot th thead time
+  tr u ul wbr`. Nothing that runs, loads or submits: no `script`, `style`, `iframe`, `object`, `embed`, `form`, `input`,
+  `button`, `svg`, `math`, `link`, `meta`, `base`, `video`, `audio`.
+* **Attributes:** `class id title lang dir aria-label aria-hidden`, and per tag `href`, `src alt width height`, `colspan rowspan
+  scope align`, `start type reversed`, `value`, `open`, `datetime`. No `style` (use a class and the blog's own CSS), no event
+  handler, no `data-*`.
+* **Addresses** are read as the browser reads them (entities decoded first, so `java&#115;cript:` is `javascript:`), and may be
+  `http(s)`, `mailto` (links), relative, or an `asset:` reference, which is pinned and resolved like an image in a paragraph. A
+  link to a CDN or other provider is `provider-url`, as in a paragraph.
+* Balanced tags only; at most 24 deep and 50,000 characters.
+
+A block that breaks a rule is **refused at publish** (`bad-html`, naming the file and the reason) and nothing is stripped
+silently. A draft is not checked until it is published. In the editor the **HTML** button opens a dialog that says what is wrong
+as you type and will not apply it; the block is drawn as its **source**, never as markup, and blank lines are removed on apply
+(they would end the block; a `<pre>` that depends on them is refused).
 
 ## Creating a blog
 
@@ -158,8 +214,10 @@ picture hosted anywhere else (a stock-photo site, another blog, a hotlinked imag
 entry on another host is skipped, and the review says so. The test is on the host, not on whether the address appears in the export.
 
 The text is converted to what the editor can say, which is what markdown can say: paragraphs, headings (to level 3; deeper ones become level
-3), bold, italic, strike, inline code, links, images, lists, quotes and code blocks. A line break becomes a new paragraph. Anything else is reduced to
-its words, and the review names it per file: a table becomes lines of text with ` | ` between cells, an embedded video or iframe becomes a link, a
+3), bold, italic, strike, inline code, links, images, lists, quotes, code blocks, [tables](#tables) and horizontal rules. A line break becomes a new
+paragraph. A table with a header row and one-line cells becomes a markdown table; any other (merged cells, no header row, a caption, a list in a
+cell) becomes an [HTML block](#html-blocks) holding only the allowed tags, and the review says so. Anything else is reduced to
+its words, and the review names it per file: an embedded video or iframe becomes a link, a
 `[gallery]` becomes its pictures, `[caption]` keeps its picture and words, other shortcodes are dropped, colours and fonts are dropped. Every
 file is checked to survive `md → Delta → md` byte for byte, as every post is, and one that cannot be is imported as plain paragraphs and
 noted.
@@ -194,6 +252,9 @@ again. The same applies to any commit made here with many files.
 **Big commits.** Text goes to GitHub inside the tree requests themselves, at most 1.5 MB or 300 files at a time in a chain, so ten thousand
 pages are a few dozen requests rather than a blob each (a blog of 8,000 posts and its generated site, 139 MB, went up this way); a request that
 GitHub times out is made again as two halves. Only binaries, and a single text file over 1.5 MB, are blobs of their own.
+
+Each post and page also gets its old permalink as an [alias](#old-addresses-redirects), so the old address redirects to the new page (the wizard's
+checkbox, or `--no-redirects`, leaves them out).
 
 The command line takes `--uploads <dir>` for the same copy and `--no-comments`, and `--no-fetch` with `--uploads` to use only the pictures in that copy and leave the rest linked to the old site (the folder may be `uploads`, an earlier import's `images/wp`, or any year). It writes `blog.json`, `posts/`, `pages/` and `images/` and nothing else (options `--domain`, `--no-drafts`, `--no-library`); push the pictures,
 then run `blog-webcli pin` (the pin is the commit the pictures are in) and `build`. The images folder sits beside a blog that has a folder of
@@ -623,6 +684,7 @@ description: Optional; defaults to the first paragraph.
 | `status` | yes | `draft` (in no index, page, feed, sitemap or search) or `published` |
 | `author` | no | text; the blog's `author` if left out. With more than one distinct author the byline links to an author page |
 | `tags` | no | a list of non-empty text, `[a, b]` or one `- item` per line. Each tag of a published post has a page |
+| `aliases` | no | old addresses this page used to have, as paths below the blog's root: `[2020/05/old-post, legacy.html]`. Each gets a [redirect page](#old-addresses-redirects) |
 | `cover` | no | an `asset:` reference, or `auto` (first image, else first video's poster, else the blog `cover`) |
 | `description` | no | text; the first paragraph if left out. Also the `<meta name="description">` and `og:description` |
 | `seo_title` | no | text; the page `<title>` and `og:title`, instead of `Title · Blog` |
@@ -639,6 +701,30 @@ pages share one address space (`slug-collision` for a repeat). Pages are not dra
 
 Frontmatter is a small YAML subset (scalars, inline and block lists, comments). Edits touch one key at a time,
 so a round trip never rewrites what you wrote.
+
+### Old addresses (redirects)
+
+`aliases: [2020/05/old-post]` lists where a post or page used to live. For each, the generator writes a small page at
+`2020/05/old-post/index.html` that sends the reader to the post (`<meta http-equiv="refresh">` and a plain link, relative so it
+works wherever the blog is served), tells a crawler where the page now is (`<link rel="canonical">`, absolute) and says `noindex`.
+A static site cannot answer with a 301; this is what a redirect plugin leaves too. Redirect pages are in no feed, sitemap, search
+or listing; `index/posts.json` records them (`redirects: [{ from, slug }]`), which is how the `/blog/` reader shows the same page
+and follows it, and how the editor deletes one when its alias is removed.
+
+* An alias is a plain path: letters (any script), digits and `. _ ~ -`, at most 8 segments, no query string, scheme or space.
+  `?p=123` addresses cannot be redirected (`bad-alias`). At most 25 per page.
+* It is **refused** (`alias-collision`, naming the file) when it is the page's own address, is claimed by another page, is below a
+  post or page address (a draft's included), or is below something the generator or the repository owns (`tags`, `feed.xml`,
+  `images`, …). A draft's aliases are not written, and not checked against other aliases, until it is published.
+* `blog-webcli build` removes the redirect page of an alias that is gone, and the folders it leaves empty; `check` reports it as
+  stale. Only a page carrying the generator's mark is ever removed.
+* Redirects work only when the new blog is served where the old site was (the blog at the root of the same domain, or the same
+  folder): the path is the old path.
+
+The WordPress importer writes each post's and page's old permalink as its alias (below the blog's own address, if it lived in a
+folder), skips a plain `?p=` address and an address that is already the new one, drops one the new blog uses for something else and
+says so, and counts what it kept. It is on by default; `--no-redirects`, or the wizard's checkbox, turns it off (it is one small
+file per post).
 
 ### Where the browser keeps things
 
@@ -980,12 +1066,13 @@ that true is two tests that fail when it stops being:
   or `style`), attribute order and quoting, and the self-closing form of a void element, plus CRLF and trailing newlines. Anything else (a
   character of text, an attribute value, an element, a comment) is a difference, and `test/normalise.test.js` proves each. A post markdown
   cannot express is refused by both, with the same code (`lossy-round-trip`). The corpus is [test/golden/](test/golden): nested lists, a
-  fence with HTML in it, footnote-, table- and shortcode-shaped text, raw HTML, `asset:` references, a video embed, unicode (CJK, RTL,
+  fence with HTML in it, footnote- and shortcode-shaped text, tables, HTML blocks, `asset:` references, a video embed, unicode (CJK, RTL,
   emoji, combining marks) and a post that is refused; the shared corpus and the example blog are compared as well.
 
-Footnotes, tables, raw HTML blocks and WordPress shortcodes are not in the markdown subset (the toolbar cannot express them), so in a
-canonical post they are escaped text and both renderers show that text, identically; a table becomes one paragraph.
-The importer is where those shapes are converted; its fidelity is therefore measured against this one renderer.
+Footnotes and WordPress shortcodes are not in the markdown subset (the toolbar cannot express them), so in a canonical post they are escaped
+text and both renderers show that text, identically. Tables and HTML blocks are, and go through the same one renderer: the corpus holds a
+table of every alignment and an HTML block of every allowed shape, and an HTML block that is not allowed, which both renderers refuse the same
+way. The importer is where WordPress's shapes are converted; its fidelity is therefore measured against this one renderer.
 
 ## Assets
 
@@ -1314,7 +1401,7 @@ upload, and nothing is uploaded until you confirm.
 `draft-in-publish` · `classic-token` · `unpinned-ref` · `pin-mismatch` · `bad-theme` · `bad-extension` ·
 `no-licence` · `bad-licence` · `not-in-directory` · `extension-output-missing` · `extension-failed` ·
 `unsafe-extension-output` · `bad-release` · `unknown-slug-in-order` · `duplicate-slug-in-order` · `bad-order-list` ·
-`missing-order-field` · `mixed-order-field-types` · `bad-order-field` · `bad-wp-export` · `bad-wp-site` · `import-refused`. A build that is refused writes nothing.
+`missing-order-field` · `mixed-order-field-types` · `bad-order-field` · `bad-html` · `bad-alias` · `alias-collision` · `missing-source` · `bad-wp-export` · `bad-wp-site` · `import-refused`. A build that is refused writes nothing.
 
 ## Gates
 
@@ -1393,16 +1480,55 @@ upload, and nothing is uploaded until you confirm.
 | R9 one shared renderer; a platform-specific import in it fails the build | `test/neutral.test.js` |
 | R10 generator and client output identical across the golden corpus, with a committed normaliser | `test/equivalence.test.js`, `test/normalise.test.js`, `test/live.test.js` (L5) |
 | R11 O1-O10 walked; O3 and O4 demonstrated through the CLI on the example blog | `test/ordering-walk.test.js`, `test/order.test.js` |
+| T1 a table is a fixed point of md → Delta → md, in every alignment, with inline markup, pipes and assets in cells; a ragged row is padded, an over-long one refused | `test/blocks.test.js` (with a fuzz of 400 random tables and 300 random documents) |
+| T2 an HTML block is held to an allowlist and re-serialised: every tag, attribute and address that could run, load, submit or restyle is refused with a reason, and nothing accepted renders anything executable | `test/blocks.test.js` (60 refused shapes, entity-obfuscated schemes, mutation of accepted ones), `test/e2e/blocks.e2e.mjs` |
+| T3 tables and blocks reach a page by the one renderer: generator and client are identical on the golden corpus, and a refused post is refused by both with the same code | `test/equivalence.test.js`, [test/golden/](test/golden) |
+| T4 the editor inserts and edits both in real Chrome, draws neither as markup, will not apply an unsafe block, and saves readable markdown | `test/e2e/blocks.e2e.mjs` |
+| T5 the importer keeps a plain table as a markdown table, any other as an allowed HTML block, a rule as `<hr>`, and a picture that stayed linked stays linked inside them | `test/wp-content.test.js` |
+| A1 an alias is a plain path; one that would write over the site, another page or a draft's address is refused, naming the file | `test/redirects.test.js` |
+| A2 a page at each old address redirects (canonical, refresh, noindex) and is in no feed, sitemap, search or listing; regenerating is byte-identical | `test/redirects.test.js` |
+| A3 the reader shows an old address as the build writes it and follows it; build, check and the editor remove a redirect whose alias is gone, and never a page that is not the generator's | `test/redirects.test.js` |
+| A4 the importer writes old permalinks as aliases, skips `?p=` and addresses already in place, drops conflicts and says so | `test/wp-content.test.js` |
+| K1 a big blog is read a hundred posts to a request, never read twice, with progress; falls back by blob and by public host; waits out the rate limit past 100 files; Stop changes nothing | `test/bulk.test.js` |
+| K2 a repository too big to list in one request is listed a folder at a time | `test/bulk.test.js` |
+| K3 a settings change on 450 posts regenerates every page and commits them in chained trees, one commit, equal to a full build; a new post on a warm cache reads nothing again | `test/bulk.test.js` |
+| K4 in real Chrome the activity line reports reading and sending, Stop is offered, and Stop leaves GitHub unchanged | `test/e2e/bulk.e2e.mjs` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves
 every named import, so a renamed export cannot silently break the browser-only modules.
 
+## Large blogs
+
+A blog of thousands of posts has to be read to be regenerated, and its regenerated pages sent. The editor's bulk path is the same
+code as for a small blog, made to cope:
+
+* **Reading** ([GitHub.readMany](app/github.js)): with a token, files are read a hundred to a request with GraphQL (one point of
+  the hourly limit a request, so 8,000 posts are 80 requests, not 8,000); a file GraphQL cuts short or cannot give as text, or a
+  token GraphQL does not accept, is read by its blob id through the API; without a token the public host is read a few at a time.
+  A file already read in this session is never read again (a blob never changes), and a post the editor has just written is
+  remembered, so publishing a second post on a big blog reads nothing it already has.
+* **Waiting:** past 100 files a job waits out GitHub's rate limit instead of failing, for as long as GitHub says, and stops short of
+  it. A short job still fails fast.
+* **Progress and Stop:** the activity line says *Preparing the changes · reading 4,200 of 8,001*, *Committing · sending 3,000 of
+  9,400* or *waiting 12 minutes for GitHub's rate limit*, with a **Stop** button once there is something to stop. Stop between
+  requests changes nothing on GitHub (a commit is made only after every file is sent; a binary already uploaded is remembered).
+* **Sending:** text goes into the tree requests themselves in a chain of a few megabytes each, so thousands of pages are tens of
+  requests, never a blob each; one commit, so the site is never half changed.
+* **Listing:** a repository whose tree GitHub will not list in one request is listed a folder at a time.
+
+What it does not do: it does not regenerate *less*. Every settings or theme change rewrites every page (they all carry the title,
+the menu and the theme), and a new post changes the listings, which shift every pagination boundary; the cost is only that the
+reading is fast and the send is patient. A repository over what a browser can hold in memory (tens of thousands of long posts) is
+a job for the CLI.
+
 ## Known limits
 
 * **WordPress import:** pictures on a site that does not allow cross-origin reads cannot be fetched by the browser (use the CLI); the REST
-  fallback sees only published posts and pages; a line break inside a paragraph becomes a new paragraph; forms, products and other
-  plugins' content are not imported; a file over 90 MB is left linked to the old site; a blog whose pictures are on an unrelated host (a CDN
+  fallback sees only published posts and pages; a line break inside a paragraph becomes a new paragraph; footnotes, columns, galleries
+  other than `[gallery]`, forms, products and other plugins' content are not imported (a table is kept, as a markdown table or an HTML
+  block; a block with scripts, styles or frames is reduced to its words); old addresses are redirected only for posts and pages
+  (not category, tag, date or attachment addresses) and only when the new blog is served where the old site was; a file over 90 MB is left linked to the old site; a blog whose pictures are on an unrelated host (a CDN
   or storage bucket on another domain) gets its text but not those pictures; links to pages that are not imported still point at the old site; a post's old permalink structure is not
   kept (the new address is `/<slug>/`, so keep the old site up, or redirect, for links from elsewhere).
 

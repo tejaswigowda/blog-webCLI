@@ -49,7 +49,6 @@ test('cli import wp: an export file becomes a blog directory and an images direc
     assert.equal(r.code, 0, r.stderr);
     assert.match(r.stdout, /4 pictures to fetch/);
     assert.match(r.stdout, /wrote 2 posts, 2 drafts, 2 pages, 2 comments, 3 pictures and 1 files/);
-    assert.match(r.stdout, /note: a table was flattened to lines of text/);
     assert.match(r.stdout, /not imported: 1 product/);
     assert.match(r.stdout, /next: commit and push the pictures/);
 
