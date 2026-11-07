@@ -539,8 +539,9 @@ async function settingsView(repo, r) {
     ),
     section(
       'Header and footer',
+      h('div', { class: 'row' }, field('Top bar text', input('topbarText', { placeholder: 'A line above the header' })), field('Top bar links', area('topbarLinks', 3, { placeholder: 'Facebook | https://facebook.com/you | asset:images/facebook.png' }), 'A bar above the header. One per line: Label | https://address, and after another | an icon from your images repository.')),
       h('div', { class: 'row' }, field('Logo', input('logo', { placeholder: 'asset:images/logo.png' }), 'An image already in your images repository; pinned when you save.'), h('div', {}, check('showTitle', 'Show the title next to the logo'))),
-      h('div', { class: 'row' }, field('Header links', area('headerLinks', 3, { placeholder: 'About | https://example.com/about' }), 'One per line: Label | https://address (up to 8)')),
+      h('div', { class: 'row' }, field('Header links', area('headerLinks', 3, { placeholder: 'About | https://example.com/about' }), 'One per line: Label | https://address (up to 8); an icon may follow a second |.')),
       h('div', { class: 'row' }, field('Footer text', input('footerText', { placeholder: '© 2026 Your Name' })), field('Footer links', area('footerLinks', 3, { placeholder: 'Source | https://github.com/you/blog' }))),
     ),
     section('Custom CSS', area('css', 6, { class: 'mono', spellcheck: 'false', placeholder: '.posts h2 { letter-spacing: .02em }' }), h('div', { class: 'hint' }, 'Rules, @media, @supports and @keyframes only. No url(), @import, @font-face or escapes: a stylesheet cannot load anything.')),

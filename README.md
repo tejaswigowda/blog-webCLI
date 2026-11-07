@@ -670,6 +670,8 @@ a closed set; an unknown setting or an out-of-range value is refused (`bad-blog-
               "dark": { "accent": "#5fd3a8", "background": "#101012" } },
   "font": "serif", "headingFont": "sans",
   "width": "42rem", "fontSize": "18px",
+  "topbar": { "text": "Fresh deals every day",
+              "links": [{ "label": "Facebook", "url": "https://facebook.com/me", "icon": "asset:images/facebook.png" }] },
   "header": { "logo": "asset:images/logo.png", "showTitle": true,
               "links": [{ "label": "About", "url": "https://example.com/about" }] },
   "footer": { "text": "© 2026 Ada", "links": [{ "label": "Source", "url": "https://github.com/me/blog" }] },
@@ -684,12 +686,31 @@ a closed set; an unknown setting or an out-of-range value is refused (`bad-blog-
 | `font`, `headingFont` | `serif`, `sans`, `humanist`, `slab`, `mono`: system font stacks. Nothing is loaded from the network. |
 | `width` | `25–80rem`, `400–1280px` or `40–120ch` |
 | `fontSize` | `14–24px` or `0.875–1.5rem` |
+| `topbar` | a bar above the header: `text` (≤ 120 characters) and up to 8 `links`, drawn as `<div class="topbar">` (the default markup contract only) |
 | `header` | `logo` (an `asset:` reference, pinned like any asset; unpinned is `unresolved-asset`), `showTitle` (`false` hides the text when there is a logo), up to 8 `links` (`https:` / `http:` / `mailto:` only) |
-| `footer` | `text` (≤ 200 characters; replaces the author line) and up to 8 `links` |
-| `list` | `layout` `list` or `cards`; `excerpts`, `dates`, `tags` true/false |
-| `css` | ≤ 8000 characters, applied last. Allowed: ordinary rules, `@media`, `@supports`, `@keyframes`. Refused: `url()` and every other resource function, `@import`, `@font-face` and every other at-rule, backslash escapes, `<`, `expression()`, `-moz-binding`, `behavior`, `javascript:` / `data:`. A stylesheet cannot fetch anything or leave its `<style>` element. |
+| `footer` | `text` (≤ 200 characters; replaces the author line, drawn as `<span class="foot-text">`) and up to 8 `links` |
+| link `icon` | any link of `topbar`, `header` or `footer` may carry `"icon": "asset:…"`: a small picture drawn before the label (`<img class="icon">`, the label kept inside a `<span>`), pinned like the logo; an unpinned icon is `unresolved-asset` |
+| `list` | `layout` `list` or `cards`; `excerpts`, `dates`, `tags` true/false. In `cards` a post that has a cover shows it as a thumbnail (`<a class="thumb">`), so a card grid can look like a deals board |
+| `css` | ≤ 16000 characters, applied last. Allowed: ordinary rules, `@media`, `@supports`, `@keyframes`. Refused: `url()` and every other resource function, `@import`, `@font-face` and every other at-rule, backslash escapes, `<`, `expression()`, `-moz-binding`, `behavior`, `javascript:` / `data:`. A stylesheet cannot fetch anything or leave its `<style>` element. |
 
-The header logo is checked once, up front: a logo that is not pinned refuses the whole build.
+The header logo and the link icons are checked once, up front: one that is not pinned refuses the whole build.
+
+### A designed front page
+
+Three small things are enough to build a front page that is more than a title and a list, without a template language or any HTML in
+posts. They are all ordinary content and `blog.json`:
+
+* **`pages/home.md`** (a standalone page with the slug `home`) is the front of the index: its body replaces the title and description, in a
+  `<section class="home">` above the list of posts, on the first page of the index only. `pages/home-after.md` is the same, in a
+  `<section class="home-after">` *under* the list. They are still pages of their own (give them `noindex: true`), the reader preview shows
+  them too, and a blog without them is unchanged. They hold markdown the editor can say: headings, paragraphs, links, images, bold, lists.
+  The generator records them in `index/posts.json` (`home`, `homeAfter`) so that the reader and the live renderer make the same page.
+* **`customize.topbar`, link icons and the `cards` thumbnails** above, with the footer text's own class, are the hooks.
+* **`customize.css`** does the rest: a grid for `.home`, tiles from a list of image-link-text items, badges from `li:has(a[href*="hot-deal"])`,
+  a footer bar. Structure is selected by position (`.home > ul`, `.home > p:nth-child(3)`) because the markup is the page's own markdown.
+
+[the dealsinaz.com recreation](https://github.com/tejaswigowda/dealsinaz) is built this way: a hero, eight category tiles, a card grid
+with badges from tags, a feature strip and a footer bar, in about 10 KB of CSS.
 
 ## Responsive pages
 
@@ -1310,6 +1331,7 @@ upload, and nothing is uploaded until you confirm.
 | W3 pictures: only PNG/JPEG/GIF/WebP/AVIF by their bytes, never an SVG; a failed one stays linked to the old site and is said; nothing identifying is sent | `test/wp-content.test.js`, `test/wp-import-app.test.js`, `test/wp-cli.test.js` |
 | W3b only what is on the blog's own site is fetched: its host, `www`, a subdomain, its own Photon copy; never a lookalike host, a suffix trick, or another site's cover or library entry | `test/wp-content.test.js` |
 | W3c a long import waits out GitHub's rate limit for as long as it asks, stops short of it, can be stopped, and carries on without re-sending what it sent | `test/github-patient.test.js`, `test/wp-import-app.test.js` |
+| F1 a designed front page: link icons pinned like the logo, a top bar, cover thumbnails on cards, the `home` and `home-after` pages above and below the list; the reader's preview of every page of such a blog is still byte-identical; nothing changes for a blog without them | `test/design.test.js` |
 | D1 dates: moment.js, one module, a calendar day in UTC and English whatever the clock or zone; ISO stays in every machine-readable place; `dateFormat` validated and set in Settings | `test/datefmt.test.js` |
 | P1 the /blog/ reader's page is the deployed page: byte-identical for every HTML file of a rich blog (paged, live, search, tags, authors, archive, standalone pages); a draft or unknown address is the site's 404 | `test/preview.test.js`, `test/e2e/order.e2e.mjs` |
 | W3d a site that blocks cross-origin reads is detected after a handful of pictures and the person is offered the ways round it; REST site and tag names are decoded once | `test/wp-import-app.test.js`, `test/wp-content.test.js`, `test/e2e/import.e2e.mjs` |
