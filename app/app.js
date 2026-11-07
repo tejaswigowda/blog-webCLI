@@ -576,6 +576,7 @@ async function settingsView(repo, r) {
       h('div', { class: 'hint' }, 'Search runs in the reader\'s browser against a file written at publish (search.json). It adds one same-origin script, on the search page only; nothing is sent anywhere.'),
       h('div', { class: 'row' }, field('Date format', input('dateFormat', { placeholder: DEFAULT_DATE_FORMAT, list: 'date-formats', spellcheck: 'false' }), h('div', { class: 'hint' }, 'How a post\'s date reads on every page and in the /blog/ reader: a ', outbound('moment.js format', 'https://momentjs.com/docs/#/displaying/format/', { class: 'link' }), ', such as MMM D, YYYY or D MMMM YYYY. YYYY-MM-DD shows the plain date. The preview shows it as you type; feeds and search engines always get the ISO date.'), h('datalist', { id: 'date-formats' }, DATE_FORMAT_EXAMPLES.map((x) => h('option', { value: x }))))),
       h('div', { class: 'row' }, field('Posts per page', input('pageSize', { type: 'number', min: 1, max: 100, placeholder: 'all on one page' }), 'Splits the index and the tag and author pages. The feed and the /blog/ reader still list everything.')),
+      h('div', { class: 'row' }, h('div', {}, check('pageStable', 'Stable page addresses (for a big blog)'), h('div', { class: 'hint' }, 'Counts pages from the oldest post, so publishing a post changes the front page and nothing else, instead of every page: far fewer files to send. The addresses of the older pages (page/1/ is the oldest) then never change. Turning it on or off renames the pages once.'))),
       h('div', { class: 'row' }, field('Email subscribe form posts to', input('subAction', { placeholder: 'https://… (your newsletter provider\'s form address)' }), 'A plain HTML form: the address a reader types goes straight to that service, never through this page. Blank: no form.'), field('Email field name', input('subField', { placeholder: 'email' }))),
       h('details', {}, h('summary', {}, 'Subscribe form wording and hidden fields'), h('div', { class: 'row' }, field('Heading', input('subTitle', { placeholder: 'Subscribe by email' })), field('Button', input('subButton', { placeholder: 'Subscribe' }))), h('div', { class: 'row' }, field('Hidden fields', area('subHidden', 2, { placeholder: 'list=abc123', class: 'mono', spellcheck: 'false' }), 'One per line: name=value, as your provider asks.'))),
     ),
@@ -883,11 +884,29 @@ async function postView(repo, r) {
     h('h1', {}, post.meta.title),
     h('p', { class: 'muted' }, dateEl(post.meta.date, { long: true }), post.meta.author ? ` · ${post.meta.author}` : '', (post.meta.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))),
     body,
-    h('div', { class: 'actions' }, h('button', { icon: 'message', onclick: () => (location.hash = link(repo, `&correct=${post.slug}`)) }, 'Suggest a correction'), gh.token ? h('button', { icon: 'edit', onclick: () => (location.hash = link(repo, `&edit=${post.slug}`)) }, 'Edit') : null),
+    h('div', { class: 'actions' }, h('button', { icon: 'message', onclick: () => (location.hash = link(repo, `&correct=${post.slug}`)) }, 'Suggest a correction'), gh.token ? h('button', { icon: 'edit', onclick: () => (location.hash = link(repo, `&edit=${post.slug}`)) }, 'Edit') : null, gh.token ? h('button', { class: 'danger', icon: 'trash', onclick: (e) => deleteContent(repo, { slug: post.slug, kind: 'post', ref: r.ref, button: e.currentTarget }) }, 'Delete') : null),
   );
 }
 
 // ---------- editing ----------
+
+// Delete a post or page: the same pre-flight and commit as a publish, and the file stays in the repository's history.
+async function deleteContent(repo, { slug, kind, ref, button }) {
+  const { repo: plainRepo } = parseRepoRef(repo);
+  const branch = ref || (await gh.repoInfo(plainRepo)).default_branch;
+  try {
+    const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, kind, remove: true, runner }), { button });
+    if (!(await confirmPlan(plan))) return false;
+    const receipt = await heavy('Committing…', () => executePlan(gh, plan), { button });
+    sent(receipt, { title: kind === 'page' ? 'Page deleted' : 'Post deleted' });
+    cache = null;
+    location.hash = link(repo);
+    return true;
+  } catch (e) {
+    fail(e);
+    return false;
+  }
+}
 
 const slugify = (t) => t.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
 const hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
@@ -992,7 +1011,7 @@ async function editorView(repo, r) {
         isPageKind
           ? h('div', { class: 'row' }, field('Menu position', f.menu, 'A number puts the page in the header menu, lowest first. Leave blank to keep it out of the menu.'), field('Status', f.status))
           : [field('Author', f.author, 'Posts by more than one author get an author page each.'), h('div', { class: 'row' }, field('Date', f.date, dateNote), field('Tags', f.tags), field('Status', f.status))],
-        h('div', { class: 'actions' }, go),
+        h('div', { class: 'actions' }, go, !isNew && !correcting && existing ? h('button', { type: 'button', class: 'danger', icon: 'trash', onclick: (e) => deleteContent(repo, { slug: existing.post.slug, kind, ref: r.ref, button: e.currentTarget }) }, `Delete ${word}`) : null),
         deploy.el,
       ))),
     ),
@@ -1435,15 +1454,16 @@ function confirmPlan(plan) {
     const rows = [...plan.assetGroups.flatMap((g) => g.files.map((x) => ({ ...x, repo: g.repo }))), ...plan.changes.map((c) => ({ ...c, repo: plan.repo }))];
     const SHOWN = 300;
     dlg.replaceChildren(...[
-      h('h2', {}, 'Ready to send'),
+      h('h2', {}, plan.removed ? `Delete this ${plan.kind === 'page' ? 'page' : 'post'}?` : 'Ready to send'),
       h('div', { class: 'preflight' }, describePlan(plan).map((l) => h('div', {}, l))),
       plan.headline ? h('div', { class: 'preflight' }, plan.headline.map((l) => h('div', {}, l))) : null,
       h('div', { class: 'files' }, rows.slice(0, SHOWN).map((c) => h('div', {}, `${c.action.padEnd(6)} ${c.repo}/${c.path}  ${fmtBytes(c.size)}`)), rows.length > SHOWN ? h('div', { class: 'muted' }, `… and ${rows.length - SHOWN} more files`) : null),
       plan.licences ? h('div', {}, h('h3', {}, 'Licences this blog will depend on'), h('div', { class: 'files' }, plan.licences.map((l) => h('div', {}, `${l.kind.padEnd(10)} ${l.name} ${l.version || ''}  ${l.licence}${l.repo ? `  ${l.repo}@${l.ref}` : '  (built in)'}`)))) : null,
       buildNote(plan),
       plan.unlisted && plan.unlisted.length ? h('div', { class: 'caution' }, `${plan.unlisted.length === 1 ? 'This post is' : `${plan.unlisted.length} published posts are`} not in ${plan.orderFile || 'the order list'}, so ${plan.unlisted.length === 1 ? 'it' : 'they'} will be added at the end, by date: ${plan.unlisted.join(', ')}. Add ${plan.unlisted.length === 1 ? 'it' : 'them'} to ${plan.orderFile || 'the list'} to place ${plan.unlisted.length === 1 ? 'it' : 'them'}.`) : null,
+      plan.removed ? h('div', { class: 'caution' }, `"${plan.title}" is removed from the blog and from its index, listings, feed and search. The file stays in the repository's history, so a revert brings it back.`) : null,
       h('p', { class: 'hint' }, plan.mode === 'pr' ? 'This opens a pull request; the default branch is not changed.' : 'Nothing has been uploaded yet.'),
-      h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'git-commit', onclick: () => done(true) }, plan.mode === 'pr' ? 'Open pull request' : 'Commit and push'), h('button', { icon: 'x', onclick: () => done(false) }, 'Cancel')),
+      h('div', { class: 'actions' }, h('button', { class: plan.removed ? 'primary danger' : 'primary', icon: 'git-commit', onclick: () => done(true) }, plan.mode === 'pr' ? 'Open pull request' : plan.removed ? 'Delete and push' : 'Commit and push'), h('button', { icon: 'x', onclick: () => done(false) }, 'Cancel')),
     ].filter(Boolean));
     dlg.addEventListener('cancel', () => done(false), { once: true }); // Esc (see chooseVideo for why not 'close')
     dlg.showModal();

@@ -1,6 +1,7 @@
 {
   "version": 2,
   "generator": "blog-webcli",
+  "generatorId": "blog-webcli@0.5.0",
   "order": {
     "by": "date",
     "dir": "desc"

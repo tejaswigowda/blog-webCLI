@@ -109,7 +109,7 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds 
     }
     if (rest[0] === 'git') {
       const tagList = tags[`${o}/${r}`] || [];
-      if (rest[1] === 'ref' && rest[2] === 'heads') return rest.slice(3).join('/') in S.branches ? json({ ref: `refs/heads/${rest.slice(3).join('/')}` }) : notFound();
+      if (rest[1] === 'ref' && rest[2] === 'heads') return rest.slice(3).join('/') in S.branches ? json({ ref: `refs/heads/${rest.slice(3).join('/')}`, object: { sha: S.branches[rest.slice(3).join('/')], type: 'commit' } }) : notFound();
       if (rest[1] === 'ref' && rest[2] === 'tags') {
         const name = rest.slice(3).join('/');
         // a configured tag points at its alias's branch (or main); a created one at the commit it was made at

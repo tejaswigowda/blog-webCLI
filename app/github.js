@@ -345,7 +345,18 @@ export class GitHub {
     return this.api('GET', `/repos/${repo}/pages/builds/latest`);
   }
 
+  // The branch's head and its tree. Not GET /commits/<branch>, which lists up to 300 of the files the commit changed (a megabyte
+  // after a big regeneration): the ref and the commit are two small requests.
   async headCommit(repo, branch) {
+    try {
+      const ref = await this.api('GET', `/repos/${repo}/git/ref/heads/${encPath(branch)}`);
+      if (ref && ref.object && ref.object.sha) {
+        const c = await this.api('GET', `/repos/${repo}/git/commits/${ref.object.sha}`);
+        return { sha: ref.object.sha, treeSha: c.tree.sha };
+      }
+    } catch (e) {
+      if (e.status !== 404) throw e; // not a branch name (a tag or a commit): ask the way it always was
+    }
     const c = await this.api('GET', `/repos/${repo}/commits/${encodeURIComponent(branch)}`);
     return { sha: c.sha, treeSha: c.commit.tree.sha };
   }

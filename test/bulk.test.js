@@ -234,16 +234,24 @@ test('bulk: a settings change on a blog of 450 posts reads them in batches, rege
   assert.ok(S.commits);
 });
 
-test('bulk: publishing one more post on a big blog, with the posts already read, reads nothing again', async () => {
-  const { server, files } = await world(300);
+test('bulk: publishing one more post on a big blog reads the newest few and the neighbours, not the blog; the second post reads almost nothing', async () => {
+  const { server } = await world(300);
   const gh = clientFor(server);
-  const text = (n) => post(n);
-  const first = await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'p300', text: text(300), create: true });
+  const reads = (since) => logOf(server).slice(since).filter((l) => /graphql|contents\/posts|git\/blobs/.test(l));
+  const first = await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'p300', text: post(300), create: true });
+  const firstReads = reads(0);
+  assert.ok(firstReads.length <= 2 && firstReads.every((l) => /graphql (\d+)/.test(l) ? Number(/graphql (\d+)/.exec(l)[1]) <= 55 : true), `one batch of the newest posts and their neighbours, not 300: ${firstReads}`);
+  assert.ok(first.changes.some((c) => c.path === 'p300/index.html'));
   await executePlan(gh, first);
   const mark = logOf(server).length;
-  const second = await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'p301', text: text(301), create: true });
-  const after = logOf(server).slice(mark);
-  assert.deepEqual(after.filter((l) => /graphql|contents\/posts|git\/blobs/.test(l)), [], 'every post but the new one was already in hand');
+  const second = await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'p301', text: post(301), create: true });
+  assert.ok(reads(mark).length <= 3, `almost nothing is read again: ${reads(mark)}`);
   assert.ok(second.changes.some((c) => c.path === 'p301/index.html'));
   assert.ok(first.changes.length < 120 && second.changes.length < 120, `a new post changes pages, not the whole site (${second.changes.length})`);
+  // what lands is what a full build makes
+  await executePlan(gh, second);
+  const now = server.files('example/blog');
+  const posts_ = Object.entries(now).filter(([p]) => /^posts\//.test(p)).map(([path, text]) => ({ path, text }));
+  const want = buildSite({ blog: now['blog.json'], posts: posts_, lock: JSON.parse(now['assets.lock.json']) });
+  for (const [p, c] of Object.entries(want.files)) assert.equal(now[p], c, p);
 });

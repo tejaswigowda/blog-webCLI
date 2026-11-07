@@ -592,6 +592,7 @@ the default.
 |---|---|---|
 | `search` | `true` adds `search/` and `search.json` (see [Site features](#site-features)) | no search page, no script on any page for it |
 | `pagination.size` | a whole number from 1 to 100: posts per page of the index, and of each tag and author page | one list. A list that fits on one page is not split |
+| `pagination.stable` | `true`: pages are counted from the oldest post, so a new post changes the front page and no other ([Pagination](#search-pagination-seo)) | `false`: page 1 is the newest `size` posts |
 | `seo.twitter` | a handle like `@ada`, written as `twitter:site` in link previews | none |
 | `seo.sitemap` | `false` stops writing `sitemap.xml` | written |
 | `seo.robots` | `false` stops writing `robots.txt` | written, but only when `domain` has no path: a robots file is read only at the root of a host |
@@ -1221,13 +1222,34 @@ author page pages the same way under its own folder (`tags/video/page/2/`). Page
 `<link rel="next">` and a "Previous page / Page 2 of 5 / Next page" row; the ends have no link, not a disabled one.
 `index/posts.json`, the feed and the `/blog/` reader are never paginated: they are the whole blog.
 
+**Stable page addresses.** By default page 1 is the newest `size` posts, so a new post moves every boundary and changes every page of the
+index, of every tag and of every author: on a blog of thousands of posts that is tens of megabytes for one post. With
+`"pagination": { "size": 10, "stable": true }` (a checkbox in Settings; the importer sets it for a blog of more than 50 posts) pages are
+counted from the **oldest** post: the front page holds the newest posts (between `size` and twice that), and each older page is a fixed run
+of `size` posts at an address that never changes (`page/1/` is the oldest). A new post changes the front page and nothing else; when the
+front page has grown by a whole page, one older page appears. An older page says "Page 12", not "Page 12 of 800", and does not give the
+tag's total post count, since that would change it every time. `rel="prev"` and `rel="next"` are as before. Turning it on or off renames
+the pages once (every `page/N/` becomes a different set of posts), so it suits a blog nobody links to by page number; a post's own address
+never changes.
+
 **Search.** With `"search": true`, `search/` has a box, and `search.json` has the title, date, tags, excerpt and the
 first 20 000 characters of text of every published post. The one script on that page (`webcli-search.js`, built by
 `node cli/build-live.js` from [lib/search-client.js](lib/search-client.js)) fetches that file from the same origin and
 matches in the reader's browser: nothing is sent anywhere, and results are drawn as text, never markup. Every term must match;
 a term in the title counts most, then tags, excerpt, body; ties keep the blog's order. `search/?q=…` works as a link.
 Without scripting the page says so and points at the archive. The search page is `noindex` and not in the sitemap. The
-index is as of the last build, not the live copy.
+index is as of the last build, not the live copy. A blog of **more than 500 posts** keeps the index in **16 shards**
+(`search/data-0.json` … `data-15.json`, by a hash of the slug) listed by `search.json`, so a new post changes one file of about a
+megabyte in ten thousand posts and not the whole index; the search page reads the list and every shard, and equal scores then keep the
+newest first rather than the blog's order.
+
+**Index.** A blog of more than 500 posts keeps `index/posts.json` as a small manifest (version 3: the order, the pages, the old addresses)
+plus 16 shards `index/posts-N.json` holding the entries, split by the same hash as the search shards, so a new post changes the manifest and
+one shard. `lib/index-data.js` reads either form and returns the same index; the build, the live script, the reader and the editor all use it.
+A smaller blog is one file, as before.
+
+**Feed.** `feed.xml` holds the **newest 50 posts** in the blog's order (a feed reader wants the latest; a blog of thousands would
+otherwise publish a feed of tens of megabytes that every publish rewrites).
 
 **Sitemap and robots.** `sitemap.xml` lists the home page, posts (with their authored dates), pages, the archive and
 the tag and author pages, in a fixed order. A post with `noindex`, or with a `canonical` address that is not its own, is
@@ -1397,6 +1419,12 @@ upload, and nothing is uploaded until you confirm.
 * **Corrections**: "Suggest a correction" opens the editor on the post body (or, for a standalone page, `#…&correctpage=slug`); submitting opens
   a pull request on a new branch (default branch untouched). Without write access the app
   links to GitHub's own fork-and-edit page.
+* **Deleting**: *Delete* on a post's page, and *Delete post* / *Delete page* in the editor, plan the removal like a publish: the pre-flight
+  ("Delete this post?") lists every file that goes (the source, its generated page, any old-address redirects) and those that change
+  (the index and its shards, the listings, the feed, the sitemap, search), *Cancel* sends nothing, and *Delete and push* makes one
+  commit. What is left is exactly what a build of the remaining posts gives (a big blog is updated incrementally, as for a publish).
+  A hand-kept `order.json` that named the post loses the entry in the same commit. The file stays in the repository's history, so
+  reverting that commit brings it back. Links in other posts to a deleted post are not rewritten.
 * **The editor**: *New post* and *New page* open the same editor (Quill, restricted to what markdown can express). A post
   has title, slug, cover, description, date, tags, author and status; a page has a menu position instead of date, tags and
   author. *Search and sharing* (collapsed) holds the search title, share image, canonical address and `noindex`. *Pages* on
@@ -1473,6 +1501,7 @@ upload, and nothing is uploaded until you confirm.
 | W3b only what is on the blog's own site is fetched: its host, `www`, a subdomain, its own Photon copy; never a lookalike host, a suffix trick, or another site's cover or library entry | `test/wp-content.test.js` |
 | W3c a long import waits out GitHub's rate limit for as long as it asks, stops short of it, can be stopped, and carries on without re-sending what it sent | `test/github-patient.test.js`, `test/wp-import-app.test.js` |
 | F1 a designed front page: link icons pinned like the logo, a top bar, cover thumbnails on cards, the `home` and `home-after` pages above and below the list; the reader's preview of every page of such a blog is still byte-identical; nothing changes for a blog without them | `test/design.test.js` |
+| X1 delete: a post or page goes with its generated page and redirects, out of the index, feed, sitemap and search; the rest equals a build of the remaining posts (small and big blog, a hand-kept order list); deleting what is not there is refused; Cancel sends nothing | `test/delete.test.js`, `test/e2e/delete.e2e.mjs` |
 | D1 dates: moment.js, one module, a calendar day in UTC and English whatever the clock or zone; ISO stays in every machine-readable place; `dateFormat` validated and set in Settings | `test/datefmt.test.js` |
 | P1 the /blog/ reader's page is the deployed page: byte-identical for every HTML file of a rich blog (paged, live, search, tags, authors, archive, standalone pages); a draft or unknown address is the site's 404 | `test/preview.test.js`, `test/e2e/order.e2e.mjs` |
 | W3d a site that blocks cross-origin reads is detected after a handful of pictures and the person is offered the ways round it; REST site and tag names are decoded once | `test/wp-import-app.test.js`, `test/wp-content.test.js`, `test/e2e/import.e2e.mjs` |
@@ -1503,6 +1532,10 @@ upload, and nothing is uploaded until you confirm.
 | K2 a repository too big to list in one request is listed a folder at a time | `test/bulk.test.js` |
 | K3 a settings change on 450 posts regenerates every page and commits them in chained trees, one commit, equal to a full build; a new post on a warm cache reads nothing again | `test/bulk.test.js` |
 | K4 in real Chrome the activity line reports reading and sending, Stop is offered, and Stop leaves GitHub unchanged | `test/e2e/bulk.e2e.mjs` |
+| K5 publishing one post of a big blog builds only what changes and equals a full build, for every kind of edit and for 24 random edits applied one on another; what it cannot be sure of is declined with the reason | `test/incremental.test.js`, `test/bulk.test.js` |
+| K6 a big blog's search index is in shards that together hold every post, the search page reads them all in real Chrome, and a small blog is as it was; the feed holds the newest 50 | `test/incremental.test.js`, `test/e2e/search-shards.e2e.mjs` |
+| K7 stable page addresses: older pages are fixed runs counted from the oldest, a new post changes only the front page (index, tags, authors), every post is on exactly one page, an incremental publish sends a handful of files; the default numbering is unchanged | `test/incremental.test.js` |
+| K8 a big blog's index is a manifest plus shards that the build, the live script, the reader and the editor read back as the same index; a publish changes the manifest and one shard | `test/incremental.test.js`, `test/bulk.test.js` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves
@@ -1527,10 +1560,26 @@ code as for a small blog, made to cope:
   requests, never a blob each; one commit, so the site is never half changed.
 * **Listing:** a repository whose tree GitHub will not list in one request is listed a folder at a time.
 
-What it does not do: it does not regenerate *less*. Every settings or theme change rewrites every page (they all carry the title,
-the menu and the theme), and a new post changes the listings, which shift every pagination boundary; the cost is only that the
-reading is fast and the send is patient. A repository over what a browser can hold in memory (tens of thousands of long posts) is
-a job for the CLI.
+**Publishing one post** does not read or build the blog ([lib/incremental.js](lib/incremental.js)). The committed files already say what the
+rest of it is: `index/posts.json` holds every post's entry and the resolved order, so a change to one post needs that post, the posts whose
+previous/next links change (the two beside it, before and after), and the newest 50 for the feed. Everything made of the index (the listing
+pages, the tag, author and archive pages, the feed, the sitemap, the index itself) is made again from the new index **by the same functions
+the full build uses**, the search shard the post belongs to is spliced, and only the files that differ from what is committed are sent. On
+the 8,000-post blog this is 0.4 s instead of 4.5 s and reads 50 posts and one shard instead of 8,000 posts; editing a post in the middle
+changes 5 files, and a new newest post changes about 1,260 (39 MB) with the default pagination, because every page of a position-numbered
+listing shifts by one (a larger `pageSize` does not help: the pages together stay the same size). With
+[stable page addresses](#search-pagination-seo) it is **12 files (4.7 MB)**: the archive and the sitemap (each one file), the search shard,
+the feed, and the index's manifest and one shard.
+It is **declined**, and the whole blog built as before, when it cannot be sure of the answer: the committed index was written by another
+version of the generator, the blog uses extensions, a hand-kept or field order, a small blog (under 300 posts), a search index not in shards,
+a standalone page, or a change that alters the header of every page (the first tag in the blog, a second author). A test holds it equal:
+[test/incremental.test.js](test/incremental.test.js) applies each kind of edit, and 24 random edits one on another, to a blog with
+pagination, tags, authors, cards, search shards, a sitemap and old addresses, and requires the files to be exactly a full build's; the same
+holds on the real 8,000-post blog.
+
+What it does not do: it does not send *less* when everything changes. Every settings or theme change rewrites every page (they all carry
+the title, the menu and the theme), and a new newest post shifts every pagination boundary; the cost there is only that the reading is
+fast and the send is patient. A repository over what a browser can hold in memory (tens of thousands of long posts) is a job for the CLI.
 
 ## Known limits
 

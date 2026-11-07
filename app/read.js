@@ -8,6 +8,7 @@ import { deltaToHtml } from '../lib/html.js';
 import { videoEmbedUrl } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { DEFAULT_ORDER, parseOrderList, resolveOrder, sequenceOf } from '../lib/order.js';
+import { readIndex } from '../lib/index-data.js';
 
 export class NotFound extends Error {}
 
@@ -33,9 +34,8 @@ export async function loadBlog(gh, where, ref) {
 // same module, from `blog` when the caller has it.
 export async function loadIndexFull(gh, where, ref, { blog = null } = {}) {
   const { repo, folder } = parseRepoRef(where);
-  const text = await gh.readText(repo, at(folder, 'index/posts.json'), ref);
-  if (text !== null) {
-    const index = JSON.parse(text);
+  const index = await readIndex((p) => gh.readText(repo, at(folder, p), ref));
+  if (index !== null) {
     // Take the recorded sequence as it is: look each slug up, never compare two posts. (An entry the sequence does
     // not name, which a hand-edited index could have, follows in the order the file gives.)
     const byslug = new Map(index.posts.map((e) => [e.slug, e]));

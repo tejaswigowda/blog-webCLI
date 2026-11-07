@@ -49,6 +49,7 @@
     "lib/extensions.js",
     "lib/frontmatter.js",
     "lib/html.js",
+    "lib/index-data.js",
     "lib/init.js",
     "lib/licence.js",
     "lib/licences.js",

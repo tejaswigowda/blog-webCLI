@@ -1,6 +1,10 @@
 // Reader and publisher cores. No DOM: the UI calls these, and so do the tests.
 import { Refusal } from '../lib/errors.js';
 import { BULK_AT } from './github.js';
+import { CannotRebuild, loadSite } from '../lib/live-render.js';
+import { prepareIncremental } from '../lib/incremental.js';
+import { readIndex } from '../lib/index-data.js';
+import { joinFile, setMeta, splitFile } from '../lib/frontmatter.js';
 import { PAGE_PATH, POST_PATH, GENERATED_TREES, OPTIONAL_GENERATED, parsePost, validateBlog } from '../lib/blog.js';
 import { buildSiteWith } from '../lib/build-async.js';
 import { parseOutputsFile } from '../lib/extensions.js';
@@ -43,13 +47,13 @@ const sortLock = (lock) => Object.fromEntries(Object.entries(lock).sort(([a], [b
 // The site for a blog.json and its posts: the pinned theme and extensions are fetched and verified,
 // recorded extension outputs are read from the repository, and any output still missing is
 // produced by `runner` (the sandbox) — or refused when there is none.
-async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner }) {
+async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner, orderText }) {
   const blog = validateBlog(blogText);
   const packs = await loadPacks(gh, blog);
   const recorded = tree.has('extension-outputs.json') ? await gh.readText(repo, prefix + 'extension-outputs.json', head.sha) : null;
   // a manual order is an authored file (order.json) beside blog.json; the generator reads it, never writes it
   const order = resolveOrder(blog);
-  const orderList = order.by === 'manual' && tree.has(order.list) ? await gh.readText(repo, prefix + order.list, head.sha) : null;
+  const orderList = orderText !== undefined ? orderText : order.by === 'manual' && tree.has(order.list) ? await gh.readText(repo, prefix + order.list, head.sha) : null;
   const site = await buildSiteWith({ blog: blogText, posts, lock, ...packs, outputs: parseOutputsFile(recorded), orderList }, runner);
   if (site.errors.length) {
     const e = new Refusal(site.errors[0].code, site.errors.map((x) => x.detail + (x.where ? ` (${x.where})` : '')).join('\n'));
@@ -82,9 +86,69 @@ async function readPosts(gh, { repo, prefix, head, tree, paths }) {
 }
 
 // `tree` is relative to the blog's folder; `prefix` puts the changes back where they live in the repository.
-async function computeChanges(gh, { blogText, others, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head, runner }) {
+// A change to one post of a big blog is made from the committed index and the few posts it touches (lib/incremental.js); anything that
+// cannot be made that way, and a small blog, is made from every post, as it always was.
+async function incrementalChanges(gh, ctx) {
+  const { newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head } = ctx;
+  if (!prevIndex || !POST_PATH.test(newPost.path) || !tree.has('licences.json') || ctx.noIncremental) return null;
+  const get = async (p) => {
+    const t = await gh.readText(repo, prefix + p, head.sha);
+    return t === null ? null : enc.encode(t);
+  };
+  try {
+    ctx.site ||= await loadSite(get, { index: prevIndex, anyBlog: true });
+  } catch (e) {
+    if (e instanceof CannotRebuild) return null;
+    throw e;
+  }
+  const slugs = new Set([...tree.keys()].map((p) => (POST_PATH.exec(p) || PAGE_PATH.exec(p) || [])[1]).filter(Boolean));
+  const slug = POST_PATH.exec(newPost.path)[1];
+  slugs.add(slug);
+  const prep = prepareIncremental({ site: ctx.site, change: { path: newPost.path, text: newPost.text }, lock, slugs, existing: new Set(tree.keys()) });
+  if (prep.reason) {
+    ctx.noIncremental = true;
+    return null;
+  }
+  const shas = prep.need.slugs.map((s) => ({ path: prefix + `posts/${s}.md`, sha: tree.get(`posts/${s}.md`) }));
+  const read = await gh.readMany(repo, shas, { ref: head.sha });
+  const texts = new Map(prep.need.slugs.map((s) => [s, read.get(prefix + `posts/${s}.md`)]));
+  if ([...texts.values()].some((t) => t === undefined)) throw new Refusal('missing-source', 'a post the blog lists could not be read; try again');
+  const files = new Map();
+  for (const f of prep.need.files) {
+    const t = await gh.readText(repo, prefix + f, head.sha);
+    if (t === null) {
+      ctx.noIncremental = true;
+      return null;
+    }
+    files.set(f, t);
+  }
+  let res;
+  try {
+    res = prep.run({ texts, files });
+  } catch (e) {
+    if (e instanceof Refusal) throw e;
+    ctx.noIncremental = true; // the committed files are not what the index says they are: build all of it
+    return null;
+  }
+  const out = { ...res.files, [newPost.path]: newPost.text };
+  if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
+  const changes = [];
+  for (const [path, content] of Object.entries(out)) {
+    const bytes = enc.encode(content);
+    if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
+  }
+  for (const path of res.remove) if (tree.has(path)) changes.push({ path: prefix + path, delete: true, size: 0, action: 'delete' });
+  return { site: { files: out, index: null, unlisted: [] }, changes };
+}
+
+async function computeChanges(gh, ctx) {
+  const inc = await incrementalChanges(gh, ctx);
+  if (inc) return inc;
+  const { blogText, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head, runner } = ctx;
+  ctx.others ||= await readPosts(gh, { repo, prefix, head, tree, paths: ctx.otherPaths });
+  const others = ctx.others;
   const posts = [...others, { path: newPost.path, text: newPost.text }];
-  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner });
+  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner, orderText: ctx.orderText });
   const out = { ...site.files, [newPost.path]: newPost.text };
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
   const changes = [];
@@ -111,7 +175,9 @@ async function computeChanges(gh, { blogText, others, newPost, lock, lockChanged
 
 // staged: [{ key, path, bytes: Uint8Array }] images the author added and has not uploaded.
 // kind: 'post' (posts/<slug>.md) or 'page' (pages/<slug>.md, a standalone page).
-export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', runner }) {
+// remove: delete posts/<slug>.md (or pages/<slug>.md). It is planned as the post going back to a draft, which already takes a post out of the
+// index, the listings, the feed, the sitemap and search, and removes its generated page and redirects; then the source file goes too.
+export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, runner }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -127,11 +193,25 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   // a post and a page share one address space: the second to claim a slug is refused
   const other = `${kind === 'page' ? 'posts' : 'pages'}/${slug}.md`;
   if (create && tree.has(other)) throw new Refusal('slug-collision', `${other} already uses "${slug}"; posts and pages share one address space`);
+  let orderText;
+  if (remove) {
+    if (!tree.has(target)) throw new Refusal('missing-source', `${target} does not exist, so there is nothing to delete`);
+    const was = await gh.readText(repo, prefix + target, head.sha);
+    if (was === null) throw new Refusal('missing-source', `${target} could not be read`);
+    const { front, body } = splitFile(was, target);
+    text = joinFile(setMeta(front, 'status', 'draft'), body);
+    // a hand-kept order that names the post would refuse the build once the file is gone
+    const order = resolveOrder(blog);
+    if (kind === 'post' && order.by === 'manual' && tree.has(order.list)) {
+      const list = await gh.readText(repo, prefix + order.list, head.sha);
+      const o = JSON.parse(list);
+      if (Array.isArray(o.order) && o.order.includes(slug)) orderText = json({ ...o, order: o.order.filter((s) => s !== slug) });
+    }
+  }
   const newPost = parsePost({ path: target, text });
   if (newPost.lossy) throw newPost.lossy.at(target);
 
   const otherPaths = [...tree.keys()].filter((p) => isContent(p) && p !== target);
-  const others = await readPosts(gh, { repo, prefix, head, tree, paths: otherPaths });
 
   const stagedByKey = new Map(staged.map((s) => [`${s.key}/${s.path}`, s]));
   const pending = [];
@@ -169,10 +249,15 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
     }
   }
 
-  const prevIndexText = tree.has('index/posts.json') ? await gh.readText(repo, prefix + 'index/posts.json', head.sha) : null;
-  const prevIndex = prevIndexText ? JSON.parse(prevIndexText) : null;
-  const ctx = { blogText, others, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, runner };
+  const prevIndex = tree.has('index/posts.json') ? await readIndex((p) => gh.readText(repo, prefix + p, head.sha)) : null;
+  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, runner, orderText };
   const { site, changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
+  if (remove) {
+    const gone = changes.findIndex((c) => c.path === prefix + target);
+    if (gone >= 0) changes.splice(gone, 1);
+    changes.push({ path: prefix + target, delete: true, size: 0, action: 'delete' });
+    if (orderText !== undefined) changes.push({ path: prefix + resolveOrder(blog).list, content: orderText, size: enc.encode(orderText).length, action: 'update' });
+  }
 
   const assetGroups = [];
   for (const s of staged.filter((s) => pending.includes(`${s.key}/${s.path}`))) {
@@ -193,7 +278,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const sizeOf = (f) => f.size;
   summary.push({ repo, folder, branch: mode === 'pr' ? `new branch from ${branch}` : branch, files: changes.length, bytes: changes.reduce((n, f) => n + sizeOf(f), 0) });
 
-  return { repo, folder, branch, mode, slug, kind, path: target, status: newPost.status, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
+  return { repo, folder, branch, mode, slug, kind, path: target, removed: remove, status: newPost.status, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
 }
 
 // Commit a (new or changed) blog.json together with the site regenerated from it: every page
@@ -398,7 +483,7 @@ export async function executePlan(gh, plan, { pullBody = '' } = {}) {
   if (plan.pending.length) ({ changes } = await computeChanges(gh, { ...plan.ctx, lock: finalLock, lockChanged: true }));
   if (!changes.length) return receipt;
 
-  const verb = plan.mode === 'pr' ? 'Correct' : plan.status === 'draft' ? 'Draft' : plan.existed ? 'Update' : 'Publish';
+  const verb = plan.removed ? 'Delete' : plan.mode === 'pr' ? 'Correct' : plan.status === 'draft' ? 'Draft' : plan.existed ? 'Update' : 'Publish';
   const message = plan.message || `${verb}: ${plan.title}`;
   const newBranch = plan.mode === 'pr' ? `correction/${plan.slug}-${Date.now().toString(36)}` : null;
   // thousands of files are a long send: wait out GitHub's limits rather than fail halfway
