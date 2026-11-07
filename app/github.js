@@ -1,6 +1,7 @@
 // Minimal GitHub client: raw reads for public repos, REST for everything with a token,
 // and the Git Data API for multi-file commits.
 import { Refusal } from '../lib/errors.js';
+import { varyPath } from '../lib/live.js';
 
 export class GitHubError extends Error {
   constructor(status, message, hint = '') {
@@ -33,6 +34,15 @@ const SHA1 = /^[0-9a-f]{40}$/;
 const stopped = (what) => new Refusal('cancelled', `Stopped. ${what}`);
 const fromBase64 = (b64) => Uint8Array.from(atob(b64.replace(/\s/g, '')), (c) => c.charCodeAt(0));
 const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
+
+// A file read without a token comes from GitHub's raw host, which keeps each address for minutes whatever the request says: reading
+// `index/posts.json` a minute after a publish would give the old one (a new file, never asked for before, would be current). The path
+// is chosen at random among the spellings that name the same file (lib/live.js varyPath), so the read is of the file as it is now.
+// A name with anything beyond letters, digits and . _ - / is sent as it is.
+export function rawUrl(repo, ref, path) {
+  const plain = (t) => /^[A-Za-z0-9._/-]+$/.test(t);
+  return `https://raw.githubusercontent.com/${repo}/${plain(ref || 'HEAD') ? varyPath(ref || 'HEAD') : encodeURIComponent(ref)}/${plain(path) ? varyPath(path) : encPath(path)}`;
+}
 
 export function assertToken(token) {
   if (/^ghp_/.test(token)) {
@@ -160,7 +170,7 @@ export class GitHub {
       ? await this.net.request(`${API}/repos/${repo}/contents/${encPath(path)}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`, {
           headers: this.headers({ Accept: 'application/vnd.github.raw+json' }),
         })
-      : await this.net.request(`https://raw.githubusercontent.com/${repo}/${encodeURIComponent(ref || 'HEAD')}/${encPath(path)}`);
+      : await this.net.request(rawUrl(repo, ref, path));
     if (res.status === 404) return null;
     if (!res.ok) throw new GitHubError(res.status, res.text().slice(0, 200));
     return res.text();
@@ -276,7 +286,7 @@ export class GitHub {
   async readBytes(repo, path, ref) {
     const res = this.token
       ? await this.net.request(`${API}/repos/${repo}/contents/${encPath(path)}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`, { headers: this.headers({ Accept: 'application/vnd.github.raw+json' }) })
-      : await this.net.request(`https://raw.githubusercontent.com/${repo}/${encodeURIComponent(ref || 'HEAD')}/${encPath(path)}`);
+      : await this.net.request(rawUrl(repo, ref, path));
     if (res.status === 404) return null;
     if (!res.ok) throw new GitHubError(res.status, res.text().slice(0, 200));
     return res.bytes;
