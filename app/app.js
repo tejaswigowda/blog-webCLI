@@ -35,7 +35,7 @@ const net = createNet();
 let sandbox = null;
 const runner = (job) => (sandbox ||= createSandbox()).runner(job);
 const KEY = 'blog.webcli.token';
-const gh = new GitHub(net, { token: sessionStorage.getItem(KEY) || localStorage.getItem(KEY) });
+const gh = new GitHub(net, { token: sessionStorage.getItem(KEY) || localStorage.getItem(KEY), store: localStorage });
 let login = null;
 let cache = null; // { repo, ref, blog, lock }
 

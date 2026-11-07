@@ -96,7 +96,12 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds 
         const sha = S.tagRefs[name] || (tagList.includes(name) ? S.branches[(aliases[`${o}/${r}`] || {})[name] || 'main'] : null);
         return sha ? json({ ref: `refs/tags/${name}`, object: { sha, type: 'commit' } }) : notFound();
       }
-      if (rest[1] === 'matching-refs') return json([...new Set([...tagList, ...Object.keys(S.tagRefs)])].map((t) => ({ ref: `refs/tags/${t}` })));
+      if (rest[1] === 'matching-refs') {
+        const all = [...new Set([...tagList, ...Object.keys(S.tagRefs)])].map((t) => ({ ref: `refs/tags/${t}` }));
+        const per = Number(u.searchParams.get('per_page')) || 30; // as GitHub: 30 a page unless asked for more
+        const page = Number(u.searchParams.get('page')) || 1;
+        return json(all.slice((page - 1) * per, page * per));
+      }
       if (rest[1] === 'commits' && method === 'GET') return S.commits[rest[2]] ? json({ sha: rest[2], tree: { sha: S.commits[rest[2]].tree } }) : notFound();
       if (rest[1] === 'trees' && method === 'GET') {
         const t = S.trees[rest[2]];
@@ -112,9 +117,11 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds 
         for (const t of b.tree) {
           if (t.sha === null) next.delete(t.path);
           else if (t.content !== undefined) next.set(t.path, await entry(t.content));
+          else if (!S.blobs[t.sha]) return json({ message: `GitRPC::BadObjectState: tree.sha ${t.sha} does not exist` }, 422);
           else next.set(t.path, S.blobs[t.sha]);
         }
-        const sha = await fakeSha('tree');
+        // as git: a tree is named by what is in it, so the same files make the same tree
+        const sha = await gitBlobSha(enc.encode(`tree\n${[...next].sort(([x], [y]) => (x < y ? -1 : 1)).map(([p, e]) => `${p}\0${e.sha}`).join('\n')}`));
         S.trees[sha] = next;
         return json({ sha }, 201);
       }

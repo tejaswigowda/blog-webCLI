@@ -4,13 +4,16 @@ import { Refusal } from '../lib/errors.js';
 import { buildSite, validateBlog } from '../lib/blog.js';
 import { blogJsonText, makeBlogJson } from '../lib/init.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
-import { IMAGES_KEY, MAX_IMAGE_BYTES, sniffImage } from '../lib/wp-content.js';
+import { IMAGES_KEY, MAX_FILE_BYTES, acceptFile } from '../lib/wp-content.js';
 import { PER_PAGE, RESOURCES, restBase, restModel } from '../lib/wp-rest.js';
 import { parseWxr } from '../lib/wxr.js';
 import { fmtBytes } from './net.js';
 import { PLACEHOLDER_SHA, detectAddress } from './site.js';
 
 const enc = new TextEncoder();
+// one commit of pictures holds at most this many files, or about this many bytes (a single larger file is a commit of its own)
+export const BATCH_FILES = 200;
+export const BATCH_BYTES = 150 * 1024 * 1024;
 const json = (o) => JSON.stringify(o, null, 2) + '\n';
 export const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -58,31 +61,53 @@ export async function readSite(net, address, { onProgress = () => {} } = {}) {
   return restModel(data, { today: todayIso() });
 }
 
-// Brings the pictures across: { fetched: Map(url -> bytes), failed: Map(url -> why) }. A few at a time; each one is read
-// whole, checked by what it starts with (never by what the server said it is) and refused if it is too big.
-export async function fetchImages(net, images, { onProgress = () => {}, concurrency = 4, isCancelled = () => false } = {}) {
+// The path of a file below wp-content/uploads, which is how a folder of the old site's uploads names it: "2024/05/cat.jpg".
+export const uploadsPath = (url) => {
+  try {
+    const p = decodeURIComponent(new URL(url).pathname);
+    const at = p.indexOf('/wp-content/uploads/');
+    return at >= 0 ? p.slice(at + '/wp-content/uploads/'.length) : null;
+  } catch {
+    return null;
+  }
+};
+
+// Brings the pictures and files across: { fetched: Map(url -> bytes), failed: Map(url -> why) }. A few at a time; each one is
+// read whole and checked by what it starts with (never by what the server said it is). `local(url)` may supply a file the person
+// already has (a copy of the old site's uploads folder) and is tried first: that needs no permission from the old site.
+export async function fetchImages(net, images, { onProgress = () => {}, concurrency = 4, isCancelled = () => false, local = null, probe = 30 } = {}) {
   const fetched = new Map();
   const failed = new Map();
   let next = 0;
   let bytes = 0;
+  let blocked = false;
+  let network = 0; // refused as a browser refuses a cross-origin read
   const worker = async () => {
-    while (next < images.length && !isCancelled()) {
+    while (next < images.length && !isCancelled() && !blocked) {
       const im = images[next++];
       try {
-        const res = await net.fetchRemote(im.url, { max: MAX_IMAGE_BYTES });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        if (!sniffImage(res.bytes)) throw new Error('it is not a PNG, JPEG, GIF, WebP or AVIF picture');
-        fetched.set(im.url, res.bytes);
-        bytes += res.bytes.length;
+        let got = local ? await local(im.url) : null;
+        if (got && !acceptFile(im.path, got)) got = null;
+        if (!got) {
+          const res = await net.fetchRemote(im.url, { max: MAX_FILE_BYTES });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          got = res.bytes;
+          if (!acceptFile(im.path, got)) throw new Error(/\.(?:png|jpe?g|gif|webp|avif)$/i.test(im.path) ? 'it is not a PNG, JPEG, GIF, WebP or AVIF picture' : 'it is a web page, not the file');
+        }
+        fetched.set(im.url, got);
+        bytes += got.length;
       } catch (e) {
         // a browser reports a refused cross-origin read as a bare network error: say what that means here
+        if (e instanceof TypeError) network++;
         failed.set(im.url, e instanceof TypeError ? "the old site does not let other web pages read its files (or is not reachable)" : e.message);
+        // the first few all refused that way, none read: the rest would only be thousands more of the same, so stop and say so
+        if (probe && !fetched.size && failed.size >= probe && network === failed.size) blocked = true;
       }
       onProgress({ done: fetched.size + failed.size, total: images.length, bytes, failed: failed.size });
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, images.length) }, worker));
-  return { fetched, failed };
+  return { fetched, failed, blocked };
 }
 
 // ---------- the pre-flight ----------
@@ -92,7 +117,7 @@ const sortedLock = (lock) => Object.fromEntries(Object.entries(lock).sort(([a], 
 
 // blogs: [{ folder, fields: { title, description, author }, files: [{ path, text }], assets: [{ path, bytes }] }]
 // `where` is owner/repo (or owner/repo/folder, below which each blog takes its folder). Refuses to touch a blog that exists.
-export async function planImport(gh, { where, branch, blogs }) {
+export async function planImport(gh, { where, branch, blogs, limits = {} }) {
   const base = parseRepoRef(where);
   const { repo } = base;
   const head = await gh.headCommit(repo, branch);
@@ -135,13 +160,26 @@ export async function planImport(gh, { where, branch, blogs }) {
   }
   changes.sort((x, y) => (x.path < y.path ? -1 : 1));
 
+  // The pictures and files go in commits of a bounded size, so a library of thousands (or of gigabytes) is never one commit
+  // too big to make; each file is pinned to the commit it is in.
   const assetGroups = [];
   if (assetMap.size) {
-    const files = [...assetMap].sort(([x], [y]) => (x < y ? -1 : 1)).map(([logical, content]) => ({ path: at(imageRef.folder, logical), key: IMAGES_KEY, logical, content, size: content.length, action: whole.has(at(imageRef.folder, logical)) ? 'update' : 'add' }));
-    assetGroups.push({ repo: imageRef.repo, branch, files });
+    const all = [...assetMap].sort(([x], [y]) => (x < y ? -1 : 1)).map(([logical, content]) => ({ path: at(imageRef.folder, logical), key: IMAGES_KEY, logical, content, size: content.length, action: whole.has(at(imageRef.folder, logical)) ? 'update' : 'add' }));
+    let batch = [];
+    let bytes = 0;
+    for (const f of all) {
+      if (batch.length && (batch.length >= (limits.files || BATCH_FILES) || bytes + f.size > (limits.bytes || BATCH_BYTES))) {
+        assetGroups.push({ repo: imageRef.repo, branch, files: batch });
+        batch = [];
+        bytes = 0;
+      }
+      batch.push(f);
+      bytes += f.size;
+    }
+    if (batch.length) assetGroups.push({ repo: imageRef.repo, branch, files: batch });
   }
   const summary = [];
-  for (const g of assetGroups) summary.push({ repo: g.repo, branch: g.branch, files: g.files.length, bytes: g.files.reduce((n, f) => n + f.size, 0) });
+  if (assetGroups.length) summary.push({ repo: imageRef.repo, branch, files: assetMap.size, bytes: assetGroups.reduce((n, g) => n + g.files.reduce((m, f) => m + f.size, 0), 0) });
   summary.push({ repo, branch, files: changes.length, bytes: changes.reduce((n, f) => n + f.size, 0) });
   const posts = blogs.reduce((n, b) => n + b.files.filter((f) => f.path.startsWith('posts/')).length, 0);
   const pages = blogs.reduce((n, b) => n + b.files.filter((f) => f.path.startsWith('pages/')).length, 0);
@@ -160,17 +198,30 @@ export async function planImport(gh, { where, branch, blogs }) {
     head,
     changes,
     assetGroups,
+    requests: assetMap.size + 5 * (assetGroups.length + 1) + 8, // one per picture or file, a few per commit
     summary,
     blogs: planned,
     pending: [],
     lockPlan: {},
-    headline: [`${blogs.length} blog${blogs.length === 1 ? '' : 's'}: ${posts} post${posts === 1 ? '' : 's'}/drafts, ${pages} page${pages === 1 ? '' : 's'}, ${assetMap.size} image${assetMap.size === 1 ? '' : 's'} (${fmtBytes([...assetMap.values()].reduce((n, x) => n + x.length, 0))})`],
+    headline: [`${blogs.length} blog${blogs.length === 1 ? '' : 's'}: ${posts} post${posts === 1 ? '' : 's'}/drafts, ${pages} page${pages === 1 ? '' : 's'}, ${assetMap.size} image${assetMap.size === 1 ? '' : 's'} and file${assetMap.size === 1 ? '' : 's'} (${fmtBytes([...assetMap.values()].reduce((n, x) => n + x.length, 0))}${assetGroups.length > 1 ? `, in ${assetGroups.length} commits` : ''})`],
   };
 }
 
 // Images first, in one commit (its sha is what every picture is pinned to), then every blog, regenerated with those pins,
 // in a second. Returns the receipt the editor shows.
+// Slow and resumable: GitHub's hourly limit is waited out (gh.patient), and a blob already sent is remembered (gh.ledger), so
+// stopping, or a failure, and starting again carries on instead of beginning again.
 export async function executeImport(gh, plan, { onProgress = () => {} } = {}) {
+  const before = gh.patient;
+  gh.patient = true;
+  try {
+    return await runImport(gh, plan, onProgress);
+  } finally {
+    gh.patient = before;
+  }
+}
+
+async function runImport(gh, plan, onProgress) {
   const receipt = { commits: [], pull: null };
   const lock = {};
   let parent = plan.head.sha;
@@ -183,7 +234,8 @@ export async function executeImport(gh, plan, { onProgress = () => {} } = {}) {
       parent: shared ? parent : h.sha,
       baseTree: shared ? baseTree : h.treeSha,
       files: g.files.map((f) => ({ path: f.path, content: f.content })),
-      message: `Add ${g.files.length} image${g.files.length === 1 ? '' : 's'} from WordPress`,
+      skipIfUnchanged: true,
+      message: `Add ${g.files.length} image${g.files.length === 1 ? '' : 's/files'} from WordPress${plan.assetGroups.length > 1 ? ` (${plan.assetGroups.indexOf(g) + 1} of ${plan.assetGroups.length})` : ''}`,
       onProgress: (done, total) => onProgress({ phase: 'images', done, total }),
     });
     receipt.commits.push({ repo: g.repo, branch: g.branch, ...c, files: g.files.length });
@@ -210,6 +262,7 @@ export async function executeImport(gh, plan, { onProgress = () => {} } = {}) {
     baseTree,
     files,
     message: plan.message,
+    skipIfUnchanged: true,
     onProgress: (done, total) => onProgress({ phase: 'files', done, total }),
   });
   receipt.commits.push({ repo: plan.repo, branch: plan.branch, ...c, files: files.length });

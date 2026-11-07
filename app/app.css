@@ -42,6 +42,7 @@ label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:4px}
 .row{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem}
 .row>div{flex:1;min-width:10rem}
 .row input,.row select{width:100%}
+pre.code{background:var(--code);padding:.7rem .9rem;border-radius:6px;overflow:auto;font-size:.85rem;margin:.6rem 0}
 .err,.ok{border-radius:7px;padding:10px 14px;margin:.75rem 0;white-space:pre-wrap;font-size:.85rem}
 .err{color:var(--warn);background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3)}
 .err b{display:block}

@@ -6,6 +6,7 @@ export class GitHubError extends Error {
   constructor(status, message, hint = '') {
     super(`GitHub ${status}: ${message}${hint ? `\n\n${hint}` : ''}`);
     this.status = status;
+    this.retrySeconds = 0; // when GitHub said how long to wait (Retry-After, or the hourly limit's reset)
   }
 }
 
@@ -49,11 +50,16 @@ export async function gitBlobSha(bytes) {
 }
 
 export class GitHub {
-  constructor(net, { token = null, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  constructor(net, { token = null, store = null, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
     this.net = net;
     this.token = token;
+    this.store = store; // localStorage-like: remembers which blobs a repository already has, so an interrupted upload resumes
     this.wait = wait;
-    this.onWait = null; // (seconds) => void, told when a write is being retried after a rate limit
+    this.onWait = null; // (seconds) => void, told when a request is being retried after a rate limit
+    this.patient = false; // a long upload: wait out any rate limit until GitHub says go, however long, instead of failing
+    this.isCancelled = null;
+    this.rate = null; // { remaining, reset } from the latest response
+    this.ledgers = new Map();
   }
 
   headers(extra = {}) {
@@ -65,12 +71,25 @@ export class GitHub {
   // GitHub throttles content creation (a secondary rate limit, answered 403 or 429). A video upload is
   // many blobs, so wait it out and retry the same request, as hls.webcli.app does, rather than fail
   // halfway through. Reads and other errors are not retried.
+  // In patient mode (a long import) it waits for exactly as long as GitHub says, reads included, and stops short of the
+  // limit instead of running into it.
   async api(method, path, body) {
+    let waited = 0;
     for (let attempt = 0; ; attempt++) {
+      if (this.patient) await this.pace();
       try {
         return await this.request(method, path, body);
       } catch (e) {
-        const limited = method !== 'GET' && (e.status === 403 || e.status === 429) && /rate limit/i.test(e.message);
+        const rateLimited = (e.status === 403 || e.status === 429) && /rate limit/i.test(e.message);
+        if (this.patient) {
+          const seconds = Math.min(Math.max(e.retrySeconds || 70, 5), 3700);
+          if (!rateLimited || waited + seconds > 4 * 3600) throw e;
+          this.rate = null; // this wait is the one that counts; do not wait again for the same limit
+          waited += seconds;
+          await this.sleep(seconds);
+          continue;
+        }
+        const limited = method !== 'GET' && rateLimited;
         if (!limited || attempt >= 4) throw e;
         const seconds = 70 * (attempt + 1);
         if (this.onWait) this.onWait(seconds);
@@ -79,12 +98,36 @@ export class GitHub {
     }
   }
 
+  async sleep(seconds) {
+    for (let left = Math.ceil(seconds); left > 0; ) {
+      if (this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. What was already sent is kept, and starting again carries on from there.');
+      if (this.onWait) this.onWait(left);
+      const tick = Math.min(5, left);
+      await this.wait(tick * 1000);
+      left -= tick;
+    }
+  }
+
+  // Close to the hourly limit, wait for it to reset now rather than fail on the next request.
+  async pace() {
+    if (this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. What was already sent is kept, and starting again carries on from there.');
+    const r = this.rate;
+    if (!r || r.remaining > 3) return;
+    this.rate = null;
+    const seconds = r.reset - Date.now() / 1000 + 2;
+    if (seconds > 0) await this.sleep(Math.min(seconds, 3700));
+  }
+
   async request(method, path, body) {
     const res = await this.net.request(`${API}${path}`, {
       method,
       headers: this.headers(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    const header = (n) => (res.headers && res.headers.get ? res.headers.get(n) : null);
+    const remaining = header('x-ratelimit-remaining');
+    const reset = Number(header('x-ratelimit-reset'));
+    if (remaining !== null && remaining !== undefined && reset) this.rate = { remaining: Number(remaining), reset };
     if (!res.ok) {
       let msg = res.text().slice(0, 200);
       try {
@@ -92,7 +135,11 @@ export class GitHub {
       } catch {
         /* keep raw text */
       }
-      throw new GitHubError(res.status, msg, permissionHint(res.status, method, path, msg));
+      const err = new GitHubError(res.status, msg, permissionHint(res.status, method, path, msg));
+      const after = Number(header('retry-after'));
+      if (after > 0) err.retrySeconds = after + 1;
+      else if (remaining === '0' && reset) err.retrySeconds = Math.max(0, Math.ceil(reset - Date.now() / 1000)) + 2;
+      throw err;
     }
     return res.status === 204 ? null : res.json();
   }
@@ -162,10 +209,15 @@ export class GitHub {
     return (await this.api('GET', `/repos/${repo}/git/commits/${obj.sha}`)).tree.sha;
   }
 
-  // Tag names of a repository ("clip/v3"), newest first is the caller's business.
+  // Tag names of a repository ("clip/v3"), newest first is the caller's business. GitHub returns 30 at a time unless asked for more.
   async tags(repo) {
-    const refs = await this.api('GET', `/repos/${repo}/git/matching-refs/tags`);
-    return refs.map((r) => r.ref.replace(/^refs\/tags\//, ''));
+    const names = [];
+    for (let page = 1; page <= 50; page++) {
+      const refs = await this.api('GET', `/repos/${repo}/git/matching-refs/tags?per_page=100&page=${page}`);
+      names.push(...refs.map((r) => r.ref.replace(/^refs\/tags\//, '')));
+      if (refs.length < 100) break;
+    }
+    return names;
   }
 
   repoInfo(repo) {
@@ -194,8 +246,50 @@ export class GitHub {
     return list.length ? list[0].sha : null;
   }
 
+  // The blobs a repository is known to have (by their git sha), kept for three days: GitHub drops blobs no commit refers to.
+  ledger(repo) {
+    if (!this.ledgers.has(repo)) {
+      let data = {};
+      try {
+        data = JSON.parse((this.store && this.store.getItem(`blog.webcli.blobs:${repo}`)) || '{}');
+      } catch {
+        data = {};
+      }
+      const cutoff = Date.now() - 3 * 86400e3;
+      for (const k of Object.keys(data)) if (!(data[k] > cutoff)) delete data[k];
+      this.ledgers.set(repo, data);
+    }
+    return this.ledgers.get(repo);
+  }
+
+  saveLedger(repo) {
+    try {
+      if (this.store) this.store.setItem(`blog.webcli.blobs:${repo}`, JSON.stringify(this.ledger(repo)));
+    } catch {
+      /* storage full or unavailable: the upload still works, it just cannot be resumed */
+    }
+  }
+
   // files: [{ path, content: string | Uint8Array } | { path, delete: true }]
-  async commit(repo, { branch, parent, baseTree, files, message, newBranch = false, onProgress = () => {} }) {
+  // skipIfUnchanged: when the result is the tree the branch already has, make no commit (an import carried on after a stop).
+  async commit(repo, opts) {
+    try {
+      return await this.commitOnce(repo, opts, true);
+    } catch (e) {
+      // a remembered blob that GitHub no longer has (a repository that was deleted and made again): forget them, send everything
+      if (e.status === 422 && this.reused && !/fast forward/i.test(e.message)) {
+        this.ledgers.set(repo, {});
+        this.saveLedger(repo);
+        return this.commitOnce(repo, opts, false);
+      }
+      throw e;
+    }
+  }
+
+  async commitOnce(repo, { branch, parent, baseTree, files, message, newBranch = false, skipIfUnchanged = false, onProgress = () => {} }, useLedger) {
+    this.reused = 0;
+    const ledger = this.ledger(repo);
+    let sinceSave = 0;
     // Small text goes into the tree request itself; binaries, and text past about 2 MB in all, become blobs of their own,
     // a few at a time, so a large import is neither one enormous request nor one request after another.
     let budget = 2_000_000;
@@ -206,21 +300,44 @@ export class GitHub {
     });
     const entries = new Array(files.length);
     let next = 0;
+    let broken = false;
     const worker = async () => {
-      while (next < files.length) {
-        const i = next++;
-        const f = files[i];
-        onProgress(i, files.length); // as before: how many were started before this one
-        if (f.delete) entries[i] = { path: f.path, mode: '100644', type: 'blob', sha: null };
-        else if (inline[i]) entries[i] = { path: f.path, mode: '100644', type: 'blob', content: f.content };
-        else {
-          const blob = await this.api('POST', `/repos/${repo}/git/blobs`, typeof f.content === 'string' ? { content: f.content, encoding: 'utf-8' } : { content: toBase64(f.content), encoding: 'base64' });
-          entries[i] = { path: f.path, mode: '100644', type: 'blob', sha: blob.sha };
+      try {
+        while (next < files.length && !broken) {
+          const i = next++;
+          const f = files[i];
+          onProgress(i, files.length); // as before: how many were started before this one
+          if (f.delete) entries[i] = { path: f.path, mode: '100644', type: 'blob', sha: null };
+          else if (inline[i]) entries[i] = { path: f.path, mode: '100644', type: 'blob', content: f.content };
+          else {
+            const bytes = typeof f.content === 'string' ? new TextEncoder().encode(f.content) : f.content;
+            const known = await gitBlobSha(bytes);
+            if (useLedger && ledger[known]) {
+              this.reused++;
+              entries[i] = { path: f.path, mode: '100644', type: 'blob', sha: known };
+            } else {
+              const blob = await this.api('POST', `/repos/${repo}/git/blobs`, typeof f.content === 'string' ? { content: f.content, encoding: 'utf-8' } : { content: toBase64(f.content), encoding: 'base64' });
+              entries[i] = { path: f.path, mode: '100644', type: 'blob', sha: blob.sha };
+              ledger[blob.sha] = Date.now();
+              if (++sinceSave >= 25) {
+                sinceSave = 0;
+                this.saveLedger(repo);
+              }
+            }
+          }
         }
+      } catch (e) {
+        broken = true; // the others finish the file they are on, and take no more
+        throw e;
       }
     };
-    await Promise.all(Array.from({ length: Math.min(4, files.length) }, worker));
+    // every worker is let finish what it is doing, so what was sent is all remembered before a failure is reported
+    const results = await Promise.allSettled(Array.from({ length: Math.min(this.patient ? 3 : 4, files.length) }, worker));
+    this.saveLedger(repo);
+    const bad = results.find((r) => r.status === 'rejected');
+    if (bad) throw bad.reason;
     const tree = await this.api('POST', `/repos/${repo}/git/trees`, { base_tree: baseTree, tree: entries });
+    if (skipIfUnchanged && tree.sha === baseTree) return { sha: parent, treeSha: tree.sha, url: `https://github.com/${repo}/commit/${parent}`, unchanged: true };
     const commit = await this.api('POST', `/repos/${repo}/git/commits`, { message, tree: tree.sha, parents: [parent] });
     if (newBranch) await this.api('POST', `/repos/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: commit.sha });
     else await this.api('PATCH', `/repos/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, { sha: commit.sha });

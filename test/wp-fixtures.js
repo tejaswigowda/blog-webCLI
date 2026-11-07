@@ -35,7 +35,8 @@ let b = 2;</code></pre>
 <p>See <a href="https://old.example.org/2024/06/second-post/">the second post</a> and <a href="/about-us/">about</a>.</p>
 <table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>
 <iframe src="https://www.youtube.com/embed/abc"></iframe>
-<p>Elsewhere: <img src="https://other.example.net/pic.png" alt="far"></p>]]></content:encoded>
+<p>Elsewhere: <img src="https://other.example.net/pic.png" alt="far"></p>
+<p>Read <a href="https://old.example.org/wp-content/uploads/2022/01/paper.pdf">the paper</a>.</p>]]></content:encoded>
     <excerpt:encoded><![CDATA[A short excerpt.]]></excerpt:encoded>
     <wp:post_id>10</wp:post_id>
     <wp:post_date>2024-05-02 09:30:00</wp:post_date>
@@ -46,6 +47,12 @@ let b = 2;</code></pre>
     <category domain="category" nicename="uncategorized"><![CDATA[Uncategorized]]></category>
     <category domain="post_tag" nicename="video-git"><![CDATA[Video, Git]]></category>
     <wp:postmeta><wp:meta_key><![CDATA[_thumbnail_id]]></wp:meta_key><wp:meta_value><![CDATA[31]]></wp:meta_value></wp:postmeta>
+    <wp:comment><wp:comment_id>1</wp:comment_id><wp:comment_author><![CDATA[Zed]]></wp:comment_author><wp:comment_author_email><![CDATA[zed@private.example]]></wp:comment_author_email><wp:comment_author_IP>203.0.113.9</wp:comment_author_IP><wp:comment_date>2024-05-03 10:00:00</wp:comment_date><wp:comment_content><![CDATA[Nice <b>post</b>!
+
+Second paragraph.]]></wp:comment_content><wp:comment_approved>1</wp:comment_approved><wp:comment_type></wp:comment_type><wp:comment_parent>0</wp:comment_parent></wp:comment>
+    <wp:comment><wp:comment_id>2</wp:comment_id><wp:comment_author><![CDATA[Ada Example]]></wp:comment_author><wp:comment_date>2024-05-04 08:00:00</wp:comment_date><wp:comment_content><![CDATA[Thanks, Zed.]]></wp:comment_content><wp:comment_approved>1</wp:comment_approved><wp:comment_type>comment</wp:comment_type><wp:comment_parent>1</wp:comment_parent></wp:comment>
+    <wp:comment><wp:comment_id>3</wp:comment_id><wp:comment_author><![CDATA[Spammer]]></wp:comment_author><wp:comment_date>2024-05-05 08:00:00</wp:comment_date><wp:comment_content><![CDATA[Buy things]]></wp:comment_content><wp:comment_approved>spam</wp:comment_approved><wp:comment_type></wp:comment_type><wp:comment_parent>0</wp:comment_parent></wp:comment>
+    <wp:comment><wp:comment_id>4</wp:comment_id><wp:comment_author><![CDATA[Some blog]]></wp:comment_author><wp:comment_date>2024-05-06 08:00:00</wp:comment_date><wp:comment_content><![CDATA[Pingback text]]></wp:comment_content><wp:comment_approved>1</wp:comment_approved><wp:comment_type>pingback</wp:comment_type><wp:comment_parent>0</wp:comment_parent></wp:comment>
   </item>
 
   <item>

@@ -31,6 +31,7 @@ async function oldSite() {
     const p = decodeURIComponent(req.url);
     if (p.endsWith('/cat.jpg') || p.endsWith('/My Unused Photo.JPG')) return res.writeHead(200).end(Buffer.from(PNG));
     if (p.endsWith('/dog.jpg')) return res.writeHead(200).end(Buffer.from(JPG));
+    if (p.endsWith('/paper.pdf')) return res.writeHead(200).end(Buffer.from('%PDF-1.4 a paper'));
     res.writeHead(404).end('no');
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -46,14 +47,14 @@ test('cli import wp: an export file becomes a blog directory and an images direc
     const blog = path.join(tmp, 'blog');
     const r = await cli('import', 'wp', path.join(tmp, 'export.xml'), blog, '--repo', 'me/site/blog');
     assert.equal(r.code, 0, r.stderr);
-    assert.match(r.stdout, /3 pictures to fetch/);
-    assert.match(r.stdout, /wrote 2 posts, 2 drafts, 2 pages and 3 pictures/);
+    assert.match(r.stdout, /4 pictures to fetch/);
+    assert.match(r.stdout, /wrote 2 posts, 2 drafts, 2 pages, 2 comments, 3 pictures and 1 files/);
     assert.match(r.stdout, /note: a table was flattened to lines of text/);
     assert.match(r.stdout, /not imported: 1 product/);
     assert.match(r.stdout, /next: commit and push the pictures/);
 
     assert.deepEqual(await walk(blog), ['blog.json', 'pages/about-us.md', 'pages/tags-wp.md', 'posts/hello-welcome.md', 'posts/not-ready.md', 'posts/second-post.md', 'posts/secret.md']);
-    assert.deepEqual(await walk(path.join(tmp, 'images')), ['wp/2022/01/My-Unused-Photo.JPG', 'wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg'], 'the pictures sit beside a blog that has a folder of its own');
+    assert.deepEqual(await walk(path.join(tmp, 'images')), ['wp/2022/01/My-Unused-Photo.JPG', 'wp/2022/01/paper.pdf', 'wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg'], 'the pictures sit beside a blog that has a folder of its own');
     const bj = JSON.parse(await fs.readFile(path.join(blog, 'blog.json'), 'utf8'));
     assert.equal(bj.repo, 'me/site/blog');
     assert.equal(bj.title, 'Ada & Friends');
@@ -90,7 +91,7 @@ test('cli import wp: options, a blog at the top of a repository, and plain refus
     const blog = path.join(tmp, 'top');
     const r = await cli('import', 'wp', path.join(tmp, 'export.xml'), blog, '--repo', 'me/blog', '--no-drafts', '--no-library', '--domain', 'https://blog.example');
     assert.equal(r.code, 0, r.stderr);
-    assert.deepEqual(await walk(path.join(blog, 'images')), ['wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg'], 'no library, and the pictures sit inside a blog at the top of a repository');
+    assert.deepEqual(await walk(path.join(blog, 'images')), ['wp/2022/01/paper.pdf', 'wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg'], 'no library, and the pictures sit inside a blog at the top of a repository');
     assert.ok(!(await walk(blog)).some((f) => /not-ready|secret/.test(f)));
     assert.equal(JSON.parse(await fs.readFile(path.join(blog, 'blog.json'), 'utf8')).domain, 'https://blog.example');
 

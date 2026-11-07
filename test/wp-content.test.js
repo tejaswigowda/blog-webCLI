@@ -105,11 +105,12 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   const job = planWp(model, { today: '2026-11-06' });
   assert.deepEqual(job.images.map((i) => [i.path, i.kind]), [
     ['wp/2024/05/cat.jpg', 'content'],
+    ['wp/2022/01/paper.pdf', 'content'],
     ['wp/2024/06/dog.jpg', 'content'],
     ['wp/2022/01/My-Unused-Photo.JPG', 'library'],
   ]);
   const paths = job.images.map((i) => i.path).sort();
-  assert.deepEqual(paths, ['wp/2022/01/My-Unused-Photo.JPG', 'wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg'], 'the resized copy is the library original; a PDF is not an image; another site\'s picture is not copied');
+  assert.deepEqual(paths, ['wp/2022/01/My-Unused-Photo.JPG', 'wp/2022/01/paper.pdf', 'wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg'], 'the resized copy is the library original; a linked PDF comes across too; another site\'s picture is not copied');
   assert.deepEqual(job.blog, { title: 'Ada & Friends', description: 'Notes &xxe; from the old blog', author: 'Ada Example' });
 
   const out = job.finish(fetchedAll(job));
@@ -124,6 +125,10 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   assert.match(hello, /See \[the second post\]\(\.\.\/second-post\/\) and \[about\]\(\.\.\/about-us\/\)\./, 'links between imported posts and pages are rewritten');
   assert.match(hello, /!\[far\]\(https:\/\/other\.example\.net\/pic\.png\)/, 'another site\'s picture stays linked');
   assert.ok(!/author:/.test(hello), 'the blog\'s own author is not repeated');
+  assert.match(hello, /Read \[the paper\]\(asset:images\/wp\/2022\/01\/paper\.pdf\)\./, 'a link to a file of the old site is a link to the copy');
+  // approved comments only, oldest first, a reply naming who it answers; never an email, an address, spam or a pingback
+  assert.match(hello, /\n## Comments \(2\)\n\n\*\*Zed\*\* · 2024-05-03\n\n> Nice \*\*post\*\*!\n>\n> Second paragraph\.\n\n\*\*Ada Example\*\* · 2024-05-04 — replying to Zed\n\n> Thanks, Zed\.\n$/);
+  for (const never of ['private.example', '203.0.113.9', 'Spammer', 'Buy things', 'Pingback', 'Some blog']) assert.ok(!hello.includes(never), never);
 
   const second = file('posts/second-post.md');
   assert.match(second, /\nauthor: Bob Guest\n/);
@@ -137,7 +142,7 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   assert.match(file('pages/about-us.md'), /^---\nslug: about-us\ntitle: About us\nstatus: published\nmenu: 1\n---\n\nWe write things\.\n$/);
   assert.match(file('pages/tags-wp.md'), /^---\nslug: tags-wp\n/, 'a slug the new blog reserves is changed, and said');
 
-  assert.deepEqual(out.summary, { posts: 2, drafts: 2, pages: 2, images: 3, imagesFailed: 0, imageBytes: out.assets.reduce((n, a) => n + a.bytes.length, 0), internalLinks: 2, skipped: { product: 1 } });
+  assert.deepEqual(out.summary, { posts: 2, drafts: 2, pages: 2, images: 3, files: 1, comments: 2, imagesFailed: 0, imageBytes: out.assets.reduce((n, a) => n + a.bytes.length, 0), internalLinks: 2, skipped: { product: 1 } });
   const said = (where, re) => out.notes.some((n) => n.where === where && re.test(n.text));
   assert.ok(said('posts/hello-welcome.md', /table was flattened/) && said('posts/hello-welcome.md', /another site/) && said('posts/second-post.md', /fancy_form/));
   assert.ok(said('posts/secret.md', /private on WordPress/));
@@ -172,7 +177,7 @@ test('import: an image that would not download stays linked to the old site, and
 test('import: drafts and the media library are options; nothing but the options changes', () => {
   const model = parseWxr(WXR, { today: '2026-11-06' });
   const job = planWp(model, { today: '2026-11-06', includeDrafts: false, includeLibrary: false });
-  assert.deepEqual(job.images.map((i) => i.path).sort(), ['wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg']);
+  assert.deepEqual(job.images.map((i) => i.path).sort(), ['wp/2022/01/paper.pdf', 'wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg']);
   const out = job.finish(fetchedAll(job));
   assert.ok(!out.files.some((f) => /not-ready|secret/.test(f.path)));
   assert.equal(out.summary.drafts, 0);
@@ -216,4 +221,57 @@ test('rest: a site\'s public API reads into the same model', () => {
   assert.match(out.files.find((f) => f.path === 'posts/my-post.md').text, /title: It’s & so\n/);
   assert.equal(out.summary.images, 1);
   assert.throws(() => restModel({ root: '<html>', posts: [] }), (e) => e.code === 'bad-wp-site');
+  const esc = restModel({ root: { name: 'Alicia&#039;s Deals &amp; More', description: 'It&#8217;s all here' }, posts: [], tags: [{ id: 3, name: 'Food &amp; Drink', slug: 'f', taxonomy: 'post_tag' }], users: [{ id: 5, name: 'O&#039;Neil', slug: 'o' }] }, { today: '2026-11-06' });
+  assert.equal(esc.title, "Alicia's Deals & More", 'the site name arrives HTML-escaped from the REST index');
+  assert.equal(esc.description, 'It’s all here');
+});
+
+test('import: only pictures and files on the blog\'s own site are copied, whatever the post, the cover or the library says', () => {
+  const model = parseWxr(WXR);
+  const html = [
+    '<p><img src="https://old.example.org/wp-content/uploads/2024/05/cat.jpg" alt="own"></p>',
+    '<p><img src="https://www.old.example.org/wp-content/uploads/a.png" alt="www"></p>',
+    '<p><img src="https://cdn.old.example.org/b.png" alt="sub"></p>',
+    '<p><img src="https://i0.wp.com/old.example.org/wp-content/uploads/c.png?resize=300" alt="photon own"></p>',
+    '<p><img src="https://i0.wp.com/stranger.example.net/d.png" alt="photon other"></p>',
+    '<p><img src="https://notold.example.org/e.png" alt="lookalike"></p>',
+    '<p><img src="https://old.example.org.evil.test/f.png" alt="suffix trick"></p>',
+    '<p><img src="https://images.unsplash.com/g.jpg" alt="stock"></p>',
+    '<p><a href="https://elsewhere.example.net/h.pdf">far pdf</a></p>',
+  ].join('\n');
+  const post = { ...model.posts[0], html, thumbnailUrl: 'https://elsewhere.example.net/cover.jpg' };
+  const m = {
+    ...model,
+    posts: [post],
+    pages: [],
+    media: [
+      ...model.media,
+      { id: 90, url: 'https://s3.example.net/bucket/offloaded.jpg', mime: 'image', alt: '' },
+      { id: 91, url: 'https://elsewhere.example.net/lib.png', mime: 'image', alt: '' },
+    ],
+  };
+  const job = planWp(m, { today: '2026-11-06' });
+  const urls = job.images.map((i) => i.url);
+  assert.ok(urls.length > 0 && urls.every((u) => /^https:\/\/(www\.|cdn\.)?old\.example\.org\//.test(u)), `fetched from the blog's own site only: ${urls.join(' ')}`);
+  for (const bad of ['stranger', 'notold', 'evil.test', 'unsplash', 'elsewhere', 's3.example']) assert.ok(!urls.some((u) => u.includes(bad)), bad);
+  assert.ok(urls.some((u) => u.includes('/cdn.old') || u.startsWith('https://cdn.old.example.org')) && urls.some((u) => u.includes('www.old.example.org')), 'a subdomain and www are the same site');
+  assert.ok(urls.some((u) => u.startsWith('https://old.example.org/wp-content/uploads/c.png')), 'a Photon copy of its own picture is fetched from its own host');
+
+  const out = job.finish(new Map(job.images.map((i) => [i.url, i.url.endsWith('.pdf') ? new TextEncoder().encode('%PDF-1.4') : PNG])));
+  const md = out.files.find((f) => f.path === 'posts/hello-welcome.md').text;
+  for (const far of ['https://i0.wp.com/stranger.example.net/d.png', 'https://notold.example.org/e.png', 'https://old.example.org.evil.test/f.png', 'https://images.unsplash.com/g.jpg', 'https://elsewhere.example.net/h.pdf']) assert.ok(md.includes(far), `${far} stays as it was`);
+  assert.ok(!/^cover:/m.test(md), 'a cover on another site is not taken');
+  assert.ok(out.notes.some((n) => /featured image is hosted on another site/.test(n.text)));
+  assert.ok(out.notes.some((n) => n.where === 'library' && /2 media library files are hosted on another site/.test(n.text)));
+});
+
+test('import: two posts with the same long title get valid, distinct slugs (the cut never leaves a double hyphen)', () => {
+  const model = parseWxr(WXR);
+  const title = 'Score a Free 8x10 Photo Enlargement from Walgreens with Any Order Today';
+  const mk = (id) => ({ ...model.posts[0], id, title, slug: '', html: '<p>x</p>', thumbnailUrl: '', comments: [] });
+  const out = planWp({ ...model, posts: [mk(1), mk(2), mk(3)], pages: [], media: [], menu: [] }, { today: '2026-11-06' }).finish(new Map());
+  const slugs = out.files.filter((f) => f.path.startsWith('posts/')).map((f) => f.path.slice(6, -3));
+  assert.equal(slugs.length, 3);
+  assert.equal(new Set(slugs).size, 3);
+  for (const s of slugs) assert.match(s, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, s);
 });

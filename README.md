@@ -138,16 +138,23 @@ draft as markdown, every picture in an `images` folder, and a blog.webcli.app bl
 | the excerpt, when there is one | `description` |
 | the post's author | `author`, only where it differs from the blog's (the author of most posts) |
 | the post's slug | the slug; changed (and noted) only if it is empty, already used, or a path this app reserves |
-| a picture on the old site, in a post or in the media library | `images/wp/<its path under wp-content/uploads>`, named in posts as `asset:images/wp/…` and pinned |
+| a picture on the blog's own site, in a post, a cover or the media library | `images/wp/<its path under wp-content/uploads>`, named in posts as `asset:images/wp/…` and pinned |
+| a PDF, document, archive, audio or video file on the blog's own site (in the library, or linked from a post) | the same folder, up to 90 MB each; a link to it becomes `asset:images/wp/…` |
 | a link from one imported post to another | rewritten to the new page (`../<slug>/`) |
-| comments, plugins' content types (products, forms…), widgets, themes | not imported; the types are counted and named in the review |
+| approved comments | a "Comments (N)" section at the end of the post: name, date, the words as a quotation, replies naming who they answer; no email or IP |
+| plugins' content types (products, forms…), widgets, themes | not imported; the types are counted and named in the review |
+
+**Only the blog's own site is copied.** A picture or file is imported only if it is on the blog's own host (with or without `www`), a
+subdomain of it, a Photon (`i0.wp.com/<host>/…`) copy of one of its own, or, for a wordpress.com blog, its `<name>.files.wordpress.com`. A
+picture hosted anywhere else (a stock-photo site, another blog, a hotlinked image) stays linked as written, a featured image or media library
+entry on another host is skipped, and the review says so. The test is on the host, not on whether the address appears in the export.
 
 The text is converted to what the editor can say, which is what markdown can say: paragraphs, headings (to level 3; deeper ones become level
 3), bold, italic, strike, inline code, links, images, lists, quotes and code blocks. A line break becomes a new paragraph. Anything else is reduced to
 its words, and the review names it per file: a table becomes lines of text with ` | ` between cells, an embedded video or iframe becomes a link, a
 `[gallery]` becomes its pictures, `[caption]` keeps its picture and words, other shortcodes are dropped, colours and fonts are dropped. Every
 file is checked to survive `md → Delta → md` byte for byte, as every post is, and one that cannot be is imported as plain paragraphs and
-noted. A picture hosted on another site is left linked there, not copied.
+noted.
 
 **Pictures and what a website allows.** A browser page may read another site's file only if that site allows it (CORS). A site with a CDN in
 front often does; many do not, and a WordPress REST API may refuse a page without an origin. A picture that cannot be read keeps its address
@@ -158,7 +165,23 @@ website's CORS policy does not limit:
 node cli/blog.js import wp export.xml my-blog --repo me/site/blog      # or a site address: import wp https://example.com …
 ```
 
-It writes `blog.json`, `posts/`, `pages/` and `images/` and nothing else (options `--domain`, `--no-drafts`, `--no-library`); push the pictures,
+If the first 30 pictures are all refused that way and none is read, the wizard stops there (not after thousands of tries) and says so, with the
+three ways forward: the uploads folder, the command line, or keeping every picture linked to the old site and importing the text.
+
+Two ways round a site that blocks the browser: **a copy of its uploads folder** (step 1 takes the `wp-content/uploads` folder from a backup or
+an FTP download; a picture or file found there is used without asking the old site, and one that is not a real picture or file is asked for
+instead), and **Import everything** (step 1, once a source is read: name the repository and the usual choices go straight to the pre-flight).
+Pictures and files go in commits of at most 200 files or 150 MB, each file pinned to the commit it is in.
+
+**Slow, and it carries on.** GitHub allows 5,000 API requests an hour and each picture or file is one, so a big library is paced rather
+than rushed: the pre-flight says how many requests the import needs and how many are left; when the hour's limit is reached (or a
+`Retry-After` is sent) the import waits for exactly as long as GitHub says, with a countdown, and continues by itself (keep the tab open,
+three uploads at a time, stopping a few requests short of the limit). **Stop** ends it cleanly. Every file already sent is remembered
+in this browser (by its git sha, for three days, in `localStorage`), so pressing the button again, after a stop, a failure, a closed tab or a
+sign-in, sends only what is missing and makes no new commit where nothing changed. A remembered file that GitHub no longer has is sent
+again. The same applies to any commit made here with many files.
+
+The command line takes `--uploads <dir>` for the same copy and `--no-comments`. It writes `blog.json`, `posts/`, `pages/` and `images/` and nothing else (options `--domain`, `--no-drafts`, `--no-library`); push the pictures,
 then run `blog-webcli pin` (the pin is the commit the pictures are in) and `build`. The images folder sits beside a blog that has a folder of
 its own, and inside a blog at the top of a repository.
 
@@ -1248,6 +1271,9 @@ upload, and nothing is uploaded until you confirm.
 | W1 a WordPress export reads into posts, pages, drafts, tags, authors, the menu and the library; trash and other types are not imported; a DOCTYPE entity is never expanded | `test/wp-content.test.js` |
 | W2 every imported file is canonical markdown (`md → Delta → md` byte-identical), builds, and says what was flattened | `test/wp-content.test.js` |
 | W3 pictures: only PNG/JPEG/GIF/WebP/AVIF by their bytes, never an SVG; a failed one stays linked to the old site and is said; nothing identifying is sent | `test/wp-content.test.js`, `test/wp-import-app.test.js`, `test/wp-cli.test.js` |
+| W3b only what is on the blog's own site is fetched: its host, `www`, a subdomain, its own Photon copy; never a lookalike host, a suffix trick, or another site's cover or library entry | `test/wp-content.test.js` |
+| W3c a long import waits out GitHub's rate limit for as long as it asks, stops short of it, can be stopped, and carries on without re-sending what it sent | `test/github-patient.test.js`, `test/wp-import-app.test.js` |
+| W3d a site that blocks cross-origin reads is detected after a handful of pictures and the person is offered the ways round it; REST site and tag names are decoded once | `test/wp-import-app.test.js`, `test/wp-content.test.js`, `test/e2e/import.e2e.mjs` |
 | W4 two exports become two blogs in one repository: pictures in one commit, blogs in a second, pinned, regenerable; an existing blog is never replaced | `test/wp-import-app.test.js` |
 | W5 the wizard, from the home page to a commit, in real Chrome against a cross-origin old site | `test/e2e/import.e2e.mjs` |
 
@@ -1258,8 +1284,9 @@ every named import, so a renamed export cannot silently break the browser-only m
 ## Known limits
 
 * **WordPress import:** pictures on a site that does not allow cross-origin reads cannot be fetched by the browser (use the CLI); the REST
-  fallback sees only published posts and pages; a line break inside a paragraph becomes a new paragraph; comments, forms, products and other
-  plugins' content are not imported; links to pages that are not imported still point at the old site; a post's old permalink structure is not
+  fallback sees only published posts and pages; a line break inside a paragraph becomes a new paragraph; forms, products and other
+  plugins' content are not imported; a file over 90 MB is left linked to the old site; a blog whose pictures are on an unrelated host (a CDN
+  or storage bucket on another domain) gets its text but not those pictures; links to pages that are not imported still point at the old site; a post's old permalink structure is not
   kept (the new address is `/<slug>/`, so keep the old site up, or redirect, for links from elsewhere).
 
 * A **new standalone page** is not drawn before the Pages build the way a new post is: the live script's 404 path reads
