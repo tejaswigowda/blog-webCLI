@@ -107,3 +107,31 @@ test('cli import wp: options, a blog at the top of a repository, and plain refus
     await fs.rm(tmp, { recursive: true });
   }
 });
+
+test('cli import wp: --uploads with --no-fetch uses only the pictures in the copy, whatever it is called, and never asks the old site', async () => {
+  const site = await oldSite();
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'wp-cli-'));
+  try {
+    await fs.writeFile(path.join(tmp, 'export.xml'), WXR.replaceAll('https://old.example.org', site.origin));
+    // a folder an earlier import wrote: sanitised names, under wp/, and only some of the pictures
+    const copy = path.join(tmp, 'images', 'wp');
+    await fs.mkdir(path.join(copy, '2022', '01'), { recursive: true });
+    await fs.mkdir(path.join(copy, '2024', '05'), { recursive: true });
+    await fs.writeFile(path.join(copy, '2024', '05', 'cat.jpg'), PNG);
+    await fs.writeFile(path.join(copy, '2022', '01', 'My-Unused-Photo.JPG'), PNG);
+    const blog = path.join(tmp, 'site');
+    const r = await cli('import', 'wp', path.join(tmp, 'export.xml'), blog, '--repo', 'me/blog', '--uploads', copy, '--no-fetch');
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(await walk(path.join(blog, 'images')), ['wp/2022/01/My-Unused-Photo.JPG', 'wp/2024/05/cat.jpg']);
+    assert.equal(site.seen.length, 0, 'the old site was never asked');
+    assert.match(r.stdout, /stay linked to the old site/);
+    const hello = await fs.readFile(path.join(blog, 'posts', 'hello-welcome.md'), 'utf8');
+    assert.match(hello, /asset:images\/wp\/2024\/05\/cat\.jpg/);
+    const second = await fs.readFile(path.join(blog, 'posts', 'second-post.md'), 'utf8');
+    assert.ok(second.includes(`${site.origin}/wp-content/uploads/2024/06/dog.jpg`), 'a picture that is not in the copy stays linked');
+    assert.match((await cli('import', 'wp', path.join(tmp, 'export.xml'), path.join(tmp, 'q'), '--repo', 'me/blog', '--no-fetch')).stderr, /--uploads|uploads copy/);
+  } finally {
+    site.server.close();
+    await fs.rm(tmp, { recursive: true });
+  }
+});

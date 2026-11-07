@@ -25,6 +25,8 @@ export function permissionHint(status, method, path, message) {
 }
 
 const API = 'https://api.github.com';
+const TREE_CHUNK = 1_500_000; // characters of file text in one tree request
+const TREE_ENTRIES = 300; // and files: GitHub times out a request that makes too much at once
 const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
 
 export function assertToken(token) {
@@ -286,18 +288,28 @@ export class GitHub {
     }
   }
 
+  // A tree request that GitHub times out ("too large to process") is made again as two halves, one built on the other.
+  async postTree(repo, base, entries) {
+    try {
+      return await this.api('POST', `/repos/${repo}/git/trees`, { base_tree: base, tree: entries });
+    } catch (e) {
+      if (e.status !== 422 || !/timed out|too large/i.test(e.message) || entries.length < 2) throw e;
+      const half = Math.ceil(entries.length / 2);
+      const first = await this.postTree(repo, base, entries.slice(0, half));
+      return this.postTree(repo, first.sha, entries.slice(half));
+    }
+  }
+
   async commitOnce(repo, { branch, parent, baseTree, files, message, newBranch = false, skipIfUnchanged = false, onProgress = () => {} }, useLedger) {
     this.reused = 0;
     const ledger = this.ledger(repo);
     let sinceSave = 0;
     // Small text goes into the tree request itself; binaries, and text past about 2 MB in all, become blobs of their own,
     // a few at a time, so a large import is neither one enormous request nor one request after another.
-    let budget = 2_000_000;
-    const inline = files.map((f) => {
-      if (f.delete || typeof f.content !== 'string' || f.content.length > budget) return false;
-      budget -= f.content.length;
-      return true;
-    });
+    // Text goes into the tree requests themselves, a few MB at a time in a chain of trees (each built on the last), so ten
+    // thousand pages are a few dozen requests and not ten thousand blobs against an hourly limit of five thousand. Only
+    // binaries, and a single text file too big for a request, become blobs of their own.
+    const inline = files.map((f) => !f.delete && typeof f.content === 'string' && f.content.length <= TREE_CHUNK);
     const entries = new Array(files.length);
     let next = 0;
     let broken = false;
@@ -336,7 +348,22 @@ export class GitHub {
     this.saveLedger(repo);
     const bad = results.find((r) => r.status === 'rejected');
     if (bad) throw bad.reason;
-    const tree = await this.api('POST', `/repos/${repo}/git/trees`, { base_tree: baseTree, tree: entries });
+    const chunks = [[]];
+    let size = 0;
+    for (const e of entries) {
+      const n = e.content === undefined ? 0 : e.content.length;
+      if ((size + n > TREE_CHUNK || chunks[chunks.length - 1].length >= TREE_ENTRIES) && chunks[chunks.length - 1].length) {
+        chunks.push([]);
+        size = 0;
+      }
+      chunks[chunks.length - 1].push(e);
+      size += n;
+    }
+    let tree = { sha: baseTree };
+    for (const [i, entriesOfChunk] of chunks.entries()) {
+      if (i > 0 && this.isCancelled && this.isCancelled()) throw new Refusal('cancelled', 'Stopped. What was already sent is kept, and starting again carries on from there.');
+      tree = await this.postTree(repo, tree.sha, entriesOfChunk);
+    }
     if (skipIfUnchanged && tree.sha === baseTree) return { sha: parent, treeSha: tree.sha, url: `https://github.com/${repo}/commit/${parent}`, unchanged: true };
     const commit = await this.api('POST', `/repos/${repo}/git/commits`, { message, tree: tree.sha, parents: [parent] });
     if (newBranch) await this.api('POST', `/repos/${repo}/git/refs`, { ref: `refs/heads/${branch}`, sha: commit.sha });

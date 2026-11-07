@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
 import { describePlan } from '../app/site.js';
-import { BATCH_FILES, executeImport, fetchImages, planImport, readExport, readSite, uploadsPath } from '../app/import.js';
+import { BATCH_FILES, executeImport, fetchImages, planImport, readExport, readSite, uploadsIndex, uploadsPath } from '../app/import.js';
 import { buildSite } from '../lib/blog.js';
 import { planWp } from '../lib/wp-content.js';
 import { fakeGitHub } from './fake-github.js';
@@ -213,22 +213,38 @@ test('import: a large library goes in commits of bounded size, each file pinned 
   assert.ok(net.ledger.uploaded.bytes > 5000);
 });
 
-test('import: a copy of the old site\'s uploads is used first and needs nothing from the old site; a bad copy falls back to the network', async () => {
+test('import: a copy of the old site\'s uploads is used first, whichever folder was chosen, and a bad copy falls back to the network', async () => {
   const site = oldSite(imageFiles());
   const { net } = await world(site);
   const job = planWp(await readExport(WXR), { today: '2026-11-06' });
-  const mine = new Map([
-    ['2024/05/cat.jpg', PNG],
-    ['2024/06/dog.jpg', JPG],
-    ['2022/01/My Unused Photo.JPG', PNG],
-    ['2022/01/paper.pdf', new TextEncoder().encode('<html>a saved login page</html>')], // not the file: the network is asked
-  ]);
-  const asked = [];
-  const { fetched, failed } = await fetchImages(net, job.images, { local: async (url) => { const k = uploadsPath(url); asked.push(k); return mine.get(k) || null; } });
-  assert.equal(failed.size, 0);
-  assert.equal(fetched.size, 4);
-  assert.deepEqual(asked.sort(), ['2022/01/My Unused Photo.JPG', '2022/01/paper.pdf', '2024/05/cat.jpg', '2024/06/dog.jpg']);
-  assert.deepEqual(site.calls.map((c) => c.url), ['https://old.example.org/wp-content/uploads/2022/01/paper.pdf'], 'only what the copy did not have');
+  const pdf = new TextEncoder().encode('<html>a saved login page</html>'); // not the file: the network is asked
+  const layouts = {
+    'the uploads folder': { 'uploads/2024/05/cat.jpg': PNG, 'uploads/2024/06/dog.jpg': JPG, 'uploads/2022/01/My Unused Photo.JPG': PNG, 'uploads/2022/01/paper.pdf': pdf },
+    'wp-content': { 'wp-content/uploads/2024/05/cat.jpg': PNG, 'wp-content/uploads/2024/06/dog.jpg': JPG, 'wp-content/uploads/2022/01/My Unused Photo.JPG': PNG, 'wp-content/uploads/2022/01/paper.pdf': pdf },
+    'a folder of another name': { 'backup-nov/2024/05/cat.jpg': PNG, 'backup-nov/2024/06/dog.jpg': JPG, 'backup-nov/2022/01/My Unused Photo.JPG': PNG, 'backup-nov/2022/01/paper.pdf': pdf },
+    'a different case, and accents spelled the other way': { 'Uploads/2024/05/CAT.JPG': PNG, 'Uploads/2024/06/Dog.jpg': JPG, 'Uploads/2022/01/my unused photo.jpg': PNG, 'Uploads/2022/01/paper.pdf': pdf },
+  };
+  for (const [name, files] of Object.entries(layouts)) {
+    const index = uploadsIndex(Object.entries(files).map(([path, bytes]) => ({ path, file: bytes })));
+    site.calls.length = 0;
+    const { fetched, failed, fromLocal } = await fetchImages(net, job.images, { local: async (url) => index.find(url) });
+    assert.equal(failed.size, 0, name);
+    assert.equal(fetched.size, 4, name);
+    assert.equal(fromLocal, 3, `${name}: three from the copy, the bad one asked for`);
+    assert.deepEqual(site.calls.map((c) => c.url), ['https://old.example.org/wp-content/uploads/2022/01/paper.pdf'], name);
+  }
+  // one year, one month, picked on their own
+  const year = uploadsIndex([{ path: '2024/05/cat.jpg', file: PNG }, { path: '2024/06/dog.jpg', file: JPG }]);
+  assert.ok(year.find('https://old.example.org/wp-content/uploads/2024/05/cat.jpg'));
+  const month = uploadsIndex([{ path: '05/cat.jpg', file: PNG }]);
+  assert.ok(month.find('https://old.example.org/wp-content/uploads/2024/05/cat.jpg'));
+  const ambiguous = uploadsIndex([{ path: 'a/cat.jpg', file: PNG }, { path: 'b/cat.jpg', file: JPG }]);
+  assert.equal(ambiguous.find('https://old.example.org/wp-content/uploads/2024/05/cat.jpg'), null, 'two files of one name are not guessed between');
+  const wrongYear = uploadsIndex([{ path: '2019/05/cat.jpg', file: PNG }, { path: 'uploads/2019/05/cat.jpg', file: PNG }]);
+  assert.equal(wrongYear.find('https://old.example.org/wp-content/uploads/2024/05/cat.jpg'), null, 'a picture of the same name from another year is not it');
+  const none = uploadsIndex([{ path: 'x/y.png', file: PNG }]);
+  assert.equal(none.find('https://old.example.org/wp-content/uploads/2024/05/cat.jpg'), null);
+  assert.deepEqual(none.missed, ['2024/05/cat.jpg'], 'what was looked for is kept, to say it');
   assert.equal(uploadsPath('https://x.test/blog/wp-content/uploads/2024/05/a%20b.jpg'), '2024/05/a b.jpg');
   assert.equal(uploadsPath('https://x.test/other/a.jpg'), null);
 });
@@ -285,4 +301,25 @@ test('fetching: when the first pictures are all refused as a browser refuses a c
   const copy = new Map([[images[0].url, PNG]]);
   const r3 = await fetchImages(net, images.slice(0, 60), { local: async (u) => copy.get(u) || null });
   assert.equal(r3.blocked, false, 'a copy of the uploads that supplied something means it is working');
+});
+
+test('fetching: a folder that has some of the pictures is used, the rest are left linked, and a site that cannot be read is not asked again', async () => {
+  let asked = 0;
+  const net = createNet(() => { asked++; return Promise.reject(new TypeError('Failed to fetch')); });
+  const images = Array.from({ length: 400 }, (_, i) => ({ url: `https://old.example.org/wp-content/uploads/2020/12/p${i}.png`, path: `wp/2020/12/p${i}.png`, kind: 'content' }));
+  // the folder has every fifth picture, none of the first thirty-odd that come first
+  const have = new Set(images.filter((_, i) => i >= 100 && i % 5 === 0).map((im) => im.url));
+  const r = await fetchImages(net, images, { local: async (url) => (have.has(url) ? PNG : null) });
+  assert.equal(r.blocked, false, 'some came from the folder, so it is working');
+  assert.equal(r.fromLocal, have.size);
+  assert.equal(r.fetched.size, have.size);
+  assert.equal(r.failed.size, 400 - have.size);
+  assert.ok(asked < 40, `the old site was asked only until it was clear it would not answer: ${asked}`);
+  assert.match([...r.failed.values()].pop(), /not in your uploads folder/);
+
+  asked = 0;
+  const none = await fetchImages(net, images, { local: async () => null });
+  assert.equal(none.blocked, true, 'a folder with none of them, from a site that cannot be read: nothing came across, and it says so');
+  assert.equal(none.fromLocal, 0);
+  assert.ok(asked < 40);
 });

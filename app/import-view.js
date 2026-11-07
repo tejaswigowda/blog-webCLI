@@ -8,7 +8,7 @@ import { Refusal } from '../lib/errors.js';
 import { slugify } from '../lib/taxonomy.js';
 import { planWp } from '../lib/wp-content.js';
 import { parseRepoRef } from '../lib/reporef.js';
-import { executeImport, fetchImages, planImport, readExport, readSite, uploadsPath } from './import.js';
+import { executeImport, fetchImages, planImport, readExport, readSite, uploadsIndex } from './import.js';
 
 const STEPS = ['Sources', 'Blogs', 'Pictures', 'Commit'];
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -93,13 +93,8 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
       const folder = h('input', { type: 'file', multiple: true, 'aria-label': 'Copy of the uploads folder' });
       folder.setAttribute('webkitdirectory', '');
       folder.addEventListener('change', () => {
-        const map = new Map();
-        for (const f of folder.files) {
-          const rel = f.webkitRelativePath || f.name;
-          const at = rel.indexOf('uploads/');
-          map.set(at >= 0 ? rel.slice(at + 'uploads/'.length) : rel.split('/').slice(1).join('/'), f);
-        }
-        st.uploads = map.size ? map : null;
+        const files = [...folder.files].map((f) => ({ path: f.webkitRelativePath || f.name, file: f }));
+        st.uploads = files.length ? { files, index: uploadsIndex(files) } : null;
         draw();
       });
       const address = h('input', { placeholder: 'https://example.com', 'aria-label': 'WordPress site address' });
@@ -115,10 +110,10 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
       } }, 'Read site');
       return h('div', {},
         card('Where the content is',
-          h('p', {}, 'In WordPress choose ', h('b', {}, 'Tools → Export → All content'), ' and download the file. Choose it here; add one file for each blog. Posts, pages, drafts, tags, authors and the media library are read; comments and other plugins\' content are not.'),
+          h('p', {}, 'In WordPress choose ', h('b', {}, 'Tools → Export → All content'), ' and download the file. Choose it here; add one file for each blog. Posts, pages, drafts, tags, authors, the media library and approved comments are read; other plugins\' content is not.'),
           field('Export files (.xml)', file, 'The file is read in this browser and is not sent anywhere.'),
           h('p', { class: 'muted' }, 'or'),
-          field('A copy of the old site\'s uploads folder (optional)', folder, st.uploads ? `${st.uploads.size} files chosen. A picture or file found here is used without asking the old site, so it works even when that site does not allow other pages to read its files. Choose wp-content/uploads from the old site\'s files (an FTP or backup copy).` : 'Pictures and files are fetched from the old site, which only works if it allows other web pages to read them. If you have a copy of wp-content/uploads, choose it and nothing needs fetching.'),
+          field('A copy of the old site\'s uploads folder (optional)', folder, st.uploads ? `${st.uploads.files.length.toLocaleString()} files chosen. A picture or file found here is used without asking the old site, so it works even when that site does not allow other pages to read its files. Choose wp-content/uploads from the old site\'s files (an FTP or backup copy).` : 'Pictures and files are fetched from the old site, which only works if it allows other web pages to read them. If you have a copy of wp-content/uploads, choose it and nothing needs fetching.'),
           h('p', { class: 'muted' }, 'or'),
           field('A live site\'s address', h('div', { class: 'row' }, address, read), 'Reads the site\'s public REST API: only published posts and pages, and only if the site lets other web pages read it. An export file always works and includes drafts.'),
         ),
@@ -213,13 +208,13 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
             st.results.push({ source: s, job, out, failed: new Map(job.images.map((im) => [im.url, why])) });
             continue;
           }
-          const { fetched, failed, blocked } = await fetchImages(net, job.images, {
+          const { fetched, failed, blocked, fromLocal } = await fetchImages(net, job.images, {
             isCancelled: () => st.cancelled,
-            local: uploads ? async (url) => { const k = uploadsPath(url); const f = k && uploads.get(k); return f ? new Uint8Array(await f.arrayBuffer()) : null; } : null,
+            local: uploads ? async (url) => { const f = uploads.index.find(url); return f ? new Uint8Array(await f.arrayBuffer()) : null; } : null,
             onProgress: (p) => {
               bar.max = Math.max(1, p.total);
               bar.value = p.done;
-              status.textContent = `${s.fields.title}: ${p.done} of ${p.total} pictures (${fmtBytes(p.bytes)}${p.failed ? `, ${p.failed} could not be read` : ''})`;
+              status.textContent = `${s.fields.title}: ${p.done} of ${p.total} pictures (${fmtBytes(p.bytes)}${p.fromLocal ? `, ${p.fromLocal} from your uploads folder` : ''}${p.failed ? `, ${p.failed} could not be read` : ''})`;
             },
           });
           if (blocked && !st.cancelled) {
@@ -229,13 +224,13 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
             } catch {
               /* shown without it */
             }
-            st.blocked = { title: s.fields.title, host, total: job.images.length, address: s.model.link || '' };
+            st.blocked = { title: s.fields.title, host, total: job.images.length, address: s.model.link || '', folder: uploads ? { files: uploads.files.length, sample: uploads.index.sample(), missed: uploads.index.missed.slice() } : null };
             st.results = [];
             break;
           }
           if (st.cancelled) break;
           const out = job.finish(fetched);
-          st.results.push({ source: s, job, out, failed });
+          st.results.push({ source: s, job, out, failed, fromLocal });
         }
       } catch (e) {
         fail(e);
@@ -267,6 +262,7 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
       return h('div', {},
         card(`${b.host || 'The old site'} does not let this page read its pictures`,
           h('p', {}, `The first 30 of ${b.total.toLocaleString()} pictures were all refused, so the rest were not tried. A browser only reads another site's files when that site sends a permission header (CORS), and ${b.host || 'this one'} sends none for its uploads. Nothing is wrong with the pictures or with your token, and nothing was copied or sent anywhere.`),
+          b.folder ? h('div', { class: 'caution' }, `Your uploads folder (${b.folder.files.toLocaleString()} files) had none of them, so it was not what the page was looking for. It looked for ${b.folder.missed.length ? b.folder.missed.map((m) => `"${m}"`).join(', ') : 'files below wp-content/uploads'}; the folder you chose starts with ${b.folder.sample.map((m) => `"${m}"`).join(', ')}. Choose the folder that holds the year folders (2023, 2024…), or one above it.`) : null,
           h('p', {}, h('b', {}, 'Three ways forward:')),
           h('ol', {},
             h('li', {}, h('b', {}, 'Use a copy of the uploads folder. '), 'Download ', h('code', {}, 'wp-content/uploads'), ' from the old host (FTP, a backup, the host\'s file manager), then choose it in step 1. Pictures found there are used without asking the old site.'),
@@ -285,13 +281,14 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
         return h('div', {}, card('Bringing the pictures across', bar, status, h('p', { class: 'hint' }, 'They are read from the old site by this page, with no account and no cookies, and held in memory until you commit.')),
           h('div', { class: 'actions' }, h('button', { icon: 'x', onclick: () => { st.cancelled = true; status.textContent = 'Stopping…'; } }, 'Cancel')));
       }
-      const cards = st.results.map(({ source, out, failed, job }) => {
+      const cards = st.results.map(({ source, out, failed, job, fromLocal }) => {
         const s = out.summary;
         const byText = new Map();
         for (const n of out.notes) byText.set(n.text, [...(byText.get(n.text) || []), n.where]);
         const why = [...new Set(failed.values())];
         return card(source.fields.title,
           h('p', {}, h('b', {}, `${plural(s.posts, 'post')}, ${plural(s.drafts, 'draft')}, ${plural(s.pages, 'page')}`), ` converted to markdown${s.comments ? ` with ${plural(s.comments, 'comment')}` : ''}; ${plural(s.images, 'picture')}${s.files ? ` and ${plural(s.files, 'file')}` : ''} (${fmtBytes(s.imageBytes)}) brought across.`),
+          fromLocal ? h('p', { class: 'muted' }, `${fromLocal.toLocaleString()} ${fromLocal === 1 ? 'picture or file' : 'pictures and files'} came from your uploads folder.`) : null,
           s.imagesFailed ? h('div', { class: 'caution' }, `${plural(s.imagesFailed, 'picture')} could not be brought across: ${why.slice(0, 3).join('; ')}. Where posts use them they stay linked to the old site, so nothing breaks while the old site is up. For every picture, use the command line importer (it is not limited by what a website allows): `, h('code', {}, 'node cli/blog.js import wp export.xml my-blog'), '.') : null,
           s.internalLinks ? h('p', { class: 'muted' }, `${plural(s.internalLinks, 'link')} between your posts now point at the new pages.`) : null,
           byText.size ? h('details', {}, h('summary', {}, `${plural(byText.size, 'thing')} to know about`), h('ul', { class: 'notes' }, [...byText].slice(0, 100).map(([text, where]) => h('li', {}, text, h('span', { class: 'muted' }, ` — ${where.slice(0, 3).join(', ')}${where.length > 3 ? ` and ${where.length - 3} more` : ''}`))))) : h('p', { class: 'muted' }, 'Nothing was flattened or dropped.'),

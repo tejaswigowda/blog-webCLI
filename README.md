@@ -170,7 +170,9 @@ three ways forward: the uploads folder, the command line, or keeping every pictu
 
 Two ways round a site that blocks the browser: **a copy of its uploads folder** (step 1 takes the `wp-content/uploads` folder from a backup or
 an FTP download; a picture or file found there is used without asking the old site, and one that is not a real picture or file is asked for
-instead), and **Import everything** (step 1, once a source is read: name the repository and the usual choices go straight to the pre-flight).
+instead). Files are found by their path below `wp-content/uploads`, so choosing `uploads`, `wp-content`, a year or a folder of another name all
+work, case and accents are ignored, and a picture of the same name from another year is never taken for it. The wizard says how many came
+from the folder, and when it held none of what was wanted it says what it looked for and what the folder starts with. There is also **Import everything** (step 1, once a source is read: name the repository and the usual choices go straight to the pre-flight).
 Pictures and files go in commits of at most 200 files or 150 MB, each file pinned to the commit it is in.
 
 **Slow, and it carries on.** GitHub allows 5,000 API requests an hour and each picture or file is one, so a big library is paced rather
@@ -181,7 +183,11 @@ in this browser (by its git sha, for three days, in `localStorage`), so pressing
 sign-in, sends only what is missing and makes no new commit where nothing changed. A remembered file that GitHub no longer has is sent
 again. The same applies to any commit made here with many files.
 
-The command line takes `--uploads <dir>` for the same copy and `--no-comments`. It writes `blog.json`, `posts/`, `pages/` and `images/` and nothing else (options `--domain`, `--no-drafts`, `--no-library`); push the pictures,
+**Big commits.** Text goes to GitHub inside the tree requests themselves, at most 1.5 MB or 300 files at a time in a chain, so ten thousand
+pages are a few dozen requests rather than a blob each (a blog of 8,000 posts and its generated site, 139 MB, went up this way); a request that
+GitHub times out is made again as two halves. Only binaries, and a single text file over 1.5 MB, are blobs of their own.
+
+The command line takes `--uploads <dir>` for the same copy and `--no-comments`, and `--no-fetch` with `--uploads` to use only the pictures in that copy and leave the rest linked to the old site (the folder may be `uploads`, an earlier import's `images/wp`, or any year). It writes `blog.json`, `posts/`, `pages/` and `images/` and nothing else (options `--domain`, `--no-drafts`, `--no-library`); push the pictures,
 then run `blog-webcli pin` (the pin is the commit the pictures are in) and `build`. The images folder sits beside a blog that has a folder of
 its own, and inside a blog at the top of a repository.
 

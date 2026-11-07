@@ -134,3 +134,54 @@ test('resume: a remembered blob that GitHub no longer has is sent again, not tru
   assert.ok(c.sha);
   assert.ok(server.files('me/site')[f.path], 'the file is there whatever the memory said');
 });
+
+test('commit: thousands of text files are a few tree requests, not a blob each, and the chain makes the same tree as the files', async () => {
+  const server = await repoWorld();
+  const seen = { blobs: 0, trees: 0 };
+  const net = createNet(async (url, init = {}) => {
+    if ((init.method || 'GET') === 'POST' && String(url).endsWith('/git/blobs')) seen.blobs++;
+    if ((init.method || 'GET') === 'POST' && String(url).endsWith('/git/trees')) seen.trees++;
+    return server.fetch(url, init);
+  });
+  const gh = new GitHub(net, { token: 'github_pat_test' });
+  const head = await gh.headCommit('me/site', 'main');
+  const files = Array.from({ length: 1500 }, (_, i) => ({ path: `posts/p${String(i).padStart(4, '0')}.md`, content: `# post ${i}\n${'word '.repeat(1000)}\n` })); // ~7.5 MB of text
+  files.push({ path: 'images/a.png', content: png(1) });
+  files.push({ path: 'big.txt', content: 'x'.repeat(3_500_000) }); // too big for a tree request: its own blob
+  const c = await gh.commit('me/site', { branch: 'main', parent: head.sha, baseTree: head.treeSha, files, message: 'many' });
+  assert.equal(seen.blobs, 2, 'only the picture and the one oversized file');
+  assert.ok(seen.trees >= 5 && seen.trees <= 12, `a few dozen at most, however many files: ${seen.trees}`);
+  const after = server.files('me/site');
+  assert.equal(Object.keys(after).filter((p) => p.startsWith('posts/')).length, 1500);
+  assert.equal(after['posts/p0007.md'].startsWith('# post 7'), true);
+  assert.equal(after['big.txt'].length, 3_500_000);
+  assert.ok(after['README.md'], 'what was there is kept');
+
+  const h2 = await gh.headCommit('me/site', 'main');
+  const again = await gh.commit('me/site', { branch: 'main', parent: h2.sha, baseTree: h2.treeSha, files, message: 'same', skipIfUnchanged: true });
+  assert.equal(again.unchanged, true, 'the same files in a chain of trees are the tree the branch already has');
+  assert.equal(c.sha === h2.sha, true);
+});
+
+test('commit: a tree request GitHub times out is made again in halves, and the result is the same', async () => {
+  const server = await repoWorld();
+  let posts = 0;
+  let timedOut = 0;
+  const net = createNet(async (url, init = {}) => {
+    if ((init.method || 'GET') === 'POST' && String(url).endsWith('/git/trees')) {
+      posts++;
+      const body = JSON.parse(init.body);
+      if (body.tree.length > 40) {
+        timedOut++;
+        return json({ message: "Sorry, your request timed out. It's likely that your input was too large to process." }, 422);
+      }
+    }
+    return server.fetch(url, init);
+  });
+  const gh = new GitHub(net, { token: 'github_pat_test' });
+  const head = await gh.headCommit('me/site', 'main');
+  const files = Array.from({ length: 150 }, (_, i) => ({ path: `posts/p${i}.md`, content: `post ${i}` }));
+  await gh.commit('me/site', { branch: 'main', parent: head.sha, baseTree: head.treeSha, files, message: 'halves' });
+  assert.ok(timedOut >= 1 && posts > timedOut);
+  assert.equal(Object.keys(server.files('me/site')).filter((p) => p.startsWith('posts/')).length, 150);
+});

@@ -72,6 +72,43 @@ export const uploadsPath = (url) => {
   }
 };
 
+// A copy of the old site's uploads, found by what it holds and not by what it is called: the person may have picked the
+// uploads folder, wp-content, one year, or a folder of another name; macOS spells accents differently from a URL; a disk may
+// not care about case. `files` is [{ path: where the browser says it is, file }]. find(url) is the file, or null.
+export function uploadsIndex(files) {
+  // the way the importer itself names a file (spaces and odd characters become hyphens), so a folder written by an earlier
+  // import is found as readily as the site's own
+  const norm = (x) => x.normalize('NFC').toLowerCase().split('/').map((g) => g.replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')).join('/');
+  const tails = new Map(); // every tail of every path ("a/b/c.jpg", "b/c.jpg", "c.jpg") -> the file, or null when two share it
+  const whole = new Map(); // a path as chosen ("05/cat.jpg" from a folder "05"), with at least a folder and a name
+  for (const { path, file } of files) {
+    const segs = norm(path).split('/').filter(Boolean);
+    for (let i = 0; i < segs.length; i++) {
+      const k = segs.slice(i).join('/');
+      tails.set(k, tails.has(k) ? null : file);
+    }
+    if (segs.length > 1) whole.set(segs.join('/'), whole.has(segs.join('/')) ? null : file);
+  }
+  const missed = [];
+  const find = (url) => {
+    const rel = uploadsPath(url);
+    if (!rel) return null;
+    const segs = norm(rel).split('/').filter(Boolean);
+    // 1. the whole wanted path is the end of a file's path (the uploads folder, wp-content, or a folder of any name above it)
+    const hit = tails.get(segs.join('/'));
+    if (hit) return hit;
+    // 2. a file's whole path is the end of the wanted path (one year or month was picked on its own). Never a file name alone:
+    // 2019/05/cat.jpg is not 2024/05/cat.jpg
+    for (let i = 1; segs.length - i > 1; i++) {
+      const w = whole.get(segs.slice(i).join('/'));
+      if (w) return w;
+    }
+    if (missed.length < 3) missed.push(rel);
+    return null;
+  };
+  return { find, size: files.length, sample: () => files.slice(0, 3).map((f) => f.path), missed };
+}
+
 // Brings the pictures and files across: { fetched: Map(url -> bytes), failed: Map(url -> why) }. A few at a time; each one is
 // read whole and checked by what it starts with (never by what the server said it is). `local(url)` may supply a file the person
 // already has (a copy of the old site's uploads folder) and is tried first: that needs no permission from the old site.
@@ -81,33 +118,48 @@ export async function fetchImages(net, images, { onProgress = () => {}, concurre
   let next = 0;
   let bytes = 0;
   let blocked = false;
-  let network = 0; // refused as a browser refuses a cross-origin read
+  let fromLocal = 0;
+  let refused = 0; // times the old site was refused as a browser refuses a cross-origin read
+  let answered = false; // the old site gave a file, or any answer at all, at least once
+  // Refused that way many times and never answered: the site does not allow this page to read its files.
+  const dead = () => !answered && probe && refused >= probe;
   const worker = async () => {
     while (next < images.length && !isCancelled() && !blocked) {
       const im = images[next++];
+      let asking = false;
       try {
         let got = local ? await local(im.url) : null;
+        let viaLocal = false;
         if (got && !acceptFile(im.path, got)) got = null;
+        else if (got) viaLocal = true;
         if (!got) {
+          // With a folder to go on, what it lacks is left linked to the old site and the old site is not asked again; without
+          // one, the rest would only be thousands more of the same refusal, so stop (below) and say so.
+          if (local && dead()) throw new Error('it is not in your uploads folder, and the old site does not let this page read it');
+          asking = true;
           const res = await net.fetchRemote(im.url, { max: MAX_FILE_BYTES });
+          answered = true;
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           got = res.bytes;
           if (!acceptFile(im.path, got)) throw new Error(/\.(?:png|jpe?g|gif|webp|avif)$/i.test(im.path) ? 'it is not a PNG, JPEG, GIF, WebP or AVIF picture' : 'it is a web page, not the file');
         }
+        if (viaLocal) fromLocal++;
         fetched.set(im.url, got);
         bytes += got.length;
       } catch (e) {
         // a browser reports a refused cross-origin read as a bare network error: say what that means here
-        if (e instanceof TypeError) network++;
+        if (e instanceof TypeError) refused++;
+        else if (asking) answered = true;
         failed.set(im.url, e instanceof TypeError ? "the old site does not let other web pages read its files (or is not reachable)" : e.message);
-        // the first few all refused that way, none read: the rest would only be thousands more of the same, so stop and say so
-        if (probe && !fetched.size && failed.size >= probe && network === failed.size) blocked = true;
+        if (!local && dead()) blocked = true;
       }
-      onProgress({ done: fetched.size + failed.size, total: images.length, bytes, failed: failed.size });
+      onProgress({ done: fetched.size + failed.size, total: images.length, bytes, failed: failed.size, fromLocal });
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, images.length) }, worker));
-  return { fetched, failed, blocked };
+  // a folder that held none of what was wanted, from a site that cannot be read: nothing came across, and the person should know why
+  if (local && dead() && !fromLocal && !isCancelled()) blocked = true;
+  return { fetched, failed, blocked, fromLocal };
 }
 
 // ---------- the pre-flight ----------
@@ -198,7 +250,8 @@ export async function planImport(gh, { where, branch, blogs, limits = {} }) {
     head,
     changes,
     assetGroups,
-    requests: assetMap.size + 5 * (assetGroups.length + 1) + 8, // one per picture or file, a few per commit
+    // one per picture or file, a few per commit, and the text a tree request at a time (see GitHub.commit)
+    requests: assetMap.size + 5 * (assetGroups.length + 1) + 8 + Math.ceil(Math.max(changes.reduce((n, c) => n + c.size, 0) / 1_500_000, changes.length / 300)),
     summary,
     blogs: planned,
     pending: [],

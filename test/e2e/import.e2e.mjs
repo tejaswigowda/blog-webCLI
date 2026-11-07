@@ -166,10 +166,35 @@ test('import wizard: a site that does not allow cross-origin reads is found out 
     assert.match(text, /node cli\/blog\.js import wp/);
     assert.ok(old.seen.filter((r) => r.url.includes('/uploads/')).length < 45, `only a handful were asked for: ${old.seen.length}`);
 
+    // a folder that is not the one wanted: the page says what it looked for and what the folder holds
+    const pick = (paths) => page.evaluate(`(() => { const i = document.querySelector('input[aria-label="Copy of the uploads folder"]'); const dt = new DataTransfer(); for (const p of ${JSON.stringify(paths)}) { const f = new File([new Uint8Array(${JSON.stringify(Array.from(PNG))})], p.split('/').pop(), { type: 'image/png' }); Object.defineProperty(f, 'webkitRelativePath', { value: p }); dt.items.add(f); } i.files = dt.files; i.dispatchEvent(new Event('change')); })()`);
+    await clickText(page, '#view button', 'Back to choose the uploads folder');
+    await until(page, "document.querySelector('input[aria-label=\"Copy of the uploads folder\"]')");
+    await pick(['holiday/other.png', 'holiday/more.png']);
+    await clickText(page, '#view button', 'Review step by step');
+    await until(page, "document.querySelector('.steps .active').textContent.includes('Blogs')");
+    await clickText(page, '#view button', 'Next: bring the pictures across');
+    await until(page, "document.querySelector('#view').innerText.includes('had none of them')");
+    assert.match(await page.evaluate("document.querySelector('#view').innerText"), /It looked for "2024\/05\/[^"]+".*"holiday\/other\.png"/s);
+
     // keep them linked and carry on: the text is imported, every picture left where it is
     await clickText(page, '#view button', 'Keep the pictures linked and continue');
     await until(page, "[...document.querySelectorAll('#view button')].some((b) => b.textContent.trim().startsWith('Next: choose where'))");
     assert.match(await page.evaluate("document.querySelector('#view').innerText"), /2 posts, 2 drafts, 2 pages converted to markdown/);
+
+    // the right folder, chosen as a browser reports it (the folder's own name first): every picture in it is used
+    await clickText(page, '#view button', 'Back');
+    await until(page, "document.querySelector('.steps .active').textContent.includes('Blogs')");
+    await clickText(page, '#view button', 'Back');
+    await until(page, "document.querySelector('input[aria-label=\"Copy of the uploads folder\"]')");
+    const before = old.seen.length;
+    await pick(Array.from({ length: 80 }, (_, i) => `uploads/2024/05/p${i}.jpg`));
+    await clickText(page, '#view button', 'Review step by step');
+    await until(page, "document.querySelector('.steps .active').textContent.includes('Blogs')");
+    await clickText(page, '#view button', 'Next: bring the pictures across');
+    await until(page, "[...document.querySelectorAll('#view button')].some((b) => b.textContent.trim().startsWith('Next: choose where'))");
+    assert.match(await page.evaluate("document.querySelector('#view').innerText"), /80 pictures and files came from your uploads folder/);
+    assert.ok(old.seen.length - before < 20, 'the old site was asked only for the few that the folder did not have');
   } finally {
     chrome.close();
     web.close();
