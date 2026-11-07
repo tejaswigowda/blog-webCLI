@@ -71,6 +71,8 @@ Body in markdown…
 preview image when the post is shared (`og:image`, `twitter:image`). In the editor the Cover field
 has **Upload…** (the image is staged and committed to the images repository when you publish, like an
 image in the body; the post names it by a logical `asset:` reference, never a provider) and **Auto**.
+In a **card layout** (`customize.list.layout: "cards"`), a post with no cover of its own shows the **first picture in its text** on its card (an `asset:` reference or an image linked from another site, found in paragraphs, tables and HTML blocks, in order); the index records it as `thumb`, and other layouts are unchanged.
+
 `cover: auto` lets the generator pick the post's own picture, at build time: its **first image**,
 else the **poster of its first video** (every hls release has a `poster.jpg`, at an address pinned by
 the release tag), else the blog's `cover`. An automatic cover is the share preview and the index's

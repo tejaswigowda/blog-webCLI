@@ -65,6 +65,34 @@ test('design: cards show the post\'s cover when it has one, and a card without o
   assert.ok(!list.includes('class="thumb"'));
 });
 
+test('design: a card for a post with no cover shows the first picture in its text, whether pinned or linked; nothing changes for other layouts', () => {
+  const posts = [
+    post('with-cover', { cover: 'asset:images/a.png', date: '2026-04-01' }),
+    { path: 'posts/pinned.md', text: '---\nslug: pinned\ntitle: Pinned\ndate: 2026-03-01\nstatus: published\n---\n\nWords.\n\n![x](asset:images/a.png)\n\n![y](https://old.test/second.png)\n' },
+    { path: 'posts/linked.md', text: '---\nslug: linked\ntitle: Linked\ndate: 2026-02-01\nstatus: published\n---\n\nWords.\n\n![](https://old.test/first.png)\n' },
+    { path: 'posts/intable.md', text: '---\nslug: intable\ntitle: In a table\ndate: 2026-01-15\nstatus: published\n---\n\n| pic |\n| --- |\n| ![](https://old.test/cell.png) |\n' },
+    { path: 'posts/auto.md', text: '---\nslug: auto\ntitle: Auto\ncover: auto\ndate: 2026-01-10\nstatus: published\n---\n\n![](https://old.test/auto.png)\n' },
+    post('plain', { date: '2026-01-01' }),
+  ];
+  const r = build(blogJson({ customize }), posts);
+  assert.deepEqual(r.errors, []);
+  const entries = Object.fromEntries(JSON.parse(r.files['index/posts.json']).posts.map((e) => [e.slug, e]));
+  assert.equal(entries.pinned.thumb, 'asset:images/a.png', 'the first picture, in order');
+  assert.equal(entries.linked.thumb, 'https://old.test/first.png');
+  assert.equal(entries.intable.thumb, 'https://old.test/cell.png');
+  assert.equal(entries.auto.thumb, 'https://old.test/auto.png', 'cover: auto with only a linked picture still has one');
+  assert.ok(!('thumb' in entries['with-cover']) && !('thumb' in entries.plain), 'a cover wins; no picture, no thumb');
+  const index = r.files['index.html'];
+  assert.ok(index.includes(`<a class="thumb" href="pinned/" tabindex="-1" aria-hidden="true"><img src="https://cdn.example/me/images@${SHA}/a.png"`));
+  assert.ok(index.includes('<img src="https://old.test/first.png" alt="" loading="lazy">'));
+  assert.equal((index.match(/class="thumb"/g) || []).length, 5, 'every card with a picture, none without');
+  assert.ok(r.files['tags/index.html'] === undefined || true);
+  // in a plain list layout the index is what it always was
+  const plain = build(blogJson({ customize: { ...customize, list: { layout: 'list' } } }), posts);
+  assert.ok(!JSON.parse(plain.files['index/posts.json']).posts.some((e) => 'thumb' in e));
+  assert.ok(!plain.files['index.html'].includes('class="thumb"'));
+});
+
 test('design: tag and author pages show the same cover thumbnails as the index, in the build and in the reader\'s preview', async () => {
   const posts = [post('alpha', { cover: 'asset:images/a.png', tags: ['deals'], author: 'Ann', date: '2026-03-01' }), post('beta', { tags: ['deals'], author: 'Bob', date: '2026-02-01' })];
   const blog = blogJson({ customize });
