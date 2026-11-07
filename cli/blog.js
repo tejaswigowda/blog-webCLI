@@ -10,7 +10,8 @@
 //   ext add <owner/repo[/folder]@ref> [dir]     pin an extension (fetched as data and hashed; never run here)
 //   ext remove <owner/repo> [dir]
 //   licences [dir]                              every licence the blog depends on
-//   import wp <export.xml | https://site> [dir] --repo owner/name[/folder]   a WordPress blog's posts, pages and pictures, as files
+//   import wp <export.xml | https://site> [dir] --repo owner/name[/folder] [--add]   a WordPress blog's posts, pages and pictures, as files
+//                                               (--add: into a blog that exists, leaving its settings and theme alone)
 //
 // This tool never executes extension code. Extension output is recorded data (extension-outputs.json),
 // written when you publish from the editor, where extensions run in a sandbox.

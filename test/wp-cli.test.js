@@ -76,6 +76,24 @@ test('cli import wp: an export file becomes a blog directory and an images direc
     const again = await cli('import', 'wp', path.join(tmp, 'export.xml'), blog, '--repo', 'me/site/blog');
     assert.equal(again.code, 1);
     assert.match(again.stderr, /already has a blog\.json/);
+    assert.match(again.stderr, /--add/, 'and says how to add to it instead');
+
+    // --add: the blog's settings and posts are left as they are; a post it has is left out and said
+    const settings = await fs.readFile(path.join(blog, 'blog.json'), 'utf8');
+    const custom = JSON.stringify({ ...JSON.parse(settings), customize: { colors: { accent: '#123456' } } }, null, 2) + '\n';
+    await fs.writeFile(path.join(blog, 'blog.json'), custom);
+    await fs.rm(path.join(blog, 'posts', 'second-post.md'));
+    const mine = await fs.readFile(path.join(blog, 'posts', 'hello-welcome.md'), 'utf8');
+    await fs.writeFile(path.join(blog, 'posts', 'hello-welcome.md'), mine.replace('First', 'My edited first'));
+    const added = await cli('import', 'wp', path.join(tmp, 'export.xml'), blog, '--repo', 'me/site/blog', '--add');
+    assert.equal(added.code, 0, added.stderr);
+    assert.match(added.stdout, /already has a blog: its settings and theme are untouched/);
+    assert.equal(await fs.readFile(path.join(blog, 'blog.json'), 'utf8'), custom, 'settings and theme untouched');
+    assert.match(await fs.readFile(path.join(blog, 'posts', 'hello-welcome.md'), 'utf8'), /My edited first/, 'a post it has is not replaced');
+    assert.ok((await walk(blog)).includes('posts/second-post.md'), 'a post it did not have is added');
+    assert.match(added.stdout, /left out: a post or page with this address is already in the blog/);
+    assert.equal((await cli('build', blog)).code, 0);
+    assert.match(await fs.readFile(path.join(blog, 'index.html'), 'utf8'), /#123456/);
   } finally {
     site.server.close();
     await fs.rm(tmp, { recursive: true });

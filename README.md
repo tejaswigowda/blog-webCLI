@@ -253,6 +253,13 @@ again. The same applies to any commit made here with many files.
 pages are a few dozen requests rather than a blob each (a blog of 8,000 posts and its generated site, 139 MB, went up this way); a request that
 GitHub times out is made again as two halves. Only binaries, and a single text file over 1.5 MB, are blobs of their own.
 
+**Into a blog that already exists.** An import never replaces a blog, but it can add to one: choose *If a blog is already there, add these posts…*
+on the last step (it is on by default; the command line takes `--add`). The blog's `blog.json` is read and kept byte for byte, so its settings,
+theme and customisation are untouched, and nothing it already has is replaced: an imported post or page at an address the blog already uses is
+left out and said, an imported old address the blog already uses is dropped and said, and a picture the blog already has pinned is not sent
+again. The whole site is regenerated with the new posts (the index, tags, feed and so on change), only the files that differ are sent, and
+the pre-flight says what was left out. A blog that uses extensions is refused (they run only in the editor's sandbox when a post is published).
+
 Each post and page also gets its old permalink as an [alias](#old-addresses-redirects), so the old address redirects to the new page (the wizard's
 checkbox, or `--no-redirects`, leaves them out).
 
@@ -1469,6 +1476,7 @@ upload, and nothing is uploaded until you confirm.
 | W3d a site that blocks cross-origin reads is detected after a handful of pictures and the person is offered the ways round it; REST site and tag names are decoded once | `test/wp-import-app.test.js`, `test/wp-content.test.js`, `test/e2e/import.e2e.mjs` |
 | W4 two exports become two blogs in one repository: pictures in one commit, blogs in a second, pinned, regenerable; an existing blog is never replaced | `test/wp-import-app.test.js` |
 | W5 the wizard, from the home page to a commit, in real Chrome against a cross-origin old site | `test/e2e/import.e2e.mjs` |
+| W6 an import into an existing blog adds posts, pages and pictures and leaves its settings, theme and every post it has exactly as they were; duplicates and clashing old addresses are left out and said; doing it twice adds nothing | `test/wp-import-app.test.js`, `test/wp-cli.test.js` |
 | R1 `vendor/hls/` removed; no encoder in the blog app | `test/video-embed.test.js`, `test/licence.test.js` |
 | R2 a video post is a sandboxed player embed of a published render; frontmatter restates no technical field | `test/video-embed.test.js`, `test/release.test.js` |
 | R3 licence per surface; generated pages bundle only the runtime directories | `test/licence.test.js` |

@@ -27,6 +27,7 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
     blocked: null, // every picture was refused as a browser refuses a cross-origin read: { title, host, total, address }
     repo: '',
     branch: '',
+    addToExisting: true, // a repository that already has a blog gets the posts added to it, its settings and theme untouched
   });
   let st = fresh();
   let uid = 0;
@@ -330,7 +331,7 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
         if (!(info.permissions && info.permissions.push)) throw new Refusal('import-refused', `Your token cannot write to ${plain}. Choose a repository you own, or give the token access to it.`);
         const target = st.branch || info.default_branch;
         const blogs = st.results.map(({ source, out: o }) => ({ folder: source.folder, fields: { ...source.fields, ...(o.blog.pageSize ? { pageSize: o.blog.pageSize } : {}) }, files: o.files, assets: o.assets }));
-        const plan = await working('Preparing the pre-flight…', () => planImport(gh, { where, branch: target, blogs }), { button: btn });
+        const plan = await working('Preparing the pre-flight…', () => planImport(gh, { where, branch: target, blogs, addToExisting: st.addToExisting }), { button: btn });
         await budgetLine(plan);
         if (!(await confirmPlan(plan))) return;
         bar.value = 0;
@@ -374,11 +375,14 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
       repo.addEventListener('input', () => { st.repo = repo.value.trim(); });
       const branch = h('input', { value: st.branch, placeholder: 'default branch', 'aria-label': 'Branch' });
       branch.addEventListener('input', () => { st.branch = branch.value.trim(); });
+      const add = h('input', { type: 'checkbox', checked: st.addToExisting });
+      add.addEventListener('change', () => { st.addToExisting = add.checked; });
       const send = h('button', { class: 'primary', icon: 'git-commit', onclick: () => reviewAndCommit(send) }, gh.token ? 'Review and commit…' : 'Sign in to commit');
       return h('div', {},
         card('Where it goes',
           h('p', {}, 'An existing repository of yours (it must have at least one commit). Each blog goes in its own folder; pictures go in an ', h('code', {}, 'images'), ' folder beside them. An existing blog is never replaced.'),
           h('div', { class: 'row' }, field('Repository', repo, st.sources.length > 1 ? 'owner/name, or owner/name/folder to put every blog below a folder' : 'owner/name, or owner/name/folder'), field('Branch', branch, 'Blank: the default branch')),
+          h('label', { class: 'check' }, add, ' If a blog is already there, add these posts, pages and pictures to it: its settings, theme and customisation are kept, and nothing it already has is replaced (a post at an address it already uses is left out)'),
           h('p', { class: 'hint' }, 'Nothing has been uploaded so far. Pressing the button shows exactly what will be sent before anything is.'),
         ),
         doneBox,

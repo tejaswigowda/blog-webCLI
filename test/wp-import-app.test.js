@@ -323,3 +323,71 @@ test('fetching: a folder that has some of the pictures is used, the rest are lef
   assert.equal(none.fromLocal, 0);
   assert.ok(asked < 40);
 });
+
+test('import: into a blog that already exists, posts, pages and pictures are added; its settings, theme and posts are left exactly as they were', async () => {
+  const blog = JSON.stringify({ title: 'Existing', description: 'Already here', author: 'Ann', domain: 'https://me.github.io/site', repo: 'me/site', theme: 'default', customize: { colors: { accent: '#aa0000' }, header: { links: [{ label: 'Shop', url: 'https://shop.example.com' }] } } }, null, 2) + '\n';
+  const mine = (slug, extra = '') => ({ path: `posts/${slug}.md`, text: `---\nslug: ${slug}\ntitle: Mine ${slug}\ndate: 2026-01-0${slug.length % 9 + 1}\nstatus: published\n${extra}---\n\nMy own words in ${slug}.\n` });
+  const existing = [mine('hello-welcome', 'aliases: [2024/05/hello-welcome-old]\n'), mine('keep-me', 'aliases: [2024/06/second-post]\n')];
+  const built = buildSite({ blog, posts: existing, lock: {} });
+  assert.deepEqual(built.errors, []);
+  const files = { ...built.files, 'blog.json': blog, 'assets.lock.json': '{}', ...Object.fromEntries(existing.map((p) => [p.path, p.text])), 'README.md': 'hello' };
+  const server = fakeGitHub({ 'me/site': files });
+  await server.ready;
+  const site = oldSite(imageFiles());
+  const net = createNet((url, opts) => (String(url).startsWith('https://api.github.com') || String(url).startsWith('https://raw.githubusercontent.com') ? server.fetch(url, opts) : site.fetch(url, opts)));
+  const gh = new GitHub(net, { token: 'github_pat_test' });
+  const model = await readExport(WXR);
+  const job = planWp(model, { today: '2026-11-06' });
+  const out = job.finish((await fetchImages(net, job.images)).fetched);
+  const blogs = [{ folder: '', fields: { title: 'Ada & Friends', description: 'x', author: 'Ada' }, files: out.files, assets: out.assets }];
+
+  // by default an existing blog is not touched, and the refusal says what to do
+  await assert.rejects(planImport(gh, { where: 'me/site', branch: 'main', blogs }), (e) => e.code === 'import-refused' && /add these posts to the blog that is there/.test(e.detail));
+
+  const plan = await planImport(gh, { where: 'me/site', branch: 'main', blogs, addToExisting: true });
+  const paths = plan.changes.map((c) => c.path);
+  assert.ok(!paths.includes('blog.json') && !paths.includes('posts/hello-welcome.md'), 'neither the settings nor a post it already has');
+  for (const p of ['posts/second-post.md', 'pages/about-us.md', 'second-post/index.html', 'index.html', 'feed.xml', 'assets.lock.json', 'index/posts.json']) assert.ok(paths.includes(p), p);
+  assert.deepEqual(plan.skipped.map((s) => s.path), ['posts/hello-welcome.md']);
+  assert.ok(plan.headline.some((l) => /settings, theme and customisation are not touched/.test(l)));
+  assert.ok(plan.headline.some((l) => /1 imported post or page was left out/.test(l)));
+  assert.ok(plan.notes.some((n) => /already in the blog|already has/.test(n.text) || /replaces/.test(n.text)));
+  // the imported "hello-welcome" would have claimed 2024/05/hello-welcome; the blog's own alias on keep-me is for /2024/06/second-post/: the import's is dropped
+  assert.ok(plan.notes.some((n) => n.where === 'posts/second-post.md' && /2024\/06\/second-post/.test(n.text) && /could not be kept/.test(n.text)));
+  assert.equal(net.ledger.uploaded.bytes, 0, 'planning sends nothing');
+
+  const receipt = await executeImport(gh, plan, {});
+  assert.equal(receipt.commits.length, 2, 'pictures, then the blog');
+  const after = server.files('me/site');
+  assert.equal(after['blog.json'], blog, 'byte for byte');
+  assert.equal(after['posts/hello-welcome.md'], existing[0].text);
+  assert.equal(after['posts/keep-me.md'], existing[1].text);
+  assert.equal(after['README.md'], 'hello');
+  assert.match(after['index.html'], /#aa0000/, 'the theme and customisation still draw the pages');
+  assert.match(after['index.html'], /Shop/);
+  assert.match(after['second-post/index.html'], /#aa0000/);
+  assert.ok(after['images/wp/2024/05/cat.jpg'] && after['2024/06/second-post/index.html'].includes('keep-me'), 'the blog\'s own redirect is still its own');
+  assert.ok(!after['2024/05/hello-welcome/index.html'], 'the imported duplicate brought nothing');
+  const lock = JSON.parse(after['assets.lock.json']);
+  assert.equal(lock['images/wp/2024/05/cat.jpg'], receipt.commits[0].sha, 'new pictures are pinned to the commit they are in');
+
+  // CI would regenerate exactly this
+  const posts = Object.entries(after).filter(([p]) => /^(posts|pages)\//.test(p)).map(([path, text]) => ({ path, text }));
+  const regen = buildSite({ blog: after['blog.json'], posts, lock });
+  assert.deepEqual(regen.errors, []);
+  for (const [p, c] of Object.entries(regen.files)) assert.equal(after[p], c, p);
+
+  // doing it again adds nothing: every post is there, every picture is pinned
+  const again = await planImport(gh, { where: 'me/site', branch: 'main', blogs, addToExisting: true });
+  assert.equal(again.assetGroups.length, 0, 'pictures it has are not sent again');
+  assert.equal(again.changes.length, 0, 'nothing differs');
+  assert.ok(again.skipped.length >= 3);
+});
+
+test('import: into a blog that uses extensions is refused, and a blog with no images repository still gets its pictures in the default one', async () => {
+  const blog = JSON.stringify({ title: 'E', description: 'd', author: 'A', domain: 'https://me.github.io/site', repo: 'me/site', extensions: [{ repo: 'me/ext', ref: 'v1.0.0', sha256: 'a'.repeat(64), name: 'X', version: '1', licence: 'MIT', kind: 'build', hooks: ['post:html'] }] });
+  const server = fakeGitHub({ 'me/site': { 'blog.json': blog, 'assets.lock.json': '{}' } });
+  await server.ready;
+  const gh = new GitHub(createNet(server.fetch), { token: 'github_pat_test' });
+  await assert.rejects(planImport(gh, { where: 'me/site', branch: 'main', blogs: [{ folder: '', fields: { title: 't', description: 'd', author: 'a' }, files: [], assets: [] }], addToExisting: true }), (e) => /uses extensions/.test(e.detail || e.message));
+});

@@ -59,6 +59,8 @@ async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, r
   return site;
 }
 
+export { generate as generateSite };
+
 // Generated files that disappear when the feature that made them is switched off, and anything left in a folder the
 // generator owns (tags/, archive/, page/, …) that the build no longer writes.
 const isContent = (p) => POST_PATH.test(p) || PAGE_PATH.test(p);

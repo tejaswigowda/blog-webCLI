@@ -1,4 +1,4 @@
-// blog-webcli import wp <export.xml | https://site> [dir] --repo owner/name[/folder] [--domain https://…] [--uploads <wp-content/uploads copy>] [--no-fetch] [--no-drafts] [--no-library] [--no-comments] [--no-redirects]
+// blog-webcli import wp <export.xml | https://site> [dir] --repo owner/name[/folder] [--domain https://…] [--uploads <wp-content/uploads copy>] [--no-fetch] [--no-drafts] [--no-library] [--no-comments] [--no-redirects] [--add]
 // The same import as the wizard, but from Node: a site's pictures can be fetched whatever its CORS policy, so this is the way to
 // bring every picture across. It writes plain files (blog.json, posts/, pages/, images/) and nothing else: no network write, no
 // commit. Push the pictures, then `pin` and `build` (the pin is the commit the pictures are in, which exists only after the push).
@@ -8,7 +8,8 @@ import { Refusal } from '../lib/errors.js';
 import { blogJsonText, defaultDomain, makeBlogJson } from '../lib/init.js';
 import { parseRepoRef } from '../lib/reporef.js';
 import { validateBlog } from '../lib/blog.js';
-import { planWp } from '../lib/wp-content.js';
+import { IMAGES_KEY, planWp } from '../lib/wp-content.js';
+import { mergeImported } from '../lib/wp-merge.js';
 import { createNet, fmtBytes } from '../app/net.js';
 import { fetchImages, readExport, readSite, todayIso, uploadsIndex } from '../app/import.js';
 
@@ -20,6 +21,7 @@ function parseArgs(args) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--no-drafts' || a === '--no-library' || a === '--no-comments' || a === '--no-fetch' || a === '--no-redirects') flags[a.slice(5)] = false;
+    else if (a === '--add') flags.add = true;
     else if (a === '--repo' || a === '--domain' || a === '--uploads') flags[a.slice(2)] = args[++i];
     else if (a.startsWith('--')) throw new Refusal('import-refused', `unknown option ${a}`);
     else pos.push(a);
@@ -34,7 +36,8 @@ export async function importWordPress(args, { fetchImpl = (...a) => globalThis.f
   if (!flags.repo) throw new Refusal('import-refused', 'say where the blog will live with --repo owner/name (or owner/name/folder): its pictures are named relative to it');
   const place = parseRepoRef(flags.repo);
   const dir = dirArg || '.';
-  if (await exists(path.join(dir, 'blog.json'))) throw new Refusal('import-refused', `${path.resolve(dir)} already has a blog.json; an import never replaces a blog`);
+  const hasBlog = await exists(path.join(dir, 'blog.json'));
+  if (hasBlog && !flags.add) throw new Refusal('import-refused', `${path.resolve(dir)} already has a blog.json; an import never replaces a blog. Use --add to add the posts and pictures to it, leaving its settings and theme alone`);
 
   const net = createNet(fetchImpl);
   if (flags.fetch === false && !flags.uploads) throw new Refusal('import-refused', '--no-fetch uses only the --uploads copy, so say where it is');
@@ -81,9 +84,22 @@ export async function importWordPress(args, { fetchImpl = (...a) => globalThis.f
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, content);
   };
-  await write(path.join(dir, 'blog.json'), blogText);
-  for (const f of out.files) await write(path.join(dir, f.path), f.text);
-  for (const a of out.assets) await write(path.join(imagesDir, a.path), a.bytes);
+  let { files, assets } = out;
+  if (hasBlog) {
+    // --add: the blog is left as it is; only what it does not already have is written
+    const existing = [];
+    for (const sub of ['posts', 'pages']) {
+      for (const name of (await fs.readdir(path.join(dir, sub)).catch(() => [])).filter((n) => n.endsWith('.md'))) existing.push({ path: `${sub}/${name}`, text: await fs.readFile(path.join(dir, sub, name), 'utf8') });
+    }
+    const lock = (await exists(path.join(dir, 'assets.lock.json'))) ? JSON.parse(await fs.readFile(path.join(dir, 'assets.lock.json'), 'utf8')) : {};
+    const merged = mergeImported({ existing, files, assets, lock, imagesKey: IMAGES_KEY });
+    files = merged.files;
+    assets = merged.assets;
+    out.notes.push(...merged.notes, ...merged.skipped.map((x) => ({ where: x.path, text: `left out: ${x.why}` })));
+    log(`${path.resolve(dir)} already has a blog: its settings and theme are untouched; ${merged.skipped.length} posts or pages it already has are left out, ${merged.reusedAssets} pictures it already has are not written again`);
+  } else await write(path.join(dir, 'blog.json'), blogText);
+  for (const f of files) await write(path.join(dir, f.path), f.text);
+  for (const a of assets) await write(path.join(imagesDir, a.path), a.bytes);
 
   const s = out.summary;
   log(`wrote ${s.posts} posts, ${s.drafts} drafts, ${s.pages} pages, ${s.comments} comments, ${s.images} pictures and ${s.files} files (${fmtBytes(s.imageBytes)}) to ${path.resolve(dir)}`);
