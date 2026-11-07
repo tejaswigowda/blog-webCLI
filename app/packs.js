@@ -53,24 +53,35 @@ async function manifestOf(gh, where, ref, file, bad, validate) {
 
 // ---- reading a pack to PIN it (no digest yet): returns what blog.json should record ----
 
-export async function readThemeToPin(gh, where, ref, { base } = {}) {
+// A registry entry is a claim about a repository, never a source for the pin: when the entry states a sha256 or a licence
+// and what the app computes differs, nothing is pinned.
+export function checkRegistryClaim(expect, pin) {
+  if (!expect) return;
+  if (expect.sha256 && expect.sha256 !== pin.sha256) throw new Refusal('registry-mismatch', `The registry lists ${pin.repo}@${pin.ref} with sha256 ${expect.sha256}, but the repository hashes to ${pin.sha256}. Nothing was pinned.`);
+  if (expect.licence && expect.licence !== pin.licence) throw new Refusal('registry-mismatch', `The registry lists ${pin.repo}@${pin.ref} as ${expect.licence}, but its manifest says ${pin.licence}. Nothing was pinned.`);
+}
+
+export async function readThemeToPin(gh, where, ref, { base, expect } = {}) {
   const r = parseRepoRef(where);
   await assertRefKind(gh, r.repo, ref, 'theme');
   const { manifest, bytes } = await manifestOf(gh, where, ref, 'theme.json', badTheme, validateThemeManifest);
   const files = { 'theme.json': bytes, ...(await readFiles(gh, where, ref, themeFilePaths(manifest).filter((p) => p !== 'theme.json'), badTheme)) };
   const digest = themeDigest(files, themeFilePaths(manifest));
   const pin = pinFor(r.ref, ref, manifest, digest, base);
+  checkRegistryClaim(expect, pin);
   const theme = loadTheme(pin, files); // proves the css passes before anything is written
   return { pin, theme, manifest };
 }
 
 export async function readExtensionToPin(gh, where, ref, opts = {}) {
+  const { expect } = opts;
   const r = parseRepoRef(where);
   await assertRefKind(gh, r.repo, ref, 'extension');
   const { manifest, bytes } = await manifestOf(gh, where, ref, 'extension.json', badExt, validateExtensionManifest);
   const files = { 'extension.json': bytes, ...(await readFiles(gh, where, ref, extensionFilePaths(manifest).filter((p) => p !== 'extension.json'), badExt)) };
   const digest = filesDigest(files, extensionFilePaths(manifest), badExt);
   const pin = pinForExtension(r.ref, ref, manifest, digest);
+  checkRegistryClaim(expect, pin);
   const ext = loadExtension(pin, files);
   await verifyPinnedAssets(opts.fetchAsset, manifest);
   return { pin, ext, manifest };

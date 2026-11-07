@@ -85,7 +85,7 @@ test('embed: a searchable dropdown with Embed beside it; an unpublished render f
     assert.equal(layout.sameRow, true, 'the Embed button is beside the dropdown');
     const text = await dialogText(page);
     assert.ok(!/Create a release/.test(text), 'releases are not something you ask for');
-    assert.match(text, /Upload a video…/);
+    assert.ok(!/Upload a video/.test(text), 'the blog app does not encode or upload video: a render is made elsewhere');
 
     // ---- an untagged render folder is found and offered; Embed says it will publish it ----
     await until(page, "document.querySelector('dialog[open] .combo-input').value === 'clip'");
@@ -97,7 +97,7 @@ test('embed: a searchable dropdown with Embed beside it; an unpublished render f
     await until(page, "document.querySelector('dialog[open]').innerText.includes('Ready to create clip/v1')");
     const review = await dialogText(page);
     assert.match(review, /Tag clip\/v1 on github\.com\/example\/blog \(main\)/);
-    assert.match(review, /Nothing has been uploaded yet/);
+    assert.match(review, /Nothing has been uploaded\. The tag is created and never moved/);
     assert.ok(!/\bnull\b/.test(review), 'no stray "null"');
     await clickText(page, 'dialog button', 'Back');
     await until(page, "document.querySelector('dialog[open] .combo-input')");

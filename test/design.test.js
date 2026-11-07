@@ -65,6 +65,24 @@ test('design: cards show the post\'s cover when it has one, and a card without o
   assert.ok(!list.includes('class="thumb"'));
 });
 
+test('design: tag and author pages show the same cover thumbnails as the index, in the build and in the reader\'s preview', async () => {
+  const posts = [post('alpha', { cover: 'asset:images/a.png', tags: ['deals'], author: 'Ann', date: '2026-03-01' }), post('beta', { tags: ['deals'], author: 'Bob', date: '2026-02-01' })];
+  const blog = blogJson({ customize });
+  const r = build(blog, posts);
+  const thumb = `<a class="thumb" href="../../alpha/" tabindex="-1" aria-hidden="true"><img src="https://cdn.example/me/images@${SHA}/a.png" alt="" loading="lazy"></a>`;
+  assert.ok(r.files['tags/deals/index.html'].includes(thumb), 'the tag page has the thumbnail');
+  assert.equal((r.files['tags/deals/index.html'].match(/class="thumb"/g) || []).length, 1, 'and only for the post that has a cover');
+  const ann = Object.keys(r.files).find((f) => /^authors\/ann\/index\.html$/.test(f));
+  assert.ok(ann && r.files[ann].includes(thumb), 'the author page has it too');
+  const files = new Map(Object.entries(r.files));
+  files.set('blog.json', JSON.stringify(blog));
+  files.set('assets.lock.json', JSON.stringify(LOCK));
+  for (const p of posts) files.set(p.path, p.text);
+  const site = await loadSite(async (p) => (files.has(p) ? enc.encode(files.get(p)) : null), { anyBlog: true });
+  const { html } = previewHtml(site, 'tags/deals/index.html');
+  assert.equal(html, r.files['tags/deals/index.html'], 'the preview is the deployed page');
+});
+
 test('design: the page with the slug "home" is the front of the index, in place of the title, on the first page only', () => {
   const r = build(blogJson({ customize: { list: { layout: 'cards' } }, pagination: { size: 1 } }));
   const index = r.files['index.html'];

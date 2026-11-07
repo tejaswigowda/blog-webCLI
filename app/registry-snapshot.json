@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "$comment": "The bundled copy of the registry (blog-registry): what the app lists when it cannot reach the registry. Written by `node cli/registry.js snapshot <registry-dir>`; never edit by hand.",
+  "themes": [
+    {
+      "name": "Essay",
+      "repo": "tejaswigowda/blog-webCLI-themes/essay",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "Long-form reading: a serif face, a narrow measure and generous leading.",
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.0.0/essay/screenshot.png"
+    },
+    {
+      "name": "Terminal",
+      "repo": "tejaswigowda/blog-webCLI-themes/terminal",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "Monospace, dark by default, with a prompt-style masthead. Follows the system if it prefers light.",
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.0.0/terminal/screenshot.png"
+    },
+    {
+      "name": "Paper",
+      "repo": "tejaswigowda/blog-webCLI-themes/paper",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "High-contrast and minimal: system sans-serif, black on white, hard rules, a considered print stylesheet.",
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.0.0/paper/screenshot.png"
+    },
+    {
+      "name": "Cards",
+      "repo": "tejaswigowda/blog-webCLI-themes/cards",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "The post list as a grid of cards; a comfortable single column for reading a post.",
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.0.0/cards/screenshot.png"
+    },
+    {
+      "name": "Twenty Twenty-One",
+      "repo": "tejaswigowda/blog-webCLI-themes/wp/twentytwentyone",
+      "ref": "v1.0.0",
+      "licence": "GPL-2.0-or-later",
+      "blurb": "Twenty Twenty-One 2.9 from wordpress.org (GPL), CSS only; uses the wordpress-classic markup.",
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.0.0/wp/twentytwentyone/screenshot.png"
+    }
+  ],
+  "extensions": [
+    {
+      "name": "Reading time",
+      "repo": "tejaswigowda/blog-webCLI-extensions/reading-time",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "Adds an estimated reading time above each post."
+    },
+    {
+      "name": "Heading anchors",
+      "repo": "tejaswigowda/blog-webCLI-extensions/heading-anchors",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "Gives every heading a stable id and a # link, so a section can be linked to."
+    },
+    {
+      "name": "Table of contents",
+      "repo": "tejaswigowda/blog-webCLI-extensions/table-of-contents",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "Adds a contents list of the h2 and h3 headings to a post that has three or more."
+    },
+    {
+      "name": "Smart typography",
+      "repo": "tejaswigowda/blog-webCLI-extensions/smart-typography",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "Curly quotes, dashes and ellipses in the rendered post. Code, links and URLs are left alone; the markdown source is never changed."
+    },
+    {
+      "name": "Archive by year",
+      "repo": "tejaswigowda/blog-webCLI-extensions/archive-by-year",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "Groups the post list under a heading for each year. Needs dates shown in the list; uses the blog-webcli-v1 markup."
+    },
+    {
+      "name": "Image captions",
+      "repo": "tejaswigowda/blog-webCLI-extensions/image-captions",
+      "ref": "v1.0.0",
+      "licence": "MIT",
+      "blurb": "Shows an image's alt text as a visible caption (a figure with a figcaption). Uses the blog-webcli-v1 markup."
+    }
+  ]
+}

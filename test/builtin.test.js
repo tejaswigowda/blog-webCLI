@@ -1,7 +1,7 @@
-// The "Built in" themes and extensions live in two sibling repositories
+// The listed themes and extensions live in two sibling repositories
 // (blog-webCLI-themes, blog-webCLI-extensions). This checks the real folders against this app:
 // every one loads and pins under the app's own rules, builds a real blog, is listed in
-// themes.json / extensions.json with the right licence and a tag that exists, and every
+// the bundled registry snapshot with the right licence and a tag that exists, and every
 // extension does what its README says. Skipped when the siblings are not checked out
 // (set BLOG_WEBCLI_THEMES / BLOG_WEBCLI_EXTENSIONS to point elsewhere).
 import test from 'node:test';
@@ -97,7 +97,8 @@ for (const [what, dir, file, listFile, key, repo, skip] of [
   ['extensions', EXTS, 'extension.json', 'extensions.json', 'extensions', EXTS_REPO, skipExts],
 ]) {
   test(`built in ${what}: every folder is listed, every entry matches its manifest and a tag that exists`, { skip }, async () => {
-    const list = JSON.parse(await fs.readFile(path.join(root, listFile), 'utf8'));
+    // the bundled snapshot (what the app lists when the registry is unreachable), which is a copy of the registry repository's file
+    const list = JSON.parse(await fs.readFile(path.join(root, 'app', 'registry-snapshot.json'), 'utf8'));
     const entries = list[key];
     const found = await folders(dir, file);
     assert.ok(found.length >= (what === 'themes' ? 5 : 6), `${found.length} ${what} found`);
@@ -108,7 +109,7 @@ for (const [what, dir, file, listFile, key, repo, skip] of [
       const m = JSON.parse(await fs.readFile(path.join(dir, folder, file), 'utf8'));
       assert.equal(e.name, m.name, e.repo);
       assert.equal(e.licence, m.licence, `${e.repo}: the list states the manifest's licence`);
-      assert.ok(e.description && e.description.length < 200, e.repo);
+      assert.ok(e.blurb && e.blurb.length < 200, e.repo);
       assert.ok(isPinnedRef(e.ref), `${e.repo}@${e.ref} is a tag or commit`);
       assert.ok(tags.includes(e.ref), `${e.repo}: tag ${e.ref} exists in the repository (git tag; push it before the list is useful)`);
       assert.ok(existsSync(path.join(dir, folder, 'LICENSE')), `${e.repo} has a LICENSE`);

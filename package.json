@@ -4,7 +4,7 @@
   "description": "blog.webcli.app — a blog is a GitHub repo; this static app renders and edits it.",
   "type": "module",
   "private": true,
-  "license": "GPL-3.0-only",
+  "license": "SEE LICENSE IN LICENSE",
   "bin": {
     "blog-webcli": "cli/blog.js"
   },

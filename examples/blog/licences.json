@@ -2,7 +2,7 @@
   "version": 1,
   "generator": {
     "name": "blog-webcli",
-    "licence": "GPL-3.0-only"
+    "licence": "MIT"
   },
   "blog": {
     "title": "Example Blog",
@@ -12,7 +12,7 @@
     {
       "kind": "theme",
       "name": "default",
-      "licence": "GPL-3.0-only",
+      "licence": "MIT",
       "builtin": true
     }
   ]

@@ -1,12 +1,9 @@
-// Creating a video release from the blog app: tag a folder that is already in the video repository,
-// or upload a finished HLS render (a folder of playlists and segments) and tag that. The app does
-// not transcode: a render comes from hls.webcli.app or ffmpeg. A release is one commit and one tag
+// Publishing a video release from the blog app: tag a render folder that is already in the video repository. The app does
+// not transcode and does not upload video: a render is made and committed by hls.webcli.app (or ffmpeg). A release is one tag
 // <name>/v<N>; a published tag never moves, so the next change is the next version.
 import { parseRepoRef } from '../lib/reporef.js';
 import { Refusal } from '../lib/errors.js';
-import { checkRelease, nextVersion, releaseFolders, releaseTag, versionsOf } from '../lib/release.js';
-import { gitBlobSha } from './github.js';
-import { fmtBytes } from './net.js';
+import { nextVersion, releaseFolders, releaseTag, versionsOf } from '../lib/release.js';
 
 async function context(gh, where) {
   const { repo, folder } = parseRepoRef(where);
@@ -82,57 +79,14 @@ export async function planTagRelease(gh, { where, name }) {
   return { kind: 'tag', repo: c.repo, folder: c.folder, branch: c.branch, head: c.head, name, version, tag: releaseTag(name, version), dir, files: under(c.tree, dir).length, bytes: 0, changes: [] };
 }
 
-// Upload a finished render into <video folder>/<name>/, replacing what is there, and tag it.
-export async function planUploadRelease(gh, { where, name, files }) {
-  const { files: checked, bytes } = checkRelease(name, files);
-  const c = await context(gh, where);
-  needWrite(c);
-  const dir = `${c.prefix}${name}/`;
-  const tags = await gh.tags(c.repo);
-  const version = nextVersion(tags, name);
-  const changes = [];
-  const keep = new Set();
-  for (const f of checked) {
-    const path = `${dir}${f.path}`;
-    keep.add(path);
-    const have = c.tree.get(path);
-    if (have !== (await gitBlobSha(f.bytes))) changes.push({ path, bytes: f.bytes, size: f.bytes.length, action: have ? 'update' : 'add' });
-  }
-  for (const [path] of under(c.tree, dir)) if (!keep.has(path)) changes.push({ path, size: 0, action: 'delete', delete: true });
-  if (!changes.length) throw new Refusal('bad-release', `${dir} already holds exactly this render. Tag it instead of uploading it again.`);
-  const sent = changes.filter((x) => !x.delete);
-  return { kind: 'upload', repo: c.repo, folder: c.folder, branch: c.branch, head: c.head, name, version, tag: releaseTag(name, version), dir, files: sent.length, bytes: sent.reduce((n, x) => n + x.size, 0), changes, total: { files: checked.length, bytes } };
-}
-
 export function describeRelease(plan) {
-  if (plan.kind === 'tag') return [`Tag ${plan.tag} on github.com/${plan.repo} (${plan.branch}), the commit it is at now. ${plan.files} files already in ${plan.dir}; nothing is uploaded.`];
-  const gone = plan.changes.filter((x) => x.delete).length;
-  return [`${plan.files} file${plan.files === 1 ? '' : 's'}, ${fmtBytes(plan.bytes)}, to github.com/${plan.repo} (${plan.branch}) in ${plan.dir} as ${plan.tag}`, ...(gone ? [`${gone} file${gone === 1 ? '' : 's'} of the folder's previous contents removed, so the release is exactly what was picked`] : [])];
+  return [`Tag ${plan.tag} on github.com/${plan.repo} (${plan.branch}), the commit it is at now. ${plan.files} files already in ${plan.dir}; nothing is uploaded.`];
 }
 
-// One commit (for an upload), then the tag. If the tag fails after the commit, the folder is in
-// the repository and tagging it is the retry.
-export async function executeRelease(gh, plan, { onProgress = () => {} } = {}) {
+// One tag, at the commit the branch is at now. A tag never moves.
+export async function executeRelease(gh, plan) {
   const receipt = { repo: plan.repo, branch: plan.branch, tag: plan.tag, tagUrl: `https://github.com/${plan.repo}/tree/${plan.tag.split('/').map(encodeURIComponent).join('/')}`, commit: null };
-  let sha = plan.head.sha;
-  if (plan.kind === 'upload') {
-    const c = await gh.commit(plan.repo, {
-      branch: plan.branch,
-      parent: plan.head.sha,
-      baseTree: plan.head.treeSha,
-      files: plan.changes.map((x) => (x.delete ? { path: x.path, delete: true } : { path: x.path, content: x.bytes })),
-      message: `Add video release ${plan.tag}`,
-      onProgress,
-    });
-    receipt.commit = { sha: c.sha, url: c.url };
-    sha = c.sha;
-  }
   if (await gh.tagExists(plan.repo, plan.tag)) throw new Refusal('bad-release', `${plan.tag} already exists, and a tag never moves. Choose the next version.`);
-  try {
-    await gh.createTag(plan.repo, plan.tag, sha);
-  } catch (e) {
-    if (receipt.commit) e.message = `The files are committed (${receipt.commit.sha.slice(0, 7)}) but tagging ${plan.tag} failed: ${e.message}. Open "Create a release" again and tag the folder.`;
-    throw e;
-  }
+  await gh.createTag(plan.repo, plan.tag, plan.head.sha);
   return receipt;
 }

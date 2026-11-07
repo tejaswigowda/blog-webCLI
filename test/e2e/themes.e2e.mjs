@@ -26,7 +26,7 @@ async function readTree(dir, base = dir, out = {}) {
 async function site() {
   const copy = await mkdtemp(path.join(os.tmpdir(), 'blog-ui-'));
   for (const d of ['app', 'lib', 'blog', 'vendor']) await cp(path.join(root, d), path.join(copy, d), { recursive: true });
-  for (const f of ['index.html', 'themes.json', 'extensions.json']) await cp(path.join(root, f), path.join(copy, f));
+  for (const f of ['index.html']) await cp(path.join(root, f), path.join(copy, f));
   await mkdir(path.join(copy, 'test'));
   await cp(path.join(root, 'test', 'fake-github.js'), path.join(copy, 'test', 'fake-github.js'));
   const ex = path.join(root, 'examples');
@@ -84,8 +84,9 @@ test('themes and extensions: chosen by address, run in the sandbox, read by a re
     await page.evaluate("location.hash = '#repo=example/blog&themes'; 0");
     await until(page, "document.querySelector('#view h1')?.textContent === 'Theme'");
     const view = await page.evaluate("document.querySelector('#view').innerText");
-    assert.match(view, /Built in/);
-    for (const name of ['Essay', 'Terminal', 'Paper', 'Cards', 'Twenty Twenty-One']) assert.ok(view.includes(name), `${name} is listed under Built in`);
+    assert.match(view, /Listed/);
+    assert.match(view, /bundled with this app/, 'the registry is unreachable here, so the bundled snapshot is shown, and the screen says so');
+    for (const name of ['Essay', 'Terminal', 'Paper', 'Cards', 'Twenty Twenty-One']) assert.ok(view.includes(name), `${name} is listed`);
     assert.ok(!view.includes('me/classic'), 'the theme used below is in no list');
     await page.evaluate("(() => { document.querySelector('#view input').value = 'me/classic@v1.0.0'; })()");
     await click(page, '#view button', 'Use this theme');

@@ -154,7 +154,7 @@ test('extensions: pinning one runs it only in the runner, and its output is comm
   const { server, gh } = await world();
   const calls = [];
   const plan = await planExtension(gh, { repo: 'example/blog', branch: 'main', add: { where: 'me/ext', ref: 'v1.0.0' }, runner: runner(calls) });
-  assert.deepEqual(plan.licences.map((l) => [l.kind, l.name, l.licence]), [['theme', 'default', 'GPL-3.0-only'], ['extension', 'Reading time', 'MIT']]);
+  assert.deepEqual(plan.licences.map((l) => [l.kind, l.name, l.licence]), [['theme', 'default', 'MIT'], ['extension', 'Reading time', 'MIT']]);
   assert.deepEqual(calls.map((c) => c.slug).sort(), ['markdown-is-the-format', 'static-hls-in-git'], 'one run per post, in the sandbox runner');
   assert.ok(plan.changes.some((c) => c.path === 'extension-outputs.json'));
   await executePlan(gh, plan);
@@ -228,4 +228,18 @@ test('X3: an embed extension frames only its pinned asset, sandboxed, and the as
   assert.equal(frames[0], `<iframe src="${CHART_URL}" sandbox="allow-scripts" referrerpolicy="no-referrer" loading="lazy" title="Chart" width="600" height="300">`);
   const wrong = await embedWorld('0'.repeat(64));
   await assert.rejects(planExtension(wrong.gh, { repo: 'example/blog', branch: 'main', add: { where: 'me/embed', ref: 'v1.0.0' }, runner: runner() }), code('pin-mismatch'));
+});
+
+// ---------- R7: a registry entry is a claim, never the pin ----------
+test('R7: a registry sha256 or licence that disagrees with the repository pins nothing; the pin is what the app computes', async () => {
+  const { gh } = await world();
+  const base = { repo: 'example/blog', branch: 'main' };
+  const use = (expect) => planTheme(gh, { ...base, use: { where: 'me/theme', ref: 'v1.0.0', expect } });
+  await assert.rejects(use({ sha256: 'a'.repeat(64) }), code('registry-mismatch'));
+  await assert.rejects(use({ licence: 'GPL-3.0-only' }), code('registry-mismatch'));
+  const plain = await use(undefined);
+  const real = JSON.parse(plain.changes.find((c) => c.path === 'blog.json').content).theme;
+  const agreed = await use({ sha256: real.sha256, licence: real.licence });
+  assert.deepEqual(JSON.parse(agreed.changes.find((c) => c.path === 'blog.json').content).theme, real);
+  await assert.rejects(planExtension(gh, { ...base, add: { where: 'me/ext', ref: 'v1.0.0', expect: { sha256: 'b'.repeat(64) } }, runner: runner() }), code('registry-mismatch'));
 });

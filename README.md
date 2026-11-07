@@ -4,11 +4,19 @@ A blog is one or more GitHub repositories. `https://blog.webcli.app/#repo=owner/
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-blog deployment.
 
-**Licence: GPL-3.0-only** ([LICENSE](LICENSE)). The app includes hls-webCLI's video encoder
-([vendor/hls/](vendor/hls), GPL-3.0), so the whole app is GPL-3.0. Themes and extensions are separate
-repositories with their own licences (the built-in ones are MIT) and are not affected. Note that the
-pages the app generates carry its built-in default theme, which is part of the app, and say so in
-their licence comment and in `licences.json`; a blog that wants no GPL text in its pages pins a theme.
+**Licence, by surface** ([LICENSE](LICENSE)). The repository has two, because what it conveys is of two kinds:
+
+| Surface | Where | Licence | Who receives it |
+|---|---|---|---|
+| **runtime** | [lib/](lib) (the generator and renderer), `vendor/moment/` | **MIT** ([lib/LICENSE](lib/LICENSE)) | every reader of every blog: the generated pages carry a script built from it |
+| **tool** | `app/`, `cli/`, `blog/`, `index.html`, `templates/`, `examples/`, `test/` | **GPL-3.0-only** ([LICENSE-GPL-3.0](LICENSE-GPL-3.0)) | nobody: it runs from blog.webcli.app or on your machine |
+
+A permissive runtime means publishing a blog with this tool never makes the blog a combined work of anything copyleft; a copyleft tool
+costs no one anything, because no one redistributes it. The split is held by a test: the scripts a blog ships are built only from the
+runtime directories (`test/licence.test.js`). Third-party files and their licences are in
+[licences-inventory.json](licences-inventory.json), generated and checked in CI (see [Dependencies and licences](#dependencies-and-licences)).
+Themes and extensions are separate repositories with their own licences (the built-in ones are MIT) and are not affected. The pages the
+app generates carry its built-in default theme, which is part of the runtime (MIT), and say so in their licence comment and in `licences.json`.
 
 ```
 blog repo     posts/*.md · pages/*.md · blog.json · [order.json] · assets.lock.json · index/posts.json · generated HTML · feed.xml · sitemap.xml
@@ -282,7 +290,7 @@ setting lives in exactly one place:
 | `index/posts.json`, `feed.xml`, `sitemap.xml`, `robots.txt`, `search.json`, `theme.css`, `licences.json`, `404.html`, `webcli-live.js`, `webcli-search.js`, every page, and the folders `tags/`, `authors/`, `archive/`, `page/`, `search/` | generated from the above | the generator; CI diffs them |
 | the reader's URL hash | one view of a blog (`/blog/#repo=…&ref=…&images=…`, see [the reader](#the-blog-reader)) | the link |
 | GitHub Pages settings | where the blog is served (branch, custom domain, HTTPS) | GitHub; the app reads it, it does not store it |
-| [`themes.json`](themes.json), [`extensions.json`](extensions.json) in *this* repository | the "Built in" lists in the theme and extension pickers (a convenience: any repository works by address) | pull request |
+| `themes.json`, `extensions.json` in the **registry repository** (`registry` in [app/config.js](app/config.js)) | the lists in the theme and extension pickers (a convenience: any repository works by address); [app/registry-snapshot.json](app/registry-snapshot.json) is the bundled fallback | pull request against the registry repository |
 
 Nothing is ever configured by writing a hostname into a post. A post names things logically
 (`asset:images/x.png`, `video:videos/clip@v2`); `blog.json` says where they live.
@@ -575,7 +583,7 @@ carry `kind` (`build`, or `embed` which frames only the pinned assets it declare
 |---|---|---|
 | images | `assets` is absent and `repo` is set | `<repo>/images` (a blog at `me/site/blog` gives `me/site/images`), CDN `https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}` |
 | videos | `video` is absent and `repo` is set | `<repo>/videos`, player `https://strataeditor.dev/player/`, CDN `https://cdn.jsdelivr.net/gh/{owner}/{repo}@{tag}/{slug}/` |
-| theme | `theme` is absent | the built-in `default` (GPL-3.0-only, recorded in `licences.json`) |
+| theme | `theme` is absent | the built-in `default` (MIT, part of the runtime; recorded in `licences.json`) |
 | `content.ref` | `content` has no `ref` | `HEAD` |
 | address | creating a blog | GitHub Pages' own answer; `https://<owner>.github.io/<repo>` until it is on |
 
@@ -888,17 +896,36 @@ player was checked to run unchanged under it.
   generated page, and shown in the app (**Settings → Licences**, and in the pre-flight of every
   change that adds one). `node cli/blog.js licences` prints the set.
 
-### Discovery without a registry
+### The registry
 
-[themes.json](themes.json) and [extensions.json](extensions.json) are lists in this repository,
-curated by pull request (name, repo, ref, licence, description, screenshot) and rendered by the
-**Theme** and **Extensions** screens under the heading **Built in**. There is no service, database
-or account, and anyone can publish a theme by publishing a repository. If nobody merges the pull
-request, the theme still works by its address (`owner/repo[/folder]@tag`); the list is a
-convenience, not a gate.
+The lists the **Theme** and **Extensions** screens show live in their own data repository (`blog-registry`), not in this one:
+`themes.json` and `extensions.json`, static files. **Adding a theme is a pull request against a JSON file**: no release of this app, no
+review by this app's maintainer. The list can be forked, and running your own registry is changing one address, `registry` in
+[app/config.js](app/config.js).
 
-**Built in** is what the two companion repositories publish. Each folder is a complete theme or
-extension, pinned by the hash of its own files, and every list entry names the tag `v1.0.0`:
+An entry is `{ name, repo, ref, licence, blurb, screenshot?, sha256? }` and nothing else ([lib/registry.js](lib/registry.js), which
+the registry repository carries a copy of, validates it with the same rules in its own CI):
+
+* **Fetched as a static file**, never an API: a plain GET with no credentials, no referrer, and a path no cache holds (the freshness
+  check's spelling, [lib/live.js](lib/live.js)). Nothing is rate limited or authenticated.
+* **A snapshot is the fallback.** [app/registry-snapshot.json](app/registry-snapshot.json) is bundled with the app; if the registry is
+  unreachable, missing, not JSON or the wrong shape, the screen lists the snapshot and says why. `node cli/registry.js snapshot <dir>`
+  rewrites it from a checkout of the registry; `scaffold <dir>` writes the registry repository's own README, licence, validator and CI.
+* **The registry is data, never authority.** Unknown fields are dropped, not read. A name is plain text; `repo` is `owner/name[/folder]`;
+  `ref` is a tag or commit; `licence` an identifier; `blurb` plain text of at most 300 characters; `screenshot` an `https:` address or
+  nothing. An entry that fails is skipped and the screen says how many; a file of the wrong shape is refused whole. Everything reaches the
+  page as text, except the screenshot, which is an `<img>` of a validated address. A registry entry cannot make code run at read time:
+  nothing in it is evaluated, and the lists are read only in the editor, never by a reader of a blog.
+* **Still pinned by ref and hash.** Using a listed theme computes the pin from the repository, exactly as by address. If the entry states a
+  `sha256` or a `licence` that differs from what the app finds, the app refuses (`registry-mismatch`) and pins nothing.
+* **A theme with no entry still works by address** (`owner/repo[/folder]@tag`); the list stays a convenience.
+
+The registry repository is prepared beside this one (`~/Downloads/blog-registry` in this working copy) and is not created on GitHub by this
+repository's tooling; until it is pushed to the address in `app/config.js`, the screens use the snapshot. Tests:
+[test/registry.test.js](test/registry.test.js).
+
+**The list** is what the two companion repositories publish. Each folder is a complete theme or
+extension, pinned by the hash of its own files, and every registry entry names the tag `v1.0.0`:
 
 | Repository | Folders |
 |---|---|
@@ -911,11 +938,54 @@ node cli/blog.js ext add   tejaswigowda/blog-webCLI-extensions/heading-anchors@v
 ```
 
 [test/builtin.test.js](test/builtin.test.js) checks the real folders against this app: each theme
-and extension loads and pins under these rules and builds a real blog; every folder is listed and
+and extension loads and pins under these rules and builds a real blog; every folder is listed (in the bundled snapshot) and
 every entry matches its manifest, its licence and a tag that exists; every class a `blog-webcli-v1`
 theme styles is one the generator emits; the extensions run together, deterministically and from
 their recorded outputs. It looks for the repositories next to this one (set `BLOG_WEBCLI_THEMES`
 and `BLOG_WEBCLI_EXTENSIONS` to point elsewhere) and skips when they are absent.
+
+## Dependencies and licences
+
+Every third-party file or package, its licence, its upstream and **which surface it lands on** is in
+[licences-inventory.json](licences-inventory.json). It is generated (`node cli/inventory.js`, from `package-lock.json`, the `SOURCE.json` beside
+each vendored file and what the shipped scripts are bundled from), never maintained by hand, and shown in the app at
+[`#licences`](https://blog.webcli.app/#licences) (and linked from the home page).
+
+| surface | what it is | who receives it | licences allowed |
+|---|---|---|---|
+| `runtime` | what the scripts generated pages load are built from | every reader of every blog | permissive only: MIT, ISC, BSD-2/3, Apache-2.0, 0BSD, Unlicense, CC0, Zlib |
+| `tool` | the editor, reader and CLI | nobody (it runs from blog.webcli.app) | the above and GPL / LGPL |
+| `dev` | build and test only | nobody | anything that is declared |
+
+**CI fails** (`node cli/inventory.js --check`) when the committed inventory is stale, when anything with no declared licence reaches any
+surface, or when anything copyleft or unrecognised reaches the runtime. The inventory is documentation; that failure is the mechanism.
+Two things hold it to the truth: the runtime list is computed from the esbuild metafile of the very scripts that ship, so a new import
+into them is in the runtime surface whether or not anyone declared it, and `test/licence.test.js` asserts those scripts are built from
+nothing outside the runtime directories. [test/inventory.test.js](test/inventory.test.js) covers the policy.
+
+## One renderer
+
+The generator (`lib/blog.js`, run in Node by the CLI and in the browser by the editor's publish path) and the page's own script (a browser
+bundle of `lib/live-render.js`) are **one module graph**, bundled by esbuild from the same source. Nothing is written twice. What keeps
+that true is two tests that fail when it stops being:
+
+* **Platform-neutral** ([test/neutral.test.js](test/neutral.test.js), R9). The renderer is bundled for esbuild's `neutral` platform, which
+  resolves no Node built-in and no package, so a `node:fs` or a bare `crypto` import fails the build. Every free reference to a Node or DOM
+  global (`document`, `window`, `process`, `Buffer`, `require`, …) is rewritten to a marker, which is scope-aware where a text search is not
+  (a local named `document`, a comment and a string are not matches), and the build fails on any. Every module reached must be in
+  `lib/` or `vendor/moment/`, the runtime directories.
+* **Generator = client** ([test/equivalence.test.js](test/equivalence.test.js), R10). For every post of a golden corpus the page the generator
+  writes and the page the browser bundle rebuilds from the repository's generated files are compared after a **committed normaliser**
+  ([test/normalise.js](test/normalise.js)), which forgives exactly: whitespace between tags (never inside text, `pre`, `textarea`, `script`
+  or `style`), attribute order and quoting, and the self-closing form of a void element, plus CRLF and trailing newlines. Anything else (a
+  character of text, an attribute value, an element, a comment) is a difference, and `test/normalise.test.js` proves each. A post markdown
+  cannot express is refused by both, with the same code (`lossy-round-trip`). The corpus is [test/golden/](test/golden): nested lists, a
+  fence with HTML in it, footnote-, table- and shortcode-shaped text, raw HTML, `asset:` references, a video embed, unicode (CJK, RTL,
+  emoji, combining marks) and a post that is refused; the shared corpus and the example blog are compared as well.
+
+Footnotes, tables, raw HTML blocks and WordPress shortcodes are not in the markdown subset (the toolbar cannot express them), so in a
+canonical post they are escaped text and both renderers show that text, identically; a table becomes one paragraph.
+The importer is where those shapes are converted; its fidelity is therefore measured against this one renderer.
 
 ## Assets
 
@@ -1003,61 +1073,36 @@ published. `node cli/blog.js pin` verifies tags too. Changing player or CDN is a
 edit and a rebuild; no post is touched, and a post naming the player or CDN address is refused
 (`provider-url`).
 
-### Uploading a video
+### Embedding a video
 
-In the editor, the video button opens **Embed a video**: a **searchable dropdown of the videos in the
-video repository with the Embed button beside it**. Type to filter (any order, case-insensitive,
-by name, version or repository); the arrow keys move, Enter chooses, Enter again embeds, Esc closes
-the list. The chosen video's poster is shown below. There is no "create a release" step: a release
-(a folder of HLS and a tag that never moves) is made for you, in one of two ways.
+**A blog does not encode video. It embeds a player.** A video post refers to a *render* that hls.webcli.app already produced and
+published: its duration, poster, renditions, captions and `files.sha256` are all in that render's own `render.json`, so a post
+**references** the render (`video:videos/clip@v1`) and never restates any of it. There is no encoder in this repository.
 
-* **Upload a video…** takes an MP4 or MOV and does everything: it is encoded **in your browser** into
-  an HLS ladder, published as a release in the video repository, and embedded in the post.
-* **A render folder that is already in the repository** (a folder holding a `master.m3u8` with no tag
-  yet, for example one you pushed from hls.webcli.app's download) is listed in the dropdown as *not
-  published yet*. Choosing it changes the button to **Publish and embed**: you get the usual review
-  (*Tag clip/v1 on github.com/me/blog (main) … nothing is uploaded*), the tag is created, and the
-  video is embedded. Videos published with hls.webcli.app appear in the dropdown by themselves.
+In the editor, the video button opens **Embed a video**: a **searchable dropdown of the videos in the video repository with the Embed
+button beside it**. Type to filter (any order, case-insensitive, by name, version or repository); the arrow keys move, Enter chooses,
+Enter again embeds, Esc closes the list. The chosen video's poster is shown below. A video published with hls.webcli.app appears in the
+dropdown by itself. A render folder that is already in the repository (a folder holding a `master.m3u8` with no tag yet, for
+example one pushed from hls.webcli.app's download) is listed as *not published yet*: choosing it changes the button to **Publish and
+embed**, you get the usual review (*Tag clip/v1 on github.com/me/blog (main) … nothing is uploaded*), the tag is created, and the video is
+embedded.
 
-1. Pick the file. It is read in the page and inspected first, so a video that cannot be packaged is
-   refused at once with the reason (`not-mp4`, `fragmented-input`, `no-video`, `unsupported-codec`,
-   `rotated-input`, `unknown-frame-rate`, `vfr-input`, `fractional-frame-rate`, `no-keyframes`):
-   H.264 at a steady 24, 25, 30, 50 or 60 fps, with a keyframe to start from.
-2. See what it is (size, frame rate, length, audio) and choose: the release name (from the file name,
-   under hls.webcli.app's naming rules), **every rung that fits the source** (1080p, 720p, 480p; never
-   upscaled, and a smaller source gets one rung at its own size), and whether to keep the audio. The
-   estimate of what it adds to the repository follows your choices (a full ladder is about 46 MB a
-   minute, so untick rungs for a long video); a release may hold at most 300 MB.
-3. **Encode and review…** runs the encoder with a progress bar and a cancel button. Nothing is sent.
-4. The review is the usual pre-flight: *"N files, X MB, to github.com/me/blog (main) in videos/<name>/
-   as <name>/v1"*, the file list, and what was encoded. **Commit and push** sends one commit and then
-   the tag, with progress by file and a wait-and-retry if GitHub rate-limits the many writes.
-5. The release is embedded in the post.
-
-The encoder is **hls-webCLI's, vendored unedited** in [vendor/hls/](vendor/hls) (Strata's own export
-modules: WebCodecs ladder, fragmented-MP4 segmenter, playlists, `render.json`, `files.sha256`), so a
-render made here is the one hls.webcli.app would make. [vendor/hls/SOURCES.json](vendor/hls/SOURCES.json)
-records the hash of every file and `test/vendored.test.js` fails if one is edited. It needs a browser
-with WebCodecs (recent Chrome, Edge or Safari); without one the dialog says so. Videos made with
-hls.webcli.app and published there still appear in the dropdown. The upload says what it is: its `render.json` records
-`determinism.frames: false`, because an uploaded file was not drawn by Strata's time-source-audited
-renderer. The video repository is, by default, a `videos/` folder of the blog's repository; for a
-shared repository `render.json`'s publication block names the repository, not the folder, so
-hls.webcli.app's *Verify* would not find a release that lives in a subfolder.
+The embed is `<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src="<player>#<pinned render folder>&present=true">`:
+`allow-scripts` without `allow-same-origin` gives the frame an opaque origin, with no access to the page, a token or storage, and the
+player is same-origin with the HLS it loads, so no CORS configuration is involved. With scripting off, the link inside is the fallback.
+The player, the folder template and the repository are `blog.json`'s `video` section; a post never names a provider.
 
 Whatever the route, a release is checked before anything is sent, and refused with `bad-release` if
 it is not one: a name that is not lowercase words joined by `-`; no `master.m3u8`; a file that is not
 a playlist, segment, caption, poster, image or manifest; unsafe paths; a playlist that names anything
 outside the release (an absolute URL, a leading `/`, `..`: a release that depends on another host is
 the lock-in this app avoids); a `files.sha256` that does not match the files; more than 2000 files,
-50 MB a file or 300 MB in all. A tag is never moved: if it exists by the time the commit is made,
-nothing is tagged. If the commit lands but the tag fails, the message says so, and the folder then
-shows in the dropdown as *not published yet*: choosing it tags it, which is the retry. Writing needs
+50 MB a file or 300 MB in all. A tag is never moved: if it exists by the time the tag is made,
+nothing is tagged. Writing needs
 the token to cover the video repository (see Token permissions); the CDN can take a few minutes to
 serve a new tag, so the player may not load a just-published video straight away. Tested in
-[test/release.test.js](test/release.test.js), [test/encode.test.js](test/encode.test.js) and, in a real
-browser, [test/e2e/release.e2e.mjs](test/e2e/release.e2e.mjs) and
-[test/e2e/upload-video.e2e.mjs](test/e2e/upload-video.e2e.mjs).
+[test/release.test.js](test/release.test.js), [test/video-embed.test.js](test/video-embed.test.js) and, in a real
+browser, [test/e2e/release.e2e.mjs](test/e2e/release.e2e.mjs).
 
 ## Site features
 
@@ -1337,6 +1382,17 @@ upload, and nothing is uploaded until you confirm.
 | W3d a site that blocks cross-origin reads is detected after a handful of pictures and the person is offered the ways round it; REST site and tag names are decoded once | `test/wp-import-app.test.js`, `test/wp-content.test.js`, `test/e2e/import.e2e.mjs` |
 | W4 two exports become two blogs in one repository: pictures in one commit, blogs in a second, pinned, regenerable; an existing blog is never replaced | `test/wp-import-app.test.js` |
 | W5 the wizard, from the home page to a commit, in real Chrome against a cross-origin old site | `test/e2e/import.e2e.mjs` |
+| R1 `vendor/hls/` removed; no encoder in the blog app | `test/video-embed.test.js`, `test/licence.test.js` |
+| R2 a video post is a sandboxed player embed of a published render; frontmatter restates no technical field | `test/video-embed.test.js`, `test/release.test.js` |
+| R3 licence per surface; generated pages bundle only the runtime directories | `test/licence.test.js` |
+| R4 licence and dependency inventory generated at build time and shown in the UI | `test/inventory.test.js`, `test/e2e/licences.e2e.mjs` |
+| R5 CI fails on an unlicensed or copyleft dependency reaching the runtime | `test/inventory.test.js`, `.github/workflows/ci.yml` (`node cli/inventory.js --check`) |
+| R6 the registry is its own repository; the app reads it from config with a bundled fallback | `test/registry.test.js`, `test/e2e/themes.e2e.mjs` (the fallback, in real Chrome) |
+| R7 registry contents schema-validated; no field reaches the DOM unvalidated; still pinned by ref and hash | `test/registry.test.js`, `test/packs-app.test.js` |
+| R8 a theme absent from the registry still resolves by address | `test/packs-app.test.js` (X9), `test/registry.test.js`, `test/e2e/themes.e2e.mjs` |
+| R9 one shared renderer; a platform-specific import in it fails the build | `test/neutral.test.js` |
+| R10 generator and client output identical across the golden corpus, with a committed normaliser | `test/equivalence.test.js`, `test/normalise.test.js`, `test/live.test.js` (L5) |
+| R11 O1-O10 walked; O3 and O4 demonstrated through the CLI on the example blog | `test/ordering-walk.test.js`, `test/order.test.js` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves
@@ -1402,9 +1458,5 @@ every named import, so a renamed export cannot silently break the browser-only m
   and a new post's default date is the reader's local day, not UTC's. Generated pages show the date
   as the blog's [`dateFormat`](#dateformat) (never relative, so a published page does not change with
   the clock and CI still regenerates it byte for byte); the feed and every machine-readable date keep ISO.
-* `vendor/hls/` is hls-webCLI's encoder (GPL-3.0), vendored unedited and hash-checked. Encoding a
-  video needs WebCodecs (recent Chrome, Edge or Safari) and holds the video and the encoded files
-  in memory, so the input is limited to 1 GB and a release to 300 MB. It takes the encoder's own
-  limits: H.264 only, steady 24/25/30/50/60 fps, no rotation; no captions yet (hls.webcli.app adds
-  those). Writes are retried when GitHub rate-limits them, but an interrupted upload leaves no
-  commit and no tag, so it is simply run again.
+* The blog app does not encode or upload video (R1): a render is made and published by hls.webcli.app. The post's embed shows the
+  player; the transcript is the render's own, in the player, and is not duplicated as text on the page.

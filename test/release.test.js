@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
-import { describeRelease, executeRelease, listReleaseFolders, planTagRelease, planUploadRelease } from '../app/release.js';
+import { describeRelease, executeRelease, listReleaseFolders, planTagRelease } from '../app/release.js';
 import { loadBlog, planChange } from '../app/site.js';
 import { LIMITS, checkRelease, nextVersion, releaseFolders, versionsOf } from '../lib/release.js';
 import { sha256Bytes } from '../lib/sha256.js';
@@ -125,64 +125,6 @@ test('tag a folder: one tag at the current commit, nothing uploaded, the next ve
   await assert.rejects(planTagRelease(gh, { where: WHERE, name: 'missing' }), code('bad-release'));
 });
 
-test('upload: one commit with the render, then the tag at that commit; the blog can embed it', async () => {
-  const { server, gh, blog } = await world();
-  const files = render();
-  const plan = await planUploadRelease(gh, { where: WHERE, name: 'fresh-clip', files });
-  assert.equal(plan.tag, 'fresh-clip/v1');
-  assert.match(describeRelease(plan)[0], /^6 files, [\d.]+ [KMB]+, to github\.com\/example\/site \(main\) in videos\/fresh-clip\/ as fresh-clip\/v1$/);
-  assert.ok(plan.changes.every((c) => c.path.startsWith('videos/fresh-clip/') && c.action === 'add'));
-
-  const before = Object.keys(server.files('example/site'));
-  const receipt = await executeRelease(gh, plan);
-  const S = server.state['example/site'];
-  assert.equal(S.branches.main, receipt.commit.sha);
-  assert.equal(S.commits[receipt.commit.sha].parents[0], plan.head.sha, 'one commit on the planned head');
-  assert.equal(S.tagRefs['fresh-clip/v1'], receipt.commit.sha, 'the tag is at the commit that holds the files');
-  const after = server.files('example/site');
-  assert.deepEqual(Object.keys(after).filter((p) => !before.includes(p)).sort(), files.map((f) => `videos/fresh-clip/${f.path}`).sort());
-  assert.equal(after['videos/fresh-clip/master.m3u8'], MASTER);
-  assert.equal(after['blog/blog.json'], BLOG + '\n', 'the blog is untouched');
-
-  // the blog can now embed it: the tag exists, so publishing a post that names it is accepted
-  const post = `---\nslug: demo\ntitle: Demo\ndate: 2026-11-08\nstatus: published\n---\n\n![](video:videos/fresh-clip@v1)\n`;
-  const publish = await planChange(gh, { repo: 'example/site/blog', branch: 'main', slug: 'demo', text: post, create: true });
-  assert.ok(publish.changes.some((c) => c.path === 'blog/demo/index.html' && c.content.includes('example/site@fresh-clip/v1/videos/fresh-clip/')));
-  const [r] = await listReleaseFolders(gh, blog);
-  assert.ok(r.folders.some((f) => f.name === 'fresh-clip' && f.state === 'released'));
-});
-
-test('upload: a new version replaces the folder exactly, and the old tag stays where it was', async () => {
-  const { server, gh, blog } = await world();
-  const first = render();
-  const r1 = await executeRelease(gh, await planUploadRelease(gh, { where: WHERE, name: 'cut', files: first }));
-  const second = [file('master.m3u8', MASTER), file('render.json', '{"version":2,"n":2}'), file('720p30/index.m3u8', RUNG), file('720p30/init.mp4', 'INIT'), file('720p30/seg00001.m4s', 'NEW SEGMENT')];
-  const plan = await planUploadRelease(gh, { where: WHERE, name: 'cut', files: second });
-  assert.equal(plan.tag, 'cut/v2');
-  assert.deepEqual(plan.changes.map((c) => [c.action, c.path.slice('videos/cut/'.length)]).sort(), [['delete', 'poster.jpg'], ['update', '720p30/seg00001.m4s'], ['update', 'render.json']], 'only what differs is sent; the stale poster goes');
-  assert.match(describeRelease(plan)[1], /^1 file of the folder's previous contents removed/);
-  const r2 = await executeRelease(gh, plan);
-  const after = server.files('example/site');
-  assert.ok(!('videos/cut/poster.jpg' in after));
-  assert.equal(after['videos/cut/720p30/seg00001.m4s'], 'NEW SEGMENT');
-  const S = server.state['example/site'];
-  assert.equal(S.tagRefs['cut/v1'], r1.commit.sha, 'v1 still points at the first commit: a tag never moves');
-  assert.equal(S.tagRefs['cut/v2'], r2.commit.sha);
-  assert.deepEqual((await listReleaseFolders(gh, blog))[0].folders.find((f) => f.name === 'cut'), { name: 'cut', files: 5, latest: 2, next: 3, state: 'released' });
-
-  // an edit made after the tag shows as changed
-  await gh.commit('example/site', { branch: 'main', parent: S.branches.main, baseTree: S.commits[S.branches.main].tree, files: [{ path: 'videos/cut/render.json', content: '{"edited":true}' }], message: 'edit' });
-  assert.equal((await listReleaseFolders(gh, blog))[0].folders.find((f) => f.name === 'cut').state, 'changed');
-  assert.equal((await planUploadRelease(gh, { where: WHERE, name: 'cut', files: second })).tag, 'cut/v3', 'uploading the render again undoes the edit, as the next version');
-});
-
-test('upload: the same render again is refused, not uploaded twice', async () => {
-  const { gh } = await world();
-  const files = render();
-  await executeRelease(gh, await planUploadRelease(gh, { where: WHERE, name: 'same', files }));
-  await assert.rejects(planUploadRelease(gh, { where: WHERE, name: 'same', files }), (e) => e.code === 'bad-release' && /already holds exactly this render/.test(e.message));
-});
-
 test('a tag that appears between planning and sending is never moved', async () => {
   const { server, gh } = await world();
   const plan = await planTagRelease(gh, { where: WHERE, name: 'clip' });
@@ -190,27 +132,11 @@ test('a tag that appears between planning and sending is never moved', async () 
   await assert.rejects(executeRelease(gh, plan), (e) => e.code === 'bad-release' && /already exists, and a tag never moves/.test(e.message));
 });
 
-test('an upload whose tag then fails says the files are committed and how to recover', async () => {
-  const { server, gh } = await world();
-  const plan = await planUploadRelease(gh, { where: WHERE, name: 'half', files: render() });
-  const real = gh.createTag.bind(gh);
-  gh.createTag = async () => {
-    throw new Error('GitHub 500: boom');
-  };
-  await assert.rejects(executeRelease(gh, plan), /files are committed \(\w{7}\) but tagging half\/v1 failed: GitHub 500: boom\. Open "Create a release" again and tag the folder/);
-  assert.ok('videos/half/master.m3u8' in server.files('example/site'));
-  gh.createTag = real;
-  const again = await planTagRelease(gh, { where: WHERE, name: 'half' });
-  assert.equal(again.tag, 'half/v1', 'the retry is a plain tag of the folder');
-  await executeRelease(gh, again);
-});
-
 test('no write access: refused before anything is sent', async () => {
   const { gh, blog } = await world({ push: false });
   const [r] = await listReleaseFolders(gh, blog);
   assert.equal(r.canPush, false);
   await assert.rejects(planTagRelease(gh, { where: WHERE, name: 'clip' }), /do not have write access to example\/site/);
-  await assert.rejects(planUploadRelease(gh, { where: WHERE, name: 'x', files: render() }), /do not have write access/);
 });
 
 test('a repository that cannot be read is reported, not thrown', async () => {

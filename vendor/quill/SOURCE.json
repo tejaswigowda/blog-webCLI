@@ -1,0 +1,8 @@
+{
+  "name": "quill",
+  "version": "2.0.3",
+  "licence": "BSD-3-Clause",
+  "upstream": "https://github.com/slab/quill",
+  "licenceFile": "quill.js.LICENSE.txt",
+  "files": ["quill.js", "quill.snow.css"]
+}

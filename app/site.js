@@ -308,7 +308,7 @@ export async function planTheme(gh, { repo: where, branch, use, runner }) {
   const { head, whole, blog } = await currentBlogJson(gh, where, branch);
   let message;
   if (use) {
-    const { pin, manifest } = await readThemeToPin(gh, use.where, use.ref, { base: use.base });
+    const { pin, manifest } = await readThemeToPin(gh, use.where, use.ref, { base: use.base, expect: use.expect });
     blog.theme = pin;
     message = `Use theme: ${manifest.name} ${manifest.version} (${manifest.licence})`;
   } else {
@@ -327,7 +327,7 @@ export async function planExtension(gh, { repo: where, branch, add, remove, runn
   const { head, whole, blog } = await currentBlogJson(gh, where, branch);
   let message;
   if (add) {
-    const { pin, manifest } = await readExtensionToPin(gh, add.where, add.ref, { fetchAsset: assetFetcher(gh) });
+    const { pin, manifest } = await readExtensionToPin(gh, add.where, add.ref, { fetchAsset: assetFetcher(gh), expect: add.expect });
     blog.extensions = [...(blog.extensions || []).filter((e) => e.repo !== pin.repo), pin];
     message = `Add extension: ${manifest.name} ${manifest.version} (${manifest.licence})`;
   } else {

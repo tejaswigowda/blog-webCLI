@@ -1,0 +1,9 @@
+{
+  "name": "moment",
+  "version": "2.31.0",
+  "licence": "MIT",
+  "upstream": "https://github.com/moment/moment",
+  "licenceFile": "LICENSE",
+  "files": ["moment.min.js", "moment.esm.js"],
+  "note": "moment.esm.js is moment.min.js given a module of its own by cli/build-live.js; the upstream file is untouched."
+}

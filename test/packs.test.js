@@ -296,7 +296,7 @@ test('X8: every licence a blog depends on is recorded in blog.json, licences.jso
     assert.ok(!m[1].includes('--'), 'a comment may not contain --');
   }
   const plain = JSON.parse(buildSite(await exampleInput()).files['licences.json']);
-  assert.deepEqual(plain.dependencies, [{ kind: 'theme', name: 'default', licence: 'GPL-3.0-only', builtin: true }]);
+  assert.deepEqual(plain.dependencies, [{ kind: 'theme', name: 'default', licence: 'MIT', builtin: true }]);
 });
 
 // ---------- extensions ----------
