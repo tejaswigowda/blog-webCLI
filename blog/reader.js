@@ -111,10 +111,10 @@ function retarget(doc, { parsed, blog, file }) {
   }
 }
 
-function showPreview(html, ctx) {
+function showPreview(html, ctx, css = '') {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const style = doc.querySelector('head style');
-  theme.textContent = style ? style.textContent : '';
+  theme.textContent = style ? style.textContent : css; // a linked stylesheet is not in the page: the preview has its text
   for (const s of doc.querySelectorAll('script')) s.remove(); // a page of the site loads its own scripts; the reader runs none of them
   retarget(doc, ctx);
   document.body.className = doc.body.className;
@@ -140,7 +140,7 @@ async function preview(parsed, mine) {
   const out = previewHtml(site, file, { text });
   if (mine !== seq) return true;
   const ctx = { parsed, blog, file };
-  showPreview(out.html, ctx);
+  showPreview(out.html, ctx, out.css);
   if (out.redirect) {
     // an old address: the page says "moved", and its link is already the reader's own address for the post
     const to = document.querySelector('#reader a[href^="#"]');
@@ -160,7 +160,7 @@ async function preview(parsed, mine) {
   // a reader's own order lists every post in one list; previous/next and every address stay as the blog has them
   const show = (mode) => {
     const sorted = mode === 'order' ? out : previewHtml(site, 'index.html', { text: null, entries: readerSort(site.index.posts, mode), size: 0 });
-    showPreview(sorted.html, ctx);
+    showPreview(sorted.html, ctx, sorted.css);
     draw(mode);
   };
   if (isIndex) show(savedSort(sessionStorage, repo));

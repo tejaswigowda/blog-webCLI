@@ -433,6 +433,7 @@ four keys are required, and the real file is plain JSON (no comments):
 | `order` | no | how posts are sequenced: [below](#order) | newest first (`date`, `desc`) |
 | `search` | no | `true` adds a [search page](#site-features) | off |
 | `pagination` | no | `{ "size": N }`: [pages of the index](#search-pagination-seo) | one list |
+| `stylesheet` | no | `"linked"`: every page links one `style.css` instead of carrying the CSS ([below](#linked-stylesheet)) | `"inline"`: the CSS is in every page |
 | `dateFormat` | no | how a post's date reads: a [moment.js format](#dates) | `MMMM D, YYYY` ("November 5, 2026") |
 | `seo` | no | `twitter`, `sitemap`, `robots`: [below](#search-pagination-seo) | a sitemap, and a robots.txt at the root of a host |
 | `comments`, `analytics` | no | a script from an address you name, [below](#comments-analytics) | none |
@@ -608,6 +609,21 @@ the default.
 Switching `sitemap` or `robots` off stops them being updated; the generator never deletes a `sitemap.xml` or
 `robots.txt`, because a blog that turns them off may have written one by hand. A `robots.txt` you wrote yourself
 is replaced while `robots` is on: set it to `false` to keep yours.
+
+#### Linked stylesheet
+
+```json
+"stylesheet": "linked"
+```
+
+By default every page carries the blog's CSS (the theme, the colours, the fonts and your custom CSS) in a `<style>` element, so a page needs
+nothing else. On a big blog that is the cost of changing the CSS: 8,000 posts of 15 KB each are 120 MB to send for one colour. With
+`"stylesheet": "linked"` (a checkbox in Settings; the importer sets it for a blog of more than 50 posts) the generator writes the CSS once, as
+`style.css` at the root of the blog, and each page links it (`../style.css`, from the root of the site on a 404 page). A change of CSS or
+colours is then `blog.json` and `style.css`, and no page. Turning it on or off rewrites every page once. The file is cached by GitHub Pages
+for a few minutes, so a change reaches a reader who has the old file in a few minutes, not at once. What stays in every page, and still
+rewrites every page when it changes: the title, the menu, the header and footer, the date format. The `/blog/` reader applies the same CSS;
+a page it shows is the page the build writes. (`test/linked-style.test.js`)
 
 #### `comments`, `analytics`
 
@@ -1549,6 +1565,7 @@ upload, and nothing is uploaded until you confirm.
 | K6 a big blog's search index is in shards that together hold every post, the search page reads them all in real Chrome, and a small blog is as it was; the feed holds the newest 50 | `test/incremental.test.js`, `test/e2e/search-shards.e2e.mjs` |
 | K7 stable page addresses: older pages are fixed runs counted from the oldest, a new post changes only the front page (index, tags, authors), every post is on exactly one page, an incremental publish sends a handful of files; the default numbering is unchanged | `test/incremental.test.js` |
 | K8 a big blog's index is a manifest plus shards that the build, the live script, the reader and the editor read back as the same index; a publish changes the manifest and one shard | `test/incremental.test.js`, `test/bulk.test.js` |
+| K9 linked stylesheet: pages link `style.css` (relative at every depth, from the root of the site on a 404) and carry no `<style>`; the file is the theme and the custom CSS; a change of CSS or colours is `blog.json` and `style.css` and no page, in the editor too; turned off, the file goes; the preview and the build agree, and the reader shows a linked blog styled in real Chrome; the default is unchanged | `test/linked-style.test.js`, `test/e2e/linked-style.e2e.mjs` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves
@@ -1593,8 +1610,8 @@ a standalone page, or a change that alters the header of every page (the first t
 pagination, tags, authors, cards, search shards, a sitemap and old addresses, and requires the files to be exactly a full build's; the same
 holds on the real 8,000-post blog.
 
-What it does not do: it does not send *less* when everything changes. Every settings or theme change rewrites every page (they all carry
-the title, the menu and the theme), and a new newest post shifts every pagination boundary unless the blog uses [stable page addresses](#search-pagination-seo); the cost there is only that the reading is
+What it does not do: it does not send *less* when everything changes. A change of the title, the menu, the header, the footer or the date format
+rewrites every page (they all carry them), and so does a change of CSS unless the blog [links its stylesheet](#linked-stylesheet), and a new newest post shifts every pagination boundary unless the blog uses [stable page addresses](#search-pagination-seo); the cost there is only that the reading is
 fast and the send is patient. A repository over what a browser can hold in memory (tens of thousands of long posts) is a job for the CLI.
 
 ## Known limits
