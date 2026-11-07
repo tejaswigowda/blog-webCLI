@@ -631,6 +631,17 @@ a closed set; an unknown setting or an out-of-range value is refused (`bad-blog-
 
 The header logo is checked once, up front: a logo that is not pinned refuses the whole build.
 
+## Responsive pages
+
+Every generated page declares the viewport and fits it. The built-in theme collapses its header, previous/next row and card grid on a
+phone and brings its type down. A **pinned theme** (including the built-in list and a converted WordPress theme) has a small layer
+appended after its own CSS, so that no theme can leave a page that scrolls sideways: images, video, tables and code fit their column,
+long words and addresses break, the header, menu and navigation rows wrap, floats stack, and below 600px the large headings and
+page titles of a theme made for a desktop are brought down (including a classic theme's `--global--font-size-*` and `--heading--*`
+variables). A theme's own margins, colours and layout are left alone, and your `customize.css` still comes last. The layer is
+`THEME_RESPONSIVE` in [lib/theme.js](lib/theme.js). Under the classic contract the generated tag, archive and search pages use the markup
+a classic theme styles (`page-header alignwide`, `page-title`, `entry-content`, `navigation pagination`), so they take the theme's look.
+
 ## Themes and extensions
 
 A **theme is a repository** of CSS. An **extension is a repository** of code. There is no package

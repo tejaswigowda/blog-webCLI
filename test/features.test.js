@@ -365,3 +365,32 @@ test('generated pages never name a provider and every internal link in a listing
     }
   }
 });
+
+// ---------- responsive ----------
+import { indexBody } from '../lib/contracts.js';
+import { THEME_RESPONSIVE, THEMES } from '../lib/theme.js';
+import { themeCss } from '../lib/customize.js';
+
+test('responsive: the default theme and, after every pinned theme, a layer that keeps any page inside the screen', () => {
+  assert.match(THEMES.default, /@media \(max-width:640px\)/);
+  assert.match(THEMES.default, /table\{display:block;max-width:100%;overflow-x:auto/);
+  const pinned = themeCss({ customize: { css: 'p{margin:0}' } }, { css: '.theme-rule{color:red}' });
+  const at = (s) => pinned.indexOf(s);
+  assert.ok(at('.theme-rule{color:red}') < at('@media (max-width:782px)') && at('@media (max-width:782px)') < at('p{margin:0}'), 'after the theme, before the blog\'s own css');
+  assert.ok(pinned.includes(THEME_RESPONSIVE));
+  for (const need of ['img,svg,canvas,video,iframe,embed,object{max-width:100%}', 'overflow-wrap:break-word', '.page-title,h1.entry-title{font-size:clamp(', '--global--font-size-page-title:2.25rem', '.nav-links,.post-nav,.pagination .nav-links{flex-wrap:wrap']) assert.ok(THEME_RESPONSIVE.includes(need), need);
+  assert.ok(!/\.alignwide/.test(THEME_RESPONSIVE), 'a classic theme\'s own margins are left to it');
+});
+
+test('responsive: a listing page under the classic contract has the heading, the column and the content classes a classic theme styles', () => {
+  const blog = { title: 'T', description: 'D', author: 'A', domain: 'https://x.test' };
+  const d = { blog, entries: [], hrefFor: (s) => s, home: '../', feed: '../feed.xml', heading: 'Archive', intro: '2 posts', prose: true, indexHtml: '<h2 id="y2026">2026</h2>' };
+  const html = indexBody('wordpress-classic', d).html;
+  assert.match(html, /<header class="page-header alignwide"><h1 class="page-title">Archive<\/h1><div class="archive-description"><p>2 posts<\/p><\/div><\/header>/);
+  assert.match(html, /<div class="entry-content">\n<h2 id="y2026">2026<\/h2>\n<\/div>/);
+  assert.match(html, /<p class="site-title">/, 'the page title is the one h1, so the site title is not');
+  assert.match(indexBody('wordpress-classic', { ...d, heading: undefined, indexHtml: undefined }).html, /<h1 class="site-title">/, 'the home page keeps its site title as the h1');
+  assert.ok(!indexBody('blog-webcli-v1', d).html.includes('entry-content'));
+  const { files } = buildSite({ blog: blogJson({ pagination: { size: 1 } }), posts: [post('a', { date: '2026-02-01' }), post('b', { date: '2026-01-01' })], lock: {} });
+  assert.match(files['index.html'], /<nav class="navigation pagination" aria-label="Pages"><div class="nav-links"><span class="page-of">Page 1 of 2<\/span><a rel="next" href="page\/2\/">Next page →<\/a><\/div><\/nav>/);
+});
