@@ -61,6 +61,11 @@ test('delete: from the post page, with a pre-flight, Cancel sending nothing, and
     await fill(page, 'dialog input[name=token]', `github_pat_${'b'.repeat(30)}`);
     await clickText(page, 'dialog button', 'Sign in');
     await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
+    // the activity line says what is going on and nothing else: no stray "null" where a Stop button would be
+    await page.evaluate("(async () => { const m = await import('/app/ui.js'); window.__end = m.busy('Committing…'); })()");
+    await until(page, "document.querySelector('.activity') && !document.querySelector('.activity').hidden");
+    assert.equal(await page.evaluate("document.querySelector('.activity').textContent.trim()"), 'Committing…');
+    await page.evaluate('window.__end(); 0');
     await page.evaluate("location.hash = '#repo=example/blog&post=gone'; 0");
     await until(page, "document.querySelector('article.post')");
 
