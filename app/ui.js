@@ -106,7 +106,8 @@ export function busy(label) {
   function draw() {
     const last = [...running].pop();
     if (!last) return;
-    activity.replaceChildren(spinner(), ' ', last.label, running.size > 1 ? ` (+${running.size - 1})` : '', last.stop ? el('button', { type: 'button', class: 'activity-stop', onclick: last.stop }, 'Stop') : null);
+    // replaceChildren(null) inserts the text "null": only what is there goes in
+    activity.replaceChildren(...[spinner(), ' ', last.label, running.size > 1 ? ` (+${running.size - 1})` : '', last.stop ? el('button', { type: 'button', class: 'activity-stop', onclick: last.stop }, 'Stop') : null].filter((x) => x != null));
     activity.hidden = false;
   }
   const end = () => {
