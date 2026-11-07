@@ -275,3 +275,15 @@ test('import: two posts with the same long title get valid, distinct slugs (the 
   assert.equal(new Set(slugs).size, 3);
   for (const s of slugs) assert.match(s, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, s);
 });
+
+test('import: a long blog is imported with pagination on, a short one without', async () => {
+  const { makeBlogJson } = await import('../lib/init.js');
+  const model = parseWxr(WXR);
+  const many = Array.from({ length: 60 }, (_, i) => ({ ...model.posts[0], id: 1000 + i, title: `Post number ${i}`, slug: `post-number-${i}`, html: '<p>x</p>', thumbnailUrl: '', comments: [] }));
+  const long = planWp({ ...model, posts: many, pages: [], media: [], menu: [] }, { today: '2026-11-06' }).finish(new Map());
+  assert.equal(long.blog.pageSize, 20);
+  assert.deepEqual(makeBlogJson('me/site', { ...long.blog, domain: 'https://me.github.io/site' }).pagination, { size: 20 });
+  const short = planWp(model, { today: '2026-11-06' }).finish(new Map());
+  assert.equal(short.blog.pageSize, undefined);
+  assert.equal(makeBlogJson('me/site', { ...short.blog, domain: 'https://me.github.io/site' }).pagination, undefined);
+});

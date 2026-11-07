@@ -25,6 +25,7 @@ import { at, parseRepoRef } from '../lib/reporef.js';
 import { DEFAULT_CONTENT_BASE, defaultDomain, defaultTitle } from '../lib/init.js';
 import { FONTS, resolveLogo, themeCss } from '../lib/customize.js';
 import { blogToForm, formToBlog } from '../lib/settings.js';
+import { DATE_FORMAT_EXAMPLES, DEFAULT_DATE_FORMAT } from '../lib/datefmt.js';
 import { validateBlog } from '../lib/blog.js';
 import { indexBody } from '../lib/contracts.js';
 import { loadPinnedTheme } from './packs.js';
@@ -512,6 +513,7 @@ async function settingsView(repo, r) {
       'Readers',
       check('search', 'Add a search page'),
       h('div', { class: 'hint' }, 'Search runs in the reader\'s browser against a file written at publish (search.json). It adds one same-origin script, on the search page only; nothing is sent anywhere.'),
+      h('div', { class: 'row' }, field('Date format', input('dateFormat', { placeholder: DEFAULT_DATE_FORMAT, list: 'date-formats', spellcheck: 'false' }), h('div', { class: 'hint' }, 'How a post\'s date reads on every page and in the /blog/ reader: a ', outbound('moment.js format', 'https://momentjs.com/docs/#/displaying/format/', { class: 'link' }), ', such as MMM D, YYYY or D MMMM YYYY. YYYY-MM-DD shows the plain date. The preview shows it as you type; feeds and search engines always get the ISO date.'), h('datalist', { id: 'date-formats' }, DATE_FORMAT_EXAMPLES.map((x) => h('option', { value: x }))))),
       h('div', { class: 'row' }, field('Posts per page', input('pageSize', { type: 'number', min: 1, max: 100, placeholder: 'all on one page' }), 'Splits the index and the tag and author pages. The feed and the /blog/ reader still list everything.')),
       h('div', { class: 'row' }, field('Email subscribe form posts to', input('subAction', { placeholder: 'https://… (your newsletter provider\'s form address)' }), 'A plain HTML form: the address a reader types goes straight to that service, never through this page. Blank: no form.'), field('Email field name', input('subField', { placeholder: 'email' }))),
       h('details', {}, h('summary', {}, 'Subscribe form wording and hidden fields'), h('div', { class: 'row' }, field('Heading', input('subTitle', { placeholder: 'Subscribe by email' })), field('Button', input('subButton', { placeholder: 'Subscribe' }))), h('div', { class: 'row' }, field('Hidden fields', area('subHidden', 2, { placeholder: 'list=abc123', class: 'mono', spellcheck: 'false' }), 'One per line: name=value, as your provider asks.'))),

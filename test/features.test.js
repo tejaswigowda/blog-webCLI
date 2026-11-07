@@ -72,7 +72,7 @@ test('archive: every published post by year, newest first, whatever the blog\'s 
   assert.ok(a.indexOf('id="y2026"') < a.indexOf('id="y2025"'));
   assert.ok(a.indexOf('Post alpha') < a.indexOf('Post beta') && a.indexOf('Post beta') < a.indexOf('Post gamma'));
   assert.ok(!a.includes('Post secret'));
-  assert.match(a, /<li><time datetime="2026-03-01">2026-03-01<\/time> <a href="\.\.\/alpha\/">Post alpha<\/a><\/li>/);
+  assert.match(a, /<li><time datetime="2026-03-01">March 1, 2026<\/time> <a href="\.\.\/alpha\/">Post alpha<\/a><\/li>/);
 });
 
 test('the header menu lists the archive and tags, and only what exists', () => {

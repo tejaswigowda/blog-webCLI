@@ -13,12 +13,16 @@ import { checkPublishedCss } from '../lib/theme-pack.js';
 import { at } from '../lib/reporef.js';
 import { resolveAsset } from '../lib/assets.js';
 import { THEMES } from '../lib/theme.js';
+import { loadSite } from '../lib/live-render.js';
+import { fileFor, previewHtml, sourceOf } from '../lib/preview.js';
+import { withRepoOverrides } from '../lib/blog.js';
 import { Refusal } from '../lib/errors.js';
 import { parseRepoRef } from '../lib/reporef.js';
 
 const net = createNet();
 const gh = new GitHub(net); // anonymous on purpose: a reader holds no token
 const page = document.getElementById('reader');
+const tools = document.getElementById('tools');
 const theme = document.getElementById('theme');
 theme.textContent = THEMES.default;
 
@@ -75,11 +79,104 @@ function failsafe(parsed, blog, error) {
   });
 }
 
+// ---- the preview: the page the published site serves, made by the code that makes it (lib/preview.js) ----
+// The reader takes what that page is made of (its stylesheet and its body) and shows it here, with the links of the site
+// pointed at this reader. Nothing of its own is added to the page: the sort and the "static page" link sit below it.
+const enc = new TextEncoder();
+const LISTING_ROOTS = new Set(['tags', 'authors', 'archive', 'search', 'page']);
+const domainRoot = (blog) => new URL(blog.domain).pathname.replace(/\/+$/, '');
+
+function retarget(doc, { parsed, blog, file }) {
+  const home = new URL(blog.domain);
+  const dir = file.replace(/index\.html$/, '');
+  const here = new URL(`${home.origin}${domainRoot(blog)}/${dir}`);
+  for (const a of doc.body.querySelectorAll('a[href]')) {
+    const raw = a.getAttribute('href');
+    if (raw.startsWith('#')) continue;
+    let u;
+    try {
+      u = new URL(raw, here);
+    } catch {
+      continue;
+    }
+    const root = domainRoot(blog);
+    if (u.origin !== home.origin || !(u.pathname === root || u.pathname.startsWith(`${root}/`))) continue; // another site: as written
+    const p = u.pathname.slice(root.length) || '/';
+    const isPage = (p.endsWith('/') || p.endsWith('/index.html')) && !p.startsWith('/search/');
+    // a page of the blog opens here; a file (the feed, the search page, which needs its own script) opens where it is published
+    const segs = p.replace(/index\.html$/, '').split('/').filter(Boolean);
+    // a post or a standalone page keeps the address the reader has always had (&post=slug); the listing pages have a path
+    const href = !isPage ? `${home.origin}${root}${p}${u.search}${u.hash}` : segs.length === 1 && !LISTING_ROOTS.has(segs[0]) ? hashFor(parsed, { post: segs[0] }) : hashFor(parsed, { path: segs.join('/') + (segs.length ? '/' : '') });
+    a.setAttribute('href', href);
+  }
+}
+
+function showPreview(html, ctx) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const style = doc.querySelector('head style');
+  theme.textContent = style ? style.textContent : '';
+  for (const s of doc.querySelectorAll('script')) s.remove(); // a page of the site loads its own scripts; the reader runs none of them
+  retarget(doc, ctx);
+  document.body.className = doc.body.className;
+  document.title = doc.title;
+  page.innerHTML = doc.body.innerHTML;
+}
+
+// true when the page was shown; throws when the blog has no generated site to preview (the caller falls back to the source)
+async function preview(parsed, mine) {
+  const repo = parseRepoRef(parsed.repo).ref;
+  const { repo: plain, folder } = parseRepoRef(repo);
+  const get = async (p) => {
+    const t = await gh.readText(plain, at(folder, p), parsed.ref);
+    return t === null ? null : enc.encode(t);
+  };
+  const loaded = await loadSite(get, { anyBlog: true });
+  const site = { ...loaded, blog: withRepoOverrides(loaded.blog, parsed) }; // the address may point the media elsewhere
+  const blog = site.blog;
+  const file = fileFor(parsed.post ? `${parsed.post}/` : parsed.path || '');
+  const source = sourceOf(site, file);
+  const text = source ? await gh.readText(plain, at(folder, source), parsed.ref) : null;
+  if (mine !== seq) return true;
+  const out = previewHtml(site, file, { text });
+  if (mine !== seq) return true;
+  const ctx = { parsed, blog, file };
+  showPreview(out.html, ctx);
+  const staticUrl = `${blog.domain}/${file.replace(/index\.html$/, '')}`;
+  const isIndex = file === 'index.html';
+  const draw = (mode) => {
+    const picker = isIndex && site.index.posts.length > 1
+      ? `<label class="sortbar">Sort <select id="reader-sort" aria-label="Sort posts">${READER_SORTS.map(([k, label]) => `<option value="${esc(k)}"${k === mode ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label> `
+      : '';
+    tools.innerHTML = `${picker}${out.status === 404 ? '<span class="meta">The published site has no page at this address; this is what it shows. </span>' : ''}<a href="${esc(staticUrl)}" rel="noopener noreferrer">${out.status === 404 ? 'Site' : 'Published page'} ↗</a>`;
+    const select = document.getElementById('reader-sort');
+    if (select) select.addEventListener('change', () => { saveSort(sessionStorage, repo, select.value); show(select.value); });
+  };
+  // a reader's own order lists every post in one list; previous/next and every address stay as the blog has them
+  const show = (mode) => {
+    const sorted = mode === 'order' ? out : previewHtml(site, 'index.html', { text: null, entries: readerSort(site.index.posts, mode), size: 0 });
+    showPreview(sorted.html, ctx);
+    draw(mode);
+  };
+  if (isIndex) show(savedSort(sessionStorage, repo));
+  else draw('order');
+  return true;
+}
+
+// a link to a place in the page itself ("#y2026") is not a route
+page.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('a[href^="#"]');
+  if (!a || a.getAttribute('href').startsWith('#repo=')) return;
+  e.preventDefault();
+  const el = document.getElementById(decodeURIComponent(a.getAttribute('href').slice(1)));
+  if (el) el.scrollIntoView();
+});
+
 let seq = 0;
 async function route() {
   const mine = ++seq;
   const parsed = parseReaderHash(location.hash);
   document.title = 'blog.webcli.app/blog';
+  tools.innerHTML = '';
   document.body.className = '';
   theme.textContent = THEMES.default;
   if (!parsed.repo && !parsed.blogUrl) return home();
@@ -92,14 +189,23 @@ async function route() {
     }
   }
   page.innerHTML = '<p class="notice">Loading…</p>';
+  tools.innerHTML = '';
   let blog = null;
+  // the published site's own page, made by the code that makes it; a blog with no generated site yet is read from its source
+  let unbuilt = '';
+  try {
+    if (await preview(parsed, mine)) return;
+  } catch (e) {
+    if (mine !== seq) return;
+    unbuilt = e && e.reason ? e.reason : '';
+  }
   try {
     const ctx = await openBlog(gh, parsed);
     blog = ctx.blog;
     if (mine !== seq) return;
     const repo = parseRepoRef(parsed.repo).ref;
     const contract = (blog.theme && typeof blog.theme === 'object' && blog.theme.contract) || 'blog-webcli-v1';
-    let themeNote = '';
+    let themeNote = unbuilt ? notice(`This blog has no generated site yet (${esc(unbuilt)}), so this is its source drawn by the reader. Publish it from the editor and this shows the page the site serves.`, true) : '';
     theme.textContent = themeCss(blog);
     if (blog.theme && typeof blog.theme === 'object') {
       // The blog's own committed copy of its theme (data in the blog's repository). The reader never

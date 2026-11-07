@@ -15,9 +15,9 @@ const exampleBlog = async () => validateBlog(await fs.readFile(path.join(EXAMPLE
 
 test('hash: repo, post, ref, media overrides and the static blog address', () => {
   assert.deepEqual(parseReaderHash('#repo=me/site/blog&post=hello&ref=dev&images=me/img&video=me/renders&audio=me/aud&blog=https://me.github.io/site/blog'), {
-    repo: 'me/site/blog', post: 'hello', ref: 'dev', blogUrl: 'https://me.github.io/site/blog', images: 'me/img', video: 'me/renders', audio: 'me/aud',
+    repo: 'me/site/blog', post: 'hello', path: null, ref: 'dev', blogUrl: 'https://me.github.io/site/blog', images: 'me/img', video: 'me/renders', audio: 'me/aud',
   });
-  assert.deepEqual(parseReaderHash(''), { repo: null, post: null, ref: undefined, blogUrl: null, images: null, video: null, audio: null });
+  assert.deepEqual(parseReaderHash(''), { repo: null, post: null, path: null, ref: undefined, blogUrl: null, images: null, video: null, audio: null });
   assert.equal(parseReaderHash('#repo= me/x ').repo, 'me/x');
 });
 
@@ -26,6 +26,9 @@ test('hash: links keep every parameter the reader was opened with', () => {
   assert.equal(hashFor(p), '#repo=me/site/blog&images=me/img&blog=https://me.github.io/site/blog');
   assert.equal(hashFor(p, { post: 'hello' }), '#repo=me/site/blog&post=hello&images=me/img&blog=https://me.github.io/site/blog');
   assert.deepEqual(parseReaderHash(hashFor(p, { post: 'a b' })), { ...p, post: 'a b' });
+  // any page of the published site: tags, pages of the index, the archive
+  assert.equal(hashFor(p, { path: '/tags/video/' }), '#repo=me/site/blog&path=tags/video/&images=me/img&blog=https://me.github.io/site/blog');
+  assert.equal(parseReaderHash(hashFor(p, { path: 'page/2/' })).path, 'page/2/');
 });
 
 test('blog address: https only, no credentials, query or fragment', () => {

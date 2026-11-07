@@ -325,7 +325,7 @@ export function createImportView({ h, nav, gh, net, link, fmtBytes, working, con
         const info = await gh.repoInfo(plain);
         if (!(info.permissions && info.permissions.push)) throw new Refusal('import-refused', `Your token cannot write to ${plain}. Choose a repository you own, or give the token access to it.`);
         const target = st.branch || info.default_branch;
-        const blogs = st.results.map(({ source, out: o }) => ({ folder: source.folder, fields: source.fields, files: o.files, assets: o.assets }));
+        const blogs = st.results.map(({ source, out: o }) => ({ folder: source.folder, fields: { ...source.fields, ...(o.blog.pageSize ? { pageSize: o.blog.pageSize } : {}) }, files: o.files, assets: o.assets }));
         const plan = await working('Preparing the pre-flight…', () => planImport(gh, { where, branch: target, blogs }), { button: btn });
         await budgetLine(plan);
         if (!(await confirmPlan(plan))) return;

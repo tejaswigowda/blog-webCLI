@@ -1,5 +1,5 @@
 // The /blog/ reader's logic, with no DOM. A page address is
-//   /blog/#repo=owner/repo[/folder][&post=slug][&ref=branch]
+//   /blog/#repo=owner/repo[/folder][&post=slug | &path=tags/video/][&ref=branch]
 //        [&images=…][&video=…][&audio=…]        optional media repository overrides
 //        [&blog=https://…]                      the blog's static site, for the failsafe
 // The hash overrides blog.json; blog.json fills in what the hash leaves out.
@@ -11,16 +11,17 @@ import { loadBlog } from './read.js';
 export function parseReaderHash(hash) {
   const p = new URLSearchParams(String(hash || '').replace(/^#/, ''));
   const get = (k) => (p.get(k) || '').trim() || null;
-  return { repo: get('repo'), post: get('post'), ref: get('ref') || undefined, blogUrl: get('blog'), images: get('images'), video: get('video'), audio: get('audio') };
+  return { repo: get('repo'), post: get('post'), path: get('path'), ref: get('ref') || undefined, blogUrl: get('blog'), images: get('images'), video: get('video'), audio: get('audio') };
 }
 
 const enc = (v) => encodeURIComponent(v).replace(/%2F/g, '/').replace(/%3A/g, ':');
 
 // A hash that keeps every parameter the reader was opened with.
-export function hashFor(parsed, { post = null } = {}) {
+export function hashFor(parsed, { post = null, path = null } = {}) {
   const parts = [];
   for (const k of ['repo']) if (parsed[k]) parts.push(`${k}=${enc(parsed[k])}`);
   if (post) parts.push(`post=${enc(post)}`);
+  if (path) parts.push(`path=${enc(path.replace(/^\/+/, ''))}`); // a page of the published site: "tags/video/", "page/2/", "archive/"
   if (parsed.ref) parts.push(`ref=${enc(parsed.ref)}`);
   for (const k of ['images', 'video', 'audio']) if (parsed[k]) parts.push(`${k}=${enc(parsed[k])}`);
   if (parsed.blogUrl) parts.push(`blog=${enc(parsed.blogUrl)}`);

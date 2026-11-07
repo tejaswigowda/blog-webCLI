@@ -207,7 +207,8 @@ CSP, and the same egress ledger (always 0 B uploaded). It takes the blog from th
 
 ```
 /blog/#repo=owner/repo[/folder]               the blog (a folder when it shares a repository)
-      &post=slug                              a post; omit for the list
+      &post=slug                              a post or a standalone page; omit for the list
+      &path=tags/video/                       any other page of the site: page/2/, authors/ada/, archive/, tags/
       &ref=branch                             a branch or tag other than the default
       &images=owner/name[/folder]             optional: override a media repository
       &video=owner/name[/folder]
@@ -226,11 +227,19 @@ CSP, and the same egress ledger (always 0 B uploaded). It takes the blog from th
 * **`/blog/#blog=https://…` alone** opens that static site. GitHub Pages hosts (`*.github.io`) and
   this app are followed directly; any other host gets a "this link points to another site"
   confirmation, so the page cannot be used as an open redirect. Only `https:` is accepted.
-* Posts link to *Suggest a correction* (the editor, which opens a pull request) and *Static page*.
-* The list starts in the blog's own order; a **Sort** control (blog order, newest, oldest, title) re-sorts it for the reader
-  alone. It is styled as a small control whatever the theme does to form fields, and sits in the theme's content column.
-  Tag, author, archive and search pages, comments and the subscribe form are the generated site's: the reader shows posts only
-  (see [Site features](#site-features) and [Known limits](#known-limits)).
+* **The reader shows the page the site serves.** Each page is made by the code that makes the deployed one (`lib/preview.js`
+  calls the generator's own `indexFiles`, `buildListings`, `renderPost` and `notFoundPage`, on the blog's committed
+  `blog.json`, `assets.lock.json`, `index/posts.json`, `theme.css` and `licences.json`), so the header menu, tag and author links,
+  dates, pagination, archive, tag and author pages, standalone pages, the footer and the stylesheet are the published ones, not a
+  look-alike. A test (`test/preview.test.js`) holds it: for every HTML file a build writes, the reader's page is byte-identical. The
+  reader only points the page's links at itself (`&post=slug`, `&path=…`) and drops its scripts. An address with no page shows the
+  site's own 404. The search page, which needs its own script, and the feed open on the published site.
+* Below the page, outside it, the reader adds *Published page ↗* and, on the index, a **Sort** control (blog order, newest,
+  oldest, title) that lists every post in one list for the reader alone: no address or previous/next changes.
+* A blog with **no generated site yet** (no `index/posts.json`) is read from its source, with a notice saying so; publish it
+  from the editor and the reader shows the real page.
+* **Same code, same date.** The preview is what the *current* generator makes. A page published by an older generator keeps its
+  older look on the site until the blog is published again (Settings → Save regenerates every page).
 
 ## The address the blog is served at
 
@@ -338,6 +347,7 @@ four keys are required, and the real file is plain JSON (no comments):
 | `order` | no | how posts are sequenced: [below](#order) | newest first (`date`, `desc`) |
 | `search` | no | `true` adds a [search page](#site-features) | off |
 | `pagination` | no | `{ "size": N }`: [pages of the index](#search-pagination-seo) | one list |
+| `dateFormat` | no | how a post's date reads: a [moment.js format](#dates) | `MMMM D, YYYY` ("November 5, 2026") |
 | `seo` | no | `twitter`, `sitemap`, `robots`: [below](#search-pagination-seo) | a sitemap, and a robots.txt at the root of a host |
 | `comments`, `analytics` | no | a script from an address you name, [below](#comments-analytics) | none |
 | `subscribe` | no | an email form that posts to an address you name, [below](#subscribe) | none |
@@ -470,6 +480,27 @@ fifty. A list value is refused (`bad-order-field`).
   the owner should choose deliberately. (The feed's `<updated>` is its newest post's date, whatever the order.)
 
 In Settings, *Post order* edits `by`, `dir`, the field and the list file; only what differs from the default is written.
+
+#### `dateFormat`
+
+```json
+"dateFormat": "D MMM YYYY"
+```
+
+A post's date reads as **November 5, 2026** on every page (post, index, tag, author and archive pages, the `/blog/` reader) and in the
+editor's Settings preview. `dateFormat` is any [moment.js format](https://momentjs.com/docs/#/displaying/format/) of up to 40
+characters: `MMM D, YYYY` (Nov 5, 2026), `D MMMM YYYY` (5 November 2026), `dddd, MMMM Do` (Thursday, November 5th),
+`[Posted] LL`, or `YYYY-MM-DD` for the plain date. In Settings it is a field with a live preview, and it is written only when it is not
+the default.
+
+* **Only the text changes.** `<time datetime>`, `article:published_time`, JSON-LD, the feed, the sitemap and `index/posts.json` keep the
+  ISO date, so machines read the same thing as before.
+* **Reproducible.** A post's date is a calendar day, read as that day in UTC with the English locale: the clock, the reader's time zone
+  and language never change a generated page, so CI still regenerates it byte for byte. A value that is not a calendar day is shown as written.
+* **One formatter everywhere.** moment.js (vendored in `vendor/moment/`, MIT) is given a module of its own by `node cli/build-live.js`
+  (`vendor/moment/moment.esm.js`, checked by `--check`), imported by the generator, the live renderer that ships as `webcli-live.js`, and
+  the reader, so a date reads the same wherever the page was made. The cost: `webcli-live.js` is about 60 KB larger (one cached script).
+* Pages published before this change show ISO dates until the blog is published again.
 
 #### `search`, `pagination`, `seo`
 
@@ -1279,6 +1310,8 @@ upload, and nothing is uploaded until you confirm.
 | W3 pictures: only PNG/JPEG/GIF/WebP/AVIF by their bytes, never an SVG; a failed one stays linked to the old site and is said; nothing identifying is sent | `test/wp-content.test.js`, `test/wp-import-app.test.js`, `test/wp-cli.test.js` |
 | W3b only what is on the blog's own site is fetched: its host, `www`, a subdomain, its own Photon copy; never a lookalike host, a suffix trick, or another site's cover or library entry | `test/wp-content.test.js` |
 | W3c a long import waits out GitHub's rate limit for as long as it asks, stops short of it, can be stopped, and carries on without re-sending what it sent | `test/github-patient.test.js`, `test/wp-import-app.test.js` |
+| D1 dates: moment.js, one module, a calendar day in UTC and English whatever the clock or zone; ISO stays in every machine-readable place; `dateFormat` validated and set in Settings | `test/datefmt.test.js` |
+| P1 the /blog/ reader's page is the deployed page: byte-identical for every HTML file of a rich blog (paged, live, search, tags, authors, archive, standalone pages); a draft or unknown address is the site's 404 | `test/preview.test.js`, `test/e2e/order.e2e.mjs` |
 | W3d a site that blocks cross-origin reads is detected after a handful of pictures and the person is offered the ways round it; REST site and tag names are decoded once | `test/wp-import-app.test.js`, `test/wp-content.test.js`, `test/e2e/import.e2e.mjs` |
 | W4 two exports become two blogs in one repository: pictures in one commit, blogs in a second, pinned, regenerable; an existing blog is never replaced | `test/wp-import-app.test.js` |
 | W5 the wizard, from the home page to a commit, in real Chrome against a cross-origin old site | `test/e2e/import.e2e.mjs` |
@@ -1298,8 +1331,9 @@ every named import, so a renamed export cannot silently break the browser-only m
 * A **new standalone page** is not drawn before the Pages build the way a new post is: the live script's 404 path reads
   `posts/<slug>.md`, so `/about/` is a 404 until the build finishes. An edited page, like any page, shows what was built.
 * The search index, tag pages, archive and sitemap are as of the last build; only post pages are refreshed from the live copy.
-* The `/blog/` reader (the no-Pages view) does not show tag, author, archive or search pages, comments, the subscribe form or
-  standalone pages: those are the generated site's.
+* The `/blog/` reader shows every page the build writes, made by the same code, except the **search** page (it needs its own
+  script) and the third-party scripts (comments, analytics), which it never runs. A blog that has not been built yet is read from
+  its source, without the site's menu, tag pages or archive.
 * Comments and analytics are third-party scripts on your readers' pages (see [above](#comments-analytics)); the generator
   cannot vouch for them, only pin them with `integrity`.
 * Two tags that share an address (`C++`, `c`) share a page, and the first alphabetically names it; nothing refuses it.
@@ -1343,9 +1377,9 @@ every named import, so a renamed export cannot silently break the browser-only m
 * `vendor/moment/` is moment.js 2.31.0 (MIT), vendored for the same reason. The app (not the generated
   pages) shows a post's date as words: *Today*, *Yesterday*, *3 days ago*, *Oct 12*, *Oct 12, 2025*,
   with the full date on hover. A date is a calendar day, so it is compared by day, not by the hour,
-  and a new post's default date is the reader's local day, not UTC's. Generated pages, the index and
-  the feed keep the ISO date, so a published page does not change with the clock and CI still
-  regenerates it byte for byte.
+  and a new post's default date is the reader's local day, not UTC's. Generated pages show the date
+  as the blog's [`dateFormat`](#dateformat) (never relative, so a published page does not change with
+  the clock and CI still regenerates it byte for byte); the feed and every machine-readable date keep ISO.
 * `vendor/hls/` is hls-webCLI's encoder (GPL-3.0), vendored unedited and hash-checked. Encoding a
   video needs WebCodecs (recent Chrome, Edge or Safari) and holds the video and the encoded files
   in memory, so the input is limited to 1 GB and a release to 300 MB. It takes the encoder's own
