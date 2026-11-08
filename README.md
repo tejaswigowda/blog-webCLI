@@ -1467,6 +1467,27 @@ CI: copy [templates/blog-check.yml](templates/blog-check.yml) into the blog repo
 Serve generated pages by enabling GitHub Pages on the blog repo (root of the default
 branch); `.nojekyll` is generated so Pages does not process `posts/*.md`.
 
+## Sign in with GitHub
+
+Besides the fine-grained token below (the expert method, unchanged and always available under **Use a token instead**), a deployment can
+offer **Sign in with GitHub**. It is a **GitHub App**: GitHub asks which repositories the editor may use (the blog and its asset repositories),
+and the token it hands back (`ghu_…`) can write only there, with only *Contents* and *Pull requests* (read and write), *Pages* and *Metadata*
+(read). That is the reach of a fine-grained token, chosen on GitHub's own page, and the sliders button in the header reopens the choice.
+GitHub has no API that creates or manages fine-grained *personal access tokens*, so this is the App's user-to-server token, not one of those.
+
+* **Tokens expire** after eight hours and are renewed quietly (a refresh token, kept beside the token in the tab, or in `localStorage` if you
+  ticked *Remember*); one that cannot be renewed signs you out and says so. **Signing out revokes** the token on GitHub.
+* **A small proxy does the code exchange**, because a static page cannot: exchanging GitHub's code needs the App's client secret, and GitHub's
+  token endpoint sends no CORS headers. [`templates/oauth-worker`](templates/oauth-worker/README.md) is that proxy (a Cloudflare Worker, about
+  sixty lines: token, refresh, revoke; it stores and logs nothing, serves only the origins you list, and refuses a code bound for another site).
+  The secret lives only there.
+* **Off until configured**: `oauth: { clientId, proxy, app }` in `app/config.js` (then `node cli/build-live.js`). Left empty, the dialog
+  is the token form alone. The CSP is unchanged: it already allows `https:` connections.
+* **Safety**: the sign-in carries a random `state` that must come back to the tab that started it; a `ghp_` classic token and any
+  non-App token returned by the proxy are still refused.
+
+(`test/oauth.test.js`)
+
 ## Token permissions
 
 Reading a public blog needs no token. Editing needs a **fine-grained personal access token**
@@ -1514,10 +1535,11 @@ upload, and nothing is uploaded until you confirm.
 * Sign in with a **fine-grained** token (see [Token permissions](#token-permissions)).
   Classic `ghp_` tokens are refused. The token is held per tab unless you tick "remember"
   (then `localStorage`).
-* **Post list** (`#repo=owner/blog`): a **Sort** control and a **Search posts** box sit above the list. Search filters as you
-  type, matching every word against a post's title, excerpt and tags (not the full text), and works with any sort order. It is
-  for you alone: nothing is written and the address does not change. **Show drafts** and **Pages** open above the list, not
-  below it, and scroll into view.
+* **Blog page** (`#repo=owner/blog`): **Settings**, **Media** and **View blog** are global buttons above two tabs, **Posts** and **Pages**.
+  The Posts tab has **New post**, **Show drafts** (drafts and scheduled posts, opened above the list), a **Sort** control and a
+  **Search posts** box. Search filters as you type, matching every word against a post's title, excerpt and tags (not the full text), and works
+  with any sort order; it is for you alone: nothing is written and the address does not change. The Pages tab lists the standalone pages
+  (read when the tab is first opened, a request each) with **New page**.
 * The page has a strict CSP (scripts only from this origin; it may read `https:` addresses only so the WordPress import can fetch
   pictures, see [Importing from WordPress](#importing-from-wordpress)) and never inserts blog content except through the escaping
   renderer, because blog content is untrusted and shares an origin with the token.

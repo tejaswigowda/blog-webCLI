@@ -22,7 +22,7 @@ export function permissionHint(status, method, path, message) {
   if (!m) return '';
   const write = method !== 'GET' && method !== 'HEAD';
   const need = /\/pulls(\/|\?|$)/.test(path) ? 'Pull requests: Read and write' : write ? 'Contents: Read and write' : 'Contents: Read-only';
-  return `The request that GitHub refused: ${method} ${path.replace(/\?.*$/, '')}\nThe token needs "${need}" on ${m[1]}, and ${m[1]} must be one of the repositories selected for the token (github.com/settings/personal-access-tokens). Being able to read a public repository, or being its owner, does not give the token write access.`;
+  return `The request that GitHub refused: ${method} ${path.replace(/\?.*$/, '')}\nThe token needs "${need}" on ${m[1]}, and ${m[1]} must be one of the repositories selected for the token (github.com/settings/personal-access-tokens). Being able to read a public repository, or being its owner, does not give the token write access. If you signed in with GitHub, the app must be installed on ${m[1]} (the sliders button in the header reopens that choice).`;
 }
 
 const API = 'https://api.github.com';

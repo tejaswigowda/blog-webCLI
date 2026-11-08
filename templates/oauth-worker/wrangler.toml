@@ -1,0 +1,10 @@
+name = "blog-webcli-oauth"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+# the pages that may call this proxy (comma separated; add http://localhost:5504 to try it locally)
+ALLOWED_ORIGINS = "https://blog.webcli.app"
+# the GitHub App's client id (not secret)
+CLIENT_ID = ""
+# the client secret is set with:  npx wrangler secret put CLIENT_SECRET

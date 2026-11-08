@@ -32,6 +32,7 @@ import { loadPinnedTheme } from './packs.js';
 import { loadRegistry } from './registry-client.js';
 import { highlightedTextarea } from './highlight.js';
 import { config } from './config.js';
+import { authorizeUrl, canRefresh, exchangeCode, installUrl, needsRefresh, newState, oauthConfigured, readCallback, redirectUri, refreshRecord, revokeToken } from './oauth.js';
 import { createImportView } from './import-view.js';
 
 const net = createNet();
@@ -41,6 +42,69 @@ const runner = (job) => (sandbox ||= createSandbox()).runner(job);
 const KEY = 'blog.webcli.token';
 const gh = new GitHub(net, { token: sessionStorage.getItem(KEY) || localStorage.getItem(KEY), store: localStorage });
 let login = null;
+
+// ---------- sign in with GitHub (a GitHub App's user token; see app/oauth.js) ----------
+const OAUTH_KEY = `${KEY}.oauth`; // { refresh, expiresAt, refreshExpiresAt }: kept beside the token, in the same storage
+const OAUTH_PENDING = 'blog.webcli.oauth';
+const oauthOn = oauthConfigured(config.oauth);
+const oauthFetch = (...a) => globalThis.fetch(...a);
+const tokenStore = () => (localStorage.getItem(KEY) ? localStorage : sessionStorage);
+const oauthRecord = () => { try { return JSON.parse(tokenStore().getItem(OAUTH_KEY)); } catch { return null; } };
+function keepOAuth(rec, store) {
+  store.setItem(KEY, rec.token);
+  store.setItem(OAUTH_KEY, JSON.stringify({ refresh: rec.refresh, expiresAt: rec.expiresAt, refreshExpiresAt: rec.refreshExpiresAt }));
+  gh.token = rec.token;
+}
+// An expiring token is renewed quietly while it is still good; one that cannot be renewed signs the user out, and says so.
+async function refreshIfNeeded() {
+  const rec = oauthRecord();
+  if (!gh.token || !rec || !rec.refresh) return;
+  if (!needsRefresh(rec)) return;
+  if (!canRefresh(rec)) {
+    signOut({ quiet: true });
+    toast({ kind: 'info', title: 'Signed out', message: 'Your GitHub sign-in expired. Sign in again.' });
+    return;
+  }
+  try {
+    keepOAuth(await refreshRecord(oauthFetch, { proxy: config.oauth.proxy, refresh: rec.refresh }), tokenStore());
+  } catch {
+    /* the old token may still have a few minutes: try again at the next tick */
+  }
+}
+if (oauthOn) setInterval(refreshIfNeeded, 60_000);
+
+function startOAuth(remember) {
+  const state = newState();
+  sessionStorage.setItem(OAUTH_PENDING, JSON.stringify({ state, hash: location.hash, remember }));
+  location.assign(authorizeUrl({ clientId: config.oauth.clientId, redirect: redirectUri(location), state }));
+}
+
+// Back from GitHub: the page is opened with ?code=… (or ?installation_id=… after the repositories were changed). Exchanges the code,
+// puts the address back as it was, and says what happened. Returns true when it handled the visit.
+async function finishOAuth() {
+  const cb = readCallback(location.search);
+  if (!cb) return false;
+  let pending = null;
+  try { pending = JSON.parse(sessionStorage.getItem(OAUTH_PENDING)); } catch { /* none */ }
+  sessionStorage.removeItem(OAUTH_PENDING);
+  history.replaceState(null, '', `${location.pathname}${(pending && pending.hash) || location.hash}`);
+  if (cb.error) { toast({ kind: 'error', title: 'GitHub sign-in stopped', message: cb.error }); return true; }
+  if (cb.installed && !cb.code) { toast({ kind: 'success', title: 'Repository access updated' }); return true; }
+  if (!oauthOn || !pending || pending.state !== cb.state) { toast({ kind: 'error', title: 'GitHub sign-in refused', message: 'The sign-in did not start in this tab, so it was ignored. Try again.' }); return true; }
+  try {
+    const rec = await exchangeCode(oauthFetch, { proxy: config.oauth.proxy, code: cb.code, redirect: redirectUri(location) });
+    keepOAuth(rec, pending.remember ? localStorage : sessionStorage);
+    login = (await gh.whoami()).login;
+    const mine = await gh.api('GET', '/user/installations').catch(() => null);
+    if (mine && mine.total_count === 0) {
+      toast({ kind: 'info', title: 'Choose the repositories this editor may use', message: 'Signed in, but the app is not installed on any repository yet.', action: { label: 'Choose repositories', onClick: () => openTab(installUrl(config.oauth.app)) }, timeout: 0 });
+    } else toast({ kind: 'success', title: `Signed in as ${login}` });
+  } catch (e) {
+    gh.token = null;
+    toast({ kind: 'error', ...describeError(e) });
+  }
+  return true;
+}
 
 // A tab keeps running the scripts it loaded: after an update, what it generates is not what the current version would write (a page
 // built without a setting the new version knows rewrites every page that has it). Nothing is sent from such a tab: reload it.
@@ -86,6 +150,9 @@ let cache = null; // { repo, ref, blog, lock }
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+// the header is sticky, so whatever sticks under it needs its height (it wraps on a narrow screen)
+const topBar = document.querySelector('#top');
+if (topBar && typeof ResizeObserver !== 'undefined') new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', `${topBar.offsetHeight}px`)).observe(topBar);
 const view = $('#view');
 
 function h(tag, attrs = {}, ...kids) {
@@ -249,7 +316,7 @@ function renderTop(repo, ref) {
   const input = h('input', { name: 'repo', placeholder: 'owner/blog or owner/repo/folder', value: repo || '', 'aria-label': 'Repository' });
   const form = h('form', { onsubmit: (e) => { e.preventDefault(); try { location.hash = link(parseRepo(input.value)); } catch (err) { view.replaceChildren(errBox(err)); } } }, input, h('button', { icon: 'arrow-right' }, ''));
   const auth = gh.token
-    ? h('span', { class: 'signed', title: login ? `Signed in as ${login}` : 'Signed in' }, icon('user'), h('span', { class: 'who' }, login || 'Signed in'), h('button', { type: 'button', class: 'icon-btn', icon: 'log-out', title: 'Sign out', 'aria-label': 'Sign out', onclick: () => signOut() }))
+    ? h('span', { class: 'signed', title: login ? `Signed in as ${login}` : 'Signed in' }, icon('user'), h('span', { class: 'who' }, login || 'Signed in'), oauthOn && /^ghu_/.test(gh.token) ? h('button', { type: 'button', class: 'icon-btn', icon: 'sliders', title: 'Repository access', 'aria-label': 'Repository access', onclick: () => openTab(installUrl(config.oauth.app)) }) : null, h('button', { type: 'button', class: 'icon-btn', icon: 'log-out', title: 'Sign out', 'aria-label': 'Sign out', onclick: () => signOut() }))
     : h('button', { type: 'button', class: 'primary', icon: 'log-in', onclick: () => signInDialog() }, 'Sign in to edit');
   $('#top').replaceChildren(
     nav('blog webCLI', repo ? link(repo, ref ? `&ref=${ref}` : '') : '', { class: 'brand', title: repo ? `Back to ${repo}` : 'Home' }),
@@ -275,12 +342,16 @@ function renderLedger(l) {
 }
 net.subscribe(renderLedger);
 
-function signOut() {
-  sessionStorage.removeItem(KEY);
-  localStorage.removeItem(KEY);
+function signOut({ quiet = false } = {}) {
+  if (oauthOn && gh.token && /^ghu_/.test(gh.token)) revokeToken(oauthFetch, { proxy: config.oauth.proxy, token: gh.token });
+  for (const s of [sessionStorage, localStorage]) {
+    s.removeItem(KEY);
+    s.removeItem(OAUTH_KEY);
+  }
   gh.token = null;
   login = null;
-  route();
+  if (!quiet) route();
+  else renderTop(parseHash().repo, parseHash().ref);
 }
 
 function signInDialog() {
@@ -288,8 +359,8 @@ function signInDialog() {
   const tok = h('input', { type: 'password', name: 'token', autocomplete: 'off', placeholder: 'github_pat_…', style: 'width:100%' });
   const remember = h('input', { type: 'checkbox' });
   const msg = h('div');
-  dlg.replaceChildren(
-    h('h2', {}, 'Sign in with a fine-grained token'),
+  const expert = [
+    oauthOn ? null : h('h2', {}, 'Sign in with a fine-grained token'),
     h('p', {}, 'Create a ', outbound('fine-grained personal access token', 'https://github.com/settings/personal-access-tokens/new', { class: 'link' }), ' limited to your blog repository and your asset repositories, with ', h('b', {}, 'Contents: read & write'), ' and ', h('b', {}, 'Pull requests: write'), '. Classic tokens are refused: they can write to every repository you own.'),
     tok,
     h('p', {}, h('label', {}, remember, ' Remember on this device (localStorage). Otherwise the token lives only for this tab.')),
@@ -301,6 +372,8 @@ function signInDialog() {
         gh.token = t;
         login = (await gh.whoami()).login;
         (remember.checked ? localStorage : sessionStorage).setItem(KEY, t);
+        localStorage.removeItem(OAUTH_KEY);
+        sessionStorage.removeItem(OAUTH_KEY);
         dlg.close();
         route();
       } catch (e) {
@@ -308,7 +381,18 @@ function signInDialog() {
         msg.replaceChildren(errBox(e.status === 401 ? new Error('GitHub rejected that token.') : e));
       }
     } }, 'Sign in'), h('button', { icon: 'x', onclick: () => dlg.close() }, 'Cancel')),
-  );
+  ].filter(Boolean);
+  if (!oauthOn) dlg.replaceChildren(...expert);
+  else {
+    const keep = h('input', { type: 'checkbox' });
+    dlg.replaceChildren(
+      h('h2', {}, 'Sign in with GitHub'),
+      h('p', {}, 'GitHub asks which repositories this editor may use (your blog and its asset repositories) and nothing else: it can write only to those, and only contents and pull requests. You can change that choice or revoke it on GitHub at any time.'),
+      h('p', {}, h('label', {}, keep, ' Remember on this device (localStorage). Otherwise the sign-in lives only for this tab.')),
+      h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'log-in', onclick: () => startOAuth(keep.checked) }, 'Sign in with GitHub'), h('button', { icon: 'x', onclick: () => dlg.close() }, 'Cancel')),
+      h('details', { class: 'more' }, h('summary', {}, 'Use a token instead'), ...expert),
+    );
+  }
   dlg.showModal();
 }
 
@@ -669,10 +753,10 @@ async function settingsView(repo, r) {
     'div',
     {},
     h('p', {}, nav(current.title, link(repo), { icon: 'arrow-left' })),
-    h('h1', {}, 'Blog settings'),
+    h('div', { class: 'sticky-bar' }, h('h1', {}, 'Blog settings'), save),
     h('p', { class: 'muted' }, `Saved to ${at(folder, 'blog.json')} in ${plain}. Posts are never touched; every generated page is regenerated from the new settings.`),
     canPush ? null : h('div', { class: 'err' }, `This token cannot write to ${plain}.`),
-    h('div', { class: 'cols' }, form, h('div', { class: 'side tall' }, themeBox, colorsBox, h('div', { class: 'actions' }, save))),
+    h('div', { class: 'cols' }, form, h('div', { class: 'side tall' }, themeBox, colorsBox)),
   );
   queueMicrotask(redraw);
   return node;
@@ -899,7 +983,8 @@ async function listView(repo, r) {
   const wrap = h('div', {}, h('h1', {}, blog.title), h('p', { class: 'muted' }, blog.description));
   // View blog opens the GitHub Pages site when GitHub is serving one, else the reader (which needs no Pages)
   const viewBlog = outbound('View blog', `blog/${link(repo, r.ref ? `&ref=${r.ref}` : '')}`, { icon: 'external-link', title: 'Opens the reader: GitHub Pages is not serving this blog' });
-  if (gh.token) wrap.append(h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'sliders', onclick: () => (location.hash = link(repo, '&settings')) }, 'Settings'), h('button', { icon: 'file-text', onclick: () => (location.hash = link(repo, '&media')) }, 'Media'), viewBlog, h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, wrap) }, 'Show drafts'), h('button', { icon: 'file-text', onclick: (e) => showPages(e.currentTarget, repo, r.ref, wrap) }, 'Pages')));
+  // the same for every tab: the blog as a whole
+  const globalActions = h('div', { class: 'actions' }, ...(gh.token ? [h('button', { icon: 'sliders', onclick: () => (location.hash = link(repo, '&settings')) }, 'Settings'), h('button', { icon: 'file-text', onclick: () => (location.hash = link(repo, '&media')) }, 'Media')] : []), viewBlog);
   if (gh.token) {
     detectAddress(gh, repo).then((found) => {
       if (found.live && found.exact && found.built) {
@@ -928,13 +1013,52 @@ async function listView(repo, r) {
   searchBox.addEventListener('input', () => { needle = searchBox.value; drawList(picker.value); none.hidden = !entries.length || list.children.length > 0; });
   sortLabel.append(searchBox);
   drawList(mode0);
-  wrap.append(...(entries.length > 1 ? [sortLabel] : []), list, none);
-  if (!entries.length) wrap.append(h('p', { class: 'muted' }, 'No published posts yet.'));
+
+  // Posts and Pages are tabs: the blog's posts, and its standalone pages (read on first use, a request each)
+  const draftsBox = h('section', {});
+  const postsPanel = h('div', { role: 'tabpanel', id: 'tab-posts' },
+    gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, draftsBox) }, 'Show drafts')) : null,
+    draftsBox,
+    ...(entries.length > 1 ? [sortLabel] : []), list, none,
+    !entries.length ? h('p', { class: 'muted' }, 'No published posts yet.') : null);
+  const pagesPanel = h('div', { role: 'tabpanel', id: 'tab-pages', hidden: true });
+  let pagesLoaded = false;
+  const tabs = [['posts', 'Posts', postsPanel], ['pages', 'Pages', pagesPanel]];
+  const buttons = tabs.map(([key, label]) => h('button', { type: 'button', role: 'tab', 'aria-controls': `tab-${key}`, onclick: () => select(key) }, label));
+  const select = (key) => {
+    tabs.forEach(([k, , panel], i) => {
+      panel.hidden = k !== key;
+      buttons[i].setAttribute('aria-selected', String(k === key));
+      buttons[i].tabIndex = k === key ? 0 : -1;
+    });
+    if (key === 'pages' && !pagesLoaded) {
+      pagesLoaded = true;
+      showPages(pagesPanel, repo, r.ref);
+    }
+  };
+  const tablist = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Posts and pages' }, ...buttons);
+  tablist.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const i = buttons.findIndex((b) => b.getAttribute('aria-selected') === 'true');
+    const next = (i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    select(tabs[next][0]);
+    buttons[next].focus();
+  });
+  select('posts');
+  // the buttons sit above the tabs; once the bar sticks they move to its right, level with the tabs
+  const bar = h('div', { class: 'stickybar' }, globalActions, tablist);
+  const sentinel = h('div', { class: 'sticky-sentinel', 'aria-hidden': 'true' });
+  if (typeof IntersectionObserver !== 'undefined') {
+    const under = (document.querySelector('#top') || { offsetHeight: 0 }).offsetHeight; // the sticky header covers the top of the page
+    new IntersectionObserver(([e]) => bar.classList.toggle('stuck', !e.isIntersecting && e.boundingClientRect.top < under), { rootMargin: `-${under}px 0px 0px 0px` }).observe(sentinel);
+  }
+  wrap.append(sentinel, bar, postsPanel, pagesPanel);
   return wrap;
 }
 
-async function showDrafts(btn, repo, ref, wrap) {
+async function showDrafts(btn, repo, ref, box) {
   btn.disabled = true;
+  box.replaceChildren(progressLine('Reading drafts…'));
   const out = h('ul', { class: 'posts' });
   const { repo: slugRepo, folder } = parseRepoRef(repo);
   for (const n of await listPostFiles(gh, repo, ref)) {
@@ -945,32 +1069,32 @@ async function showDrafts(btn, repo, ref, wrap) {
       /* skip unreadable */
     }
   }
-  placeAboveList(wrap, h('h2', {}, 'Drafts and scheduled'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts or scheduled posts.'));
+  box.replaceChildren(h('h2', {}, 'Drafts and scheduled'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts or scheduled posts.'));
+  box.scrollIntoView({ block: 'start' });
 }
 
-// Drafts and pages open above the (possibly very long) post list, not after it, and are scrolled into view.
-function placeAboveList(wrap, ...nodes) {
-  const anchor = wrap.querySelector('.sortbar') || wrap.querySelector('ul.posts');
-  const section = h('section', {}, ...nodes);
-  if (anchor) anchor.before(section); else wrap.append(section);
-  section.scrollIntoView({ block: 'start' });
-}
-
-// The standalone pages (about, contact, …): not posts, so not in the list above. Listed on request, since reading them
-// costs a request each.
-async function showPages(btn, repo, ref, wrap) {
-  btn.disabled = true;
+// The standalone pages (about, contact, …): not posts, so not in the posts list. Read when the tab is first opened, a request each.
+async function showPages(panel, repo, ref) {
+  panel.replaceChildren(progressLine('Reading pages…'));
   const out = h('ul', { class: 'posts' });
   const { repo: slugRepo, folder } = parseRepoRef(repo);
-  for (const n of await listPageFiles(gh, repo, ref)) {
-    try {
-      const m = parseMeta(splitFile(await gh.readText(slugRepo, at(folder, `pages/${n}`), ref), n).front, n);
-      out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'draft' ? `${m.title} (draft)` : m.title, link(repo, `&editpage=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, m.menu ? `In the menu, position ${m.menu}` : 'Not in the menu')));
-    } catch {
-      /* skip unreadable */
+  try {
+    for (const n of await listPageFiles(gh, repo, ref)) {
+      try {
+        const m = parseMeta(splitFile(await gh.readText(slugRepo, at(folder, `pages/${n}`), ref), n).front, n);
+        out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'draft' ? `${m.title} (draft)` : m.title, link(repo, `&editpage=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, m.menu ? `In the menu, position ${m.menu}` : 'Not in the menu')));
+      } catch {
+        /* skip unreadable */
+      }
     }
+  } catch (e) {
+    panel.replaceChildren(errBox(e));
+    return;
   }
-  placeAboveList(wrap, h('h2', {}, 'Pages'), h('div', { class: 'actions' }, h('button', { icon: 'plus', onclick: () => (location.hash = link(repo, '&newpage')) }, 'New page')), out.children.length ? out : h('p', { class: 'muted' }, 'No pages yet.'));
+  panel.replaceChildren(
+    gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&newpage')) }, 'New page')) : null,
+    out.children.length ? out : h('p', { class: 'muted' }, 'No pages yet.'),
+  );
 }
 
 async function postView(repo, r) {
@@ -1634,4 +1758,4 @@ async function confirmPlan(plan) {
 
 addEventListener('hashchange', route);
 // the dates need moment; if it cannot load they are shown as written
-loadMoment().catch(() => {}).then(route);
+loadMoment().catch(() => {}).then(() => finishOAuth()).then(() => refreshIfNeeded()).then(route);
