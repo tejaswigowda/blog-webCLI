@@ -848,12 +848,23 @@ async function listView(repo, r) {
   // changes this list and nothing else: no address, no previous/next, nothing written anywhere.
   const sortLabel = h('label', { class: 'sortbar' }, 'Sort ');
   const list = h('ul', { class: 'posts' });
-  const drawList = (mode) => list.replaceChildren(...readerSort(entries, mode).map((e) => h('li', { class: 'card-link' }, h('h3', {}, nav(e.title, link(repo, `&post=${e.slug}${r.ref ? `&ref=${r.ref}` : ''}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(e.date), (e.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))), e.excerpt ? h('p', {}, e.excerpt) : null)));
+  let needle = '';
+  const found = (e) => {
+    const tokens = needle.toLowerCase().split(/\s+/).filter(Boolean);
+    const hay = `${e.title} ${e.excerpt || ''} ${(e.tags || []).join(' ')}`.toLowerCase();
+    return tokens.every((t) => hay.includes(t));
+  };
+  const drawList = (mode) => list.replaceChildren(...readerSort(entries, mode).filter(found).map((e) => h('li', { class: 'card-link' }, h('h3', {}, nav(e.title, link(repo, `&post=${e.slug}${r.ref ? `&ref=${r.ref}` : ''}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(e.date), (e.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))), e.excerpt ? h('p', {}, e.excerpt) : null)));
   const mode0 = savedSort(sessionStorage, repo);
   const picker = h('select', { 'aria-label': 'Sort posts', onchange: () => { saveSort(sessionStorage, repo, picker.value); drawList(picker.value); } }, READER_SORTS.map(([k, label]) => h('option', { value: k, selected: k === mode0 }, label)));
   sortLabel.append(picker);
+  const searchBox = h('input', { type: 'search', placeholder: 'Search posts…', 'aria-label': 'Search posts', autocomplete: 'off', style: 'margin-left:1rem' });
+  const none = h('p', { class: 'muted' }, 'No posts match your search.');
+  none.hidden = true;
+  searchBox.addEventListener('input', () => { needle = searchBox.value; drawList(picker.value); none.hidden = !entries.length || list.children.length > 0; });
+  sortLabel.append(searchBox);
   drawList(mode0);
-  wrap.append(...(entries.length > 1 ? [sortLabel] : []), list);
+  wrap.append(...(entries.length > 1 ? [sortLabel] : []), list, none);
   if (!entries.length) wrap.append(h('p', { class: 'muted' }, 'No published posts yet.'));
   return wrap;
 }
