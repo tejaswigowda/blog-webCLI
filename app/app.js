@@ -148,6 +148,39 @@ function heavy(label, fn, opts) {
 }
 let cache = null; // { repo, ref, blog, lock }
 
+// What is known of a blog as of its latest commit: its settings, its index, its drafts, its pages and its images. Coming back to a blog
+// asks GitHub one question (what is the branch's latest commit?) and reuses all of it when the answer has not changed; any commit,
+// from this tab or another, changes the answer, so nothing stale is ever shown and nothing is read twice.
+const memos = new Map();
+const defaultBranches = new Map();
+let current = null;
+async function headShaOf(repo, ref) {
+  try {
+    const { repo: r } = parseRepoRef(repo);
+    let branch = ref;
+    if (!branch) {
+      if (!defaultBranches.has(r)) defaultBranches.set(r, (await gh.repoInfo(r)).default_branch);
+      branch = defaultBranches.get(r);
+    }
+    return (await gh.headCommit(r, branch)).sha;
+  } catch {
+    return null; // cannot tell: read it all, as before
+  }
+}
+async function syncCurrent(repo, ref) {
+  const key = `${repo}@${ref || ''}`;
+  const sha = await headShaOf(repo, ref);
+  const hit = memos.get(key);
+  if (sha && hit && hit.sha === sha) {
+    current = hit;
+    return true;
+  }
+  current = { key, sha, cache: null, entries: null, drafts: null, pages: null, media: null };
+  if (sha) memos.set(key, current);
+  else memos.delete(key);
+  return false;
+}
+
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // the header is sticky, so whatever sticks under it needs its height (it wraps on a narrow screen)
@@ -428,7 +461,10 @@ async function route() {
     }
     if (!r.repo) return home();
     const repo = parseRepo(r.repo);
-    if (!cache || cache.repo !== repo || cache.ref !== r.ref) cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
+    const unchanged = await syncCurrent(repo, r.ref);
+    if (unchanged && current.cache) cache = current.cache;
+    else if (!unchanged || !cache || cache.repo !== repo || cache.ref !== r.ref) cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
+    if (mine === seq && current && !current.cache && current.sha) current.cache = cache;
     if (mine !== seq) return;
     let node;
     if (r.mode === 'themes') node = await themesView(repo, r);
@@ -579,7 +615,9 @@ async function settingsView(repo, r) {
   const canPush = !!(info.permissions && info.permissions.push);
   let entries = [];
   try {
-    entries = await loadIndex(gh, repo, r.ref);
+    const memo = current;
+    entries = memo && memo.entries ? memo.entries : await loadIndex(gh, repo, r.ref);
+    if (memo && !memo.entries) memo.entries = entries;
   } catch {
     /* the preview falls back to a sample */
   }
@@ -921,7 +959,11 @@ function licencesView(repo, r) {
 // ledger counts it, and nothing is uploaded by opening the view.
 async function loadMedia(repo, ref) {
   const { blog, lock } = cache;
-  return listMedia(gh, { blog, lock, index: await loadIndexFull(gh, repo, ref, { blog }) });
+  const memo = current;
+  if (memo && memo.media) return memo.media;
+  const media = await listMedia(gh, { blog, lock, index: await loadIndexFull(gh, repo, ref, { blog }) });
+  if (memo && !media.problems.length) memo.media = media;
+  return media;
 }
 
 // A searchable grid of tiles. Lazy images with explicit dimensions, so a repository of thousands of pictures is not fetched at full
@@ -979,7 +1021,9 @@ async function mediaView(repo, r) {
 async function listView(repo, r) {
   const { blog } = cache;
   document.title = blog.title;
-  const entries = await loadIndex(gh, repo, r.ref, { blog });
+  const memo = current;
+  const entries = memo && memo.entries ? memo.entries : await loadIndex(gh, repo, r.ref, { blog });
+  if (memo && !memo.entries) memo.entries = entries;
   const wrap = h('div', {}, h('h1', {}, blog.title), h('p', { class: 'muted' }, blog.description));
   // View blog opens the GitHub Pages site when GitHub is serving one, else the reader (which needs no Pages)
   const viewBlog = outbound('View blog', `blog/${link(repo, r.ref ? `&ref=${r.ref}` : '')}`, { icon: 'external-link', title: 'Opens the reader: GitHub Pages is not serving this blog' });
@@ -1017,7 +1061,7 @@ async function listView(repo, r) {
   // Posts and Pages are tabs: the blog's posts, and its standalone pages (read on first use, a request each)
   const draftsBox = h('section', {});
   const postsPanel = h('div', { role: 'tabpanel', id: 'tab-posts' },
-    gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, draftsBox, new Set(entries.map((x) => x.slug))) }, 'Show drafts')) : null,
+    gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, draftsBox, new Set(entries.map((x) => x.slug)), memo) }, 'Show drafts')) : null,
     draftsBox,
     ...(entries.length > 1 ? [sortLabel] : []), list, none,
     !entries.length ? h('p', { class: 'muted' }, 'No published posts yet.') : null);
@@ -1033,7 +1077,7 @@ async function listView(repo, r) {
     });
     if (key === 'pages' && !pagesLoaded) {
       pagesLoaded = true;
-      showPages(pagesPanel, repo, r.ref);
+      showPages(pagesPanel, repo, r.ref, memo);
     }
   };
   const tablist = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Posts and pages' }, ...buttons);
@@ -1057,31 +1101,38 @@ async function listView(repo, r) {
 }
 
 // Drafts are the posts/ files the generated index does not list (a commit rebuilds the index with it, so the two agree), so only those
-// are read, in batches: not every post of a blog of thousands, one request each.
-async function showDrafts(btn, repo, ref, box, published) {
+// are read, in batches: not every post of a blog of thousands, one request each. What was read is kept for this commit (`memo`).
+async function showDrafts(btn, repo, ref, box, published, memo) {
   btn.disabled = true;
-  box.replaceChildren(progressLine('Looking for drafts…'));
+  const draw = (metas) => {
+    const out = h('ul', { class: 'posts' });
+    for (const m of metas) out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'scheduled' ? `${m.title} (scheduled for ${m.publish_at})` : `${m.title} (draft)`, link(repo, `&edit=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(m.date))));
+    box.replaceChildren(h('h2', {}, 'Drafts and scheduled'), metas.length ? out : h('p', { class: 'muted' }, 'No drafts or scheduled posts.'));
+    box.scrollIntoView({ block: 'start' });
+  };
   try {
+    if (memo && memo.drafts) return draw(memo.drafts);
+    box.replaceChildren(progressLine('Looking for drafts…'));
     const { repo: slugRepo, folder } = parseRepoRef(repo);
     const prefix = folder ? `${folder}/` : '';
     const branch = ref || (await gh.repoInfo(slugRepo)).default_branch;
     const head = await gh.headCommit(slugRepo, branch);
     const tree = await gh.tree(slugRepo, head.treeSha);
     const files = [...tree].filter(([p]) => p.startsWith(`${prefix}posts/`) && /\/[^/]+\.md$/.test(p) && p.slice(`${prefix}posts/`.length).indexOf('/') < 0 && !published.has(p.slice(`${prefix}posts/`.length, -3)));
-    box.replaceChildren(progressLine(files.length ? `Reading ${files.length} unpublished post${files.length === 1 ? '' : 's'}…` : 'Looking for drafts…'));
+    if (files.length) box.replaceChildren(progressLine(`Reading ${files.length} unpublished post${files.length === 1 ? '' : 's'}…`));
     const texts = files.length ? await gh.readMany(slugRepo, files.map(([path, sha]) => ({ path, sha })), { ref: head.sha }) : new Map();
-    const out = h('ul', { class: 'posts' });
+    const metas = [];
     for (const [path] of files) {
       const n = path.slice(`${prefix}posts/`.length);
       try {
         const m = parseMeta(splitFile(texts.get(path), n).front, n);
-        if (m.status !== 'published') out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'scheduled' ? `${m.title} (scheduled for ${m.publish_at})` : `${m.title} (draft)`, link(repo, `&edit=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(m.date))));
+        if (m.status !== 'published') metas.push({ slug: m.slug, title: m.title, status: m.status, publish_at: m.publish_at, date: m.date });
       } catch {
         /* skip unreadable */
       }
     }
-    box.replaceChildren(h('h2', {}, 'Drafts and scheduled'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts or scheduled posts.'));
-    box.scrollIntoView({ block: 'start' });
+    if (memo) memo.drafts = metas;
+    draw(metas);
   } catch (e) {
     box.replaceChildren(errBox(e));
   } finally {
@@ -1089,16 +1140,22 @@ async function showDrafts(btn, repo, ref, box, published) {
   }
 }
 
-// The standalone pages (about, contact, …): not posts, so not in the posts list. Read when the tab is first opened, a request each.
-async function showPages(panel, repo, ref) {
+// The standalone pages (about, contact, …): not posts, so not in the posts list. Read when the tab is first opened, a request each,
+// and kept for this commit.
+async function showPages(panel, repo, ref, memo) {
+  const draw = (metas) => panel.replaceChildren(
+    gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&newpage')) }, 'New page')) : null,
+    metas.length ? h('ul', { class: 'posts' }, metas.map((m) => h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'draft' ? `${m.title} (draft)` : m.title, link(repo, `&editpage=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, m.menu ? `In the menu, position ${m.menu}` : 'Not in the menu')))) : h('p', { class: 'muted' }, 'No pages yet.'),
+  );
+  if (memo && memo.pages) return draw(memo.pages);
   panel.replaceChildren(progressLine('Reading pages…'));
-  const out = h('ul', { class: 'posts' });
+  const metas = [];
   const { repo: slugRepo, folder } = parseRepoRef(repo);
   try {
     for (const n of await listPageFiles(gh, repo, ref)) {
       try {
         const m = parseMeta(splitFile(await gh.readText(slugRepo, at(folder, `pages/${n}`), ref), n).front, n);
-        out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'draft' ? `${m.title} (draft)` : m.title, link(repo, `&editpage=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, m.menu ? `In the menu, position ${m.menu}` : 'Not in the menu')));
+        metas.push({ slug: m.slug, title: m.title, status: m.status, menu: m.menu });
       } catch {
         /* skip unreadable */
       }
@@ -1107,10 +1164,8 @@ async function showPages(panel, repo, ref) {
     panel.replaceChildren(errBox(e));
     return;
   }
-  panel.replaceChildren(
-    gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&newpage')) }, 'New page')) : null,
-    out.children.length ? out : h('p', { class: 'muted' }, 'No pages yet.'),
-  );
+  if (memo) memo.pages = metas;
+  draw(metas);
 }
 
 async function postView(repo, r) {
