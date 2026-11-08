@@ -40,6 +40,24 @@ const KEY = 'blog.webcli.token';
 const gh = new GitHub(net, { token: sessionStorage.getItem(KEY) || localStorage.getItem(KEY), store: localStorage });
 let login = null;
 
+// A tab keeps running the scripts it loaded: after an update, what it generates is not what the current version would write (a page
+// built without a setting the new version knows rewrites every page that has it). Nothing is sent from such a tab: reload it.
+// app-build.json is made by cli/build-live.js from every script of app/ and lib/.
+const fetchBuild = async () => {
+  try {
+    const res = await fetch('app-build.json', { cache: 'no-store', credentials: 'omit' });
+    return res.ok ? (await res.json()).id || null : null;
+  } catch {
+    return null;
+  }
+};
+const startedWith = fetchBuild();
+async function ensureCurrent() {
+  const [was, now] = await Promise.all([startedWith, fetchBuild()]);
+  if (was && now && was !== now) throw new Refusal('stale-app', 'The editor was updated after this page was opened. Reload the page (nothing has been sent), then try again.');
+}
+gh.beforeWrite = ensureCurrent;
+
 // A long job on a big blog: the activity line says how far it has got and when it is waiting out GitHub's limit, and Stop ends it.
 // Nothing here changes what the job does; a blog too small to need it never sees more than the label.
 const fmtWait = (s) => (s >= 90 ? `${Math.ceil(s / 60)} minutes` : `${s} s`);
@@ -1442,7 +1460,8 @@ function releaseReceipt(r) {
   });
 }
 
-function confirmPlan(plan) {
+async function confirmPlan(plan) {
+  await ensureCurrent(); // before the pre-flight, so a plan made by old scripts is not even offered
   const dlg = $('#dlg');
   return new Promise((resolve) => {
     let settled = false;

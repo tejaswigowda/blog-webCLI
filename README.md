@@ -373,7 +373,7 @@ setting lives in exactly one place:
 | `order.json` (or the file `order.list` names) | the sequence of posts, when the blog is [ordered by hand](#order) | you (the one authored file beside `blog.json`) |
 | `assets.lock.json` | the commit each `asset:` reference is pinned to | the editor / `blog-webcli pin` (never by hand) |
 | `extension-outputs.json` | what each extension returned at publish | the editor's sandbox (never by hand) |
-| `index/posts.json`, `feed.xml`, `sitemap.xml`, `robots.txt`, `search.json`, `theme.css`, `licences.json`, `404.html`, `webcli-live.js`, `webcli-search.js`, every page, and the folders `tags/`, `authors/`, `archive/`, `page/`, `search/` | generated from the above | the generator; CI diffs them |
+| `index/posts.json`, `feed.xml`, `sitemap.xml`, `robots.txt`, `search.json`, `theme.css`, `licences.json`, `404.html`, `webcli-live.js`, `webcli-search.js`, every page, and the folders `tags/`, `authors/`, `archive/`, `page/`, `search/`, `sitemaps/` | generated from the above | the generator; CI diffs them |
 | the reader's URL hash | one view of a blog (`/blog/#repo=…&ref=…&images=…`, see [the reader](#the-blog-reader)) | the link |
 | GitHub Pages settings | where the blog is served (branch, custom domain, HTTPS) | GitHub; the app reads it, it does not store it |
 | `themes.json`, `extensions.json` in the **registry repository** (`registry` in [app/config.js](app/config.js)) | the lists in the theme and extension pickers (a convenience: any repository works by address); [app/registry-snapshot.json](app/registry-snapshot.json) is the bundled fallback | pull request against the registry repository |
@@ -1246,7 +1246,9 @@ lowercase letters and digits with hyphens (`Static HLS` → `static-hls`); two t
 share a page. A tag that only drafts use has no page.
 
 **Archive.** `archive/` lists every published post by year, newest first, by authored date, whatever order the blog
-itself is in.
+itself is in. A blog of **more than 500 posts** keeps one page per year instead, `archive/2026/`, under an `archive/` that lists the years with
+their post counts: a post then changes the page of its own year, not one page of every post (1.7 MB on a blog of 8,000). The address
+`archive/#y2026` of the single page becomes `archive/2026/`.
 
 **Authors.** With more than one distinct author across the posts, each has `authors/<name>/` and the byline links
 to it. A blog with one author has none, since it would repeat the index.
@@ -1287,7 +1289,10 @@ otherwise publish a feed of tens of megabytes that every publish rewrites).
 
 **Sitemap and robots.** `sitemap.xml` lists the home page, posts (with their authored dates), pages, the archive and
 the tag and author pages, in a fixed order. A post with `noindex`, or with a `canonical` address that is not its own, is
-left out. `robots.txt` (`Allow: /` and the sitemap) is written only where the blog is at the root of a host.
+left out. `robots.txt` (`Allow: /` and the sitemap) is written only where the blog is at the root of a host. A blog of more than 500 posts
+makes `sitemap.xml` a sitemap index (`sitemapindex`) of `sitemaps/<year>.xml`, one per year of posts, and `sitemaps/site.xml` for the home page,
+pages, archive, tags and authors; the index names no dates, so a post changes the file of its year (and `site.xml` when it is the newest of the blog or of
+a tag). Search engines and `robots.txt` still start at `sitemap.xml`.
 
 **Structured data and previews.** Every post has JSON-LD (`BlogPosting`), every standalone page `WebPage`, the home
 page `WebSite` (with a `SearchAction` when search is on): a `<script type="application/ld+json">`, which is data and
@@ -1304,7 +1309,7 @@ share image, canonical address and `noindex` per post.
 
 **Removed with the feature.** When you turn search or pagination off, or a tag loses its last post, the files that
 feature wrote are deleted in the same commit (the editor's pre-flight lists them) and `blog-webcli build` removes
-them (`check` reports them as stale). The folders `tags/`, `authors/`, `archive/`, `page/` and `search/` belong to the
+them (`check` reports them as stale). The folders `tags/`, `authors/`, `archive/`, `page/`, `search/` and `sitemaps/` belong to the
 generator: do not keep your own files in them.
 
 Because the generator is one pure module, the browser's live renderer (see [Publish latency](#publish-latency-not-waiting-for-github-pages))
@@ -1458,6 +1463,11 @@ upload, and nothing is uploaded until you confirm.
 * **Corrections**: "Suggest a correction" opens the editor on the post body (or, for a standalone page, `#…&correctpage=slug`); submitting opens
   a pull request on a new branch (default branch untouched). Without write access the app
   links to GitHub's own fork-and-edit page.
+* **A tab that is out of date sends nothing.** A tab keeps running the scripts it loaded; after an update, what it generates is not what the
+  current version writes (a setting the old scripts do not know is ignored, and every page that has it is rewritten without it). `cli/build-live.js`
+  writes `app-build.json`, a digest of every script of `app/` and `lib/` (`--check` fails when it is stale, and CI runs it); the editor reads it when
+  the page opens and again before a pre-flight is offered and before any commit, and refuses with `stale-app` ("reload the page; nothing has been
+  sent") when they differ. (`test/app-build.test.js`, `test/e2e/stale.e2e.mjs`)
 * **Deleting**: *Delete* on a post's page, and *Delete post* / *Delete page* in the editor, plan the removal like a publish: the pre-flight
   ("Delete this post?") lists every file that goes (the source, its generated page, any old-address redirects) and those that change
   (the index and its shards, the listings, the feed, the sitemap, search), *Cancel* sends nothing, and *Delete and push* makes one
@@ -1477,7 +1487,7 @@ upload, and nothing is uploaded until you confirm.
 `draft-in-publish` · `classic-token` · `unpinned-ref` · `pin-mismatch` · `bad-theme` · `bad-extension` ·
 `no-licence` · `bad-licence` · `not-in-directory` · `extension-output-missing` · `extension-failed` ·
 `unsafe-extension-output` · `bad-release` · `unknown-slug-in-order` · `duplicate-slug-in-order` · `bad-order-list` ·
-`missing-order-field` · `mixed-order-field-types` · `bad-order-field` · `bad-html` · `bad-alias` · `alias-collision` · `missing-source` · `bad-wp-export` · `bad-wp-site` · `import-refused`. A build that is refused writes nothing.
+`missing-order-field` · `mixed-order-field-types` · `bad-order-field` · `bad-html` · `bad-alias` · `alias-collision` · `stale-app` · `missing-source` · `bad-wp-export` · `bad-wp-site` · `import-refused`. A build that is refused writes nothing.
 
 ## Gates
 
@@ -1577,6 +1587,8 @@ upload, and nothing is uploaded until you confirm.
 | K8 a big blog's index is a manifest plus shards that the build, the live script, the reader and the editor read back as the same index; a publish changes the manifest and one shard | `test/incremental.test.js`, `test/bulk.test.js` |
 | K9 linked stylesheet: pages link `style.css` (relative at every depth, from the root of the site on a 404) and carry no `<style>`; the file is the theme and the custom CSS; a change of CSS or colours is `blog.json` and `style.css` and no page, in the editor too; turned off, the file goes; the preview and the build agree, and the reader shows a linked blog styled in real Chrome; the default is unchanged | `test/linked-style.test.js`, `test/e2e/linked-style.e2e.mjs` |
 | K10 a date may carry a time: refused when not real; posts of one day newest first, a post with no time the oldest of its day; pages show the day, the feed the moment, the sitemap the day; a day-only blog is unchanged; a timed post published to a big blog equals a full build; a new post starts with the time | `test/datetime.test.js`, `test/e2e/cover.e2e.mjs` |
+| K11 an editor tab opened before an update refuses to offer a pre-flight or send a commit (`stale-app`); app-build.json is what app/ and lib/ build to | `test/app-build.test.js`, `test/e2e/stale.e2e.mjs` |
+| K12 a blog of more than 500 posts keeps its archive by year and its sitemap as an index of yearly sitemaps (every post in the archive page and the sitemap of its year, every address in exactly one sitemap); 500 or fewer is unchanged; the reader makes the same pages; publishing or deleting changes one year, equals a full build, and removes the files of a year that is gone | `test/split.test.js` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves

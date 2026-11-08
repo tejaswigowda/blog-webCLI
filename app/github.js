@@ -77,6 +77,7 @@ export class GitHub {
     this.isCancelled = null;
     this.rate = null; // { remaining, reset } from the latest response
     this.ledgers = new Map();
+    this.beforeWrite = null; // () => Promise, rejects to stop a commit before anything is sent
     this.onProgress = null; // (what, done, total) => void, told how a long read or send is getting on
     this.texts = new Map(); // "repo@blob sha" -> the text of a file already read: a blob never changes, so it is never read twice
     this.noGraphql = false; // GraphQL answered like something this token cannot use: files are read one request each
@@ -440,6 +441,7 @@ export class GitHub {
   // files: [{ path, content: string | Uint8Array } | { path, delete: true }]
   // skipIfUnchanged: when the result is the tree the branch already has, make no commit (an import carried on after a stop).
   async commit(repo, opts) {
+    if (this.beforeWrite) await this.beforeWrite(); // the editor refuses to write when this page's scripts are out of date
     try {
       return await this.commitOnce(repo, opts, true);
     } catch (e) {
