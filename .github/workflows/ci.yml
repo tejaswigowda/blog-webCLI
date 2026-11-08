@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dev dependencies (esbuild builds the live script that generated pages load)
+        run: npm ci
+      - name: Install xmllint (feed validation, gate B5)
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+      - name: Tests (gates B1-B11)
+        run: npm test
+      - name: Example blog's generated output is current (gate B8)
+        run: node cli/blog.js check examples/blog
+      - name: The live script a blog ships is current (gate L5)
+        run: node cli/build-live.js --check
+      - name: Nothing unlicensed or copyleft reaches the runtime; the inventory is current (gates R4, R5)
+        run: node cli/inventory.js --check

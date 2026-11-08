@@ -332,3 +332,14 @@ test('a big blog keeps its index in shards listed by a small index/posts.json, a
   const two = Object.keys(added.res.files).filter((f) => /^index\/posts/.test(f) && r.files[f] !== added.res.files[f]);
   assert.equal(two.length, 2, `a new post changes the manifest (the order) and one shard: ${two}`);
 });
+
+test('settings: the stable-pages checkbox round-trips and is written only when on', async () => {
+  const { blogToForm, formToBlog } = await import('../lib/settings.js');
+  const base = { title: 'T', pagination: { size: 10 } };
+  assert.equal(blogToForm(base).pageStable, false);
+  const on = formToBlog(base, { ...blogToForm(base), pageStable: true });
+  assert.deepEqual({ ...on.pagination }, { size: 10, stable: true });
+  assert.equal(blogToForm(on).pageStable, true);
+  const off = formToBlog(on, { ...blogToForm(on), pageStable: false });
+  assert.deepEqual({ ...off.pagination }, { size: 10 });
+});
