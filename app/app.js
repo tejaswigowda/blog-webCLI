@@ -1017,7 +1017,7 @@ async function listView(repo, r) {
   // Posts and Pages are tabs: the blog's posts, and its standalone pages (read on first use, a request each)
   const draftsBox = h('section', {});
   const postsPanel = h('div', { role: 'tabpanel', id: 'tab-posts' },
-    gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, draftsBox) }, 'Show drafts')) : null,
+    gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, draftsBox, new Set(entries.map((x) => x.slug))) }, 'Show drafts')) : null,
     draftsBox,
     ...(entries.length > 1 ? [sortLabel] : []), list, none,
     !entries.length ? h('p', { class: 'muted' }, 'No published posts yet.') : null);
@@ -1056,21 +1056,37 @@ async function listView(repo, r) {
   return wrap;
 }
 
-async function showDrafts(btn, repo, ref, box) {
+// Drafts are the posts/ files the generated index does not list (a commit rebuilds the index with it, so the two agree), so only those
+// are read, in batches: not every post of a blog of thousands, one request each.
+async function showDrafts(btn, repo, ref, box, published) {
   btn.disabled = true;
-  box.replaceChildren(progressLine('Reading drafts…'));
-  const out = h('ul', { class: 'posts' });
-  const { repo: slugRepo, folder } = parseRepoRef(repo);
-  for (const n of await listPostFiles(gh, repo, ref)) {
-    try {
-      const m = parseMeta(splitFile(await gh.readText(slugRepo, at(folder, `posts/${n}`), ref), n).front, n);
-      if (m.status !== 'published') out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'scheduled' ? `${m.title} (scheduled for ${m.publish_at})` : `${m.title} (draft)`, link(repo, `&edit=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(m.date))));
-    } catch {
-      /* skip unreadable */
+  box.replaceChildren(progressLine('Looking for drafts…'));
+  try {
+    const { repo: slugRepo, folder } = parseRepoRef(repo);
+    const prefix = folder ? `${folder}/` : '';
+    const branch = ref || (await gh.repoInfo(slugRepo)).default_branch;
+    const head = await gh.headCommit(slugRepo, branch);
+    const tree = await gh.tree(slugRepo, head.treeSha);
+    const files = [...tree].filter(([p]) => p.startsWith(`${prefix}posts/`) && /\/[^/]+\.md$/.test(p) && p.slice(`${prefix}posts/`.length).indexOf('/') < 0 && !published.has(p.slice(`${prefix}posts/`.length, -3)));
+    box.replaceChildren(progressLine(files.length ? `Reading ${files.length} unpublished post${files.length === 1 ? '' : 's'}…` : 'Looking for drafts…'));
+    const texts = files.length ? await gh.readMany(slugRepo, files.map(([path, sha]) => ({ path, sha })), { ref: head.sha }) : new Map();
+    const out = h('ul', { class: 'posts' });
+    for (const [path] of files) {
+      const n = path.slice(`${prefix}posts/`.length);
+      try {
+        const m = parseMeta(splitFile(texts.get(path), n).front, n);
+        if (m.status !== 'published') out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'scheduled' ? `${m.title} (scheduled for ${m.publish_at})` : `${m.title} (draft)`, link(repo, `&edit=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(m.date))));
+      } catch {
+        /* skip unreadable */
+      }
     }
+    box.replaceChildren(h('h2', {}, 'Drafts and scheduled'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts or scheduled posts.'));
+    box.scrollIntoView({ block: 'start' });
+  } catch (e) {
+    box.replaceChildren(errBox(e));
+  } finally {
+    btn.disabled = false;
   }
-  box.replaceChildren(h('h2', {}, 'Drafts and scheduled'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts or scheduled posts.'));
-  box.scrollIntoView({ block: 'start' });
 }
 
 // The standalone pages (about, contact, …): not posts, so not in the posts list. Read when the tab is first opened, a request each.
