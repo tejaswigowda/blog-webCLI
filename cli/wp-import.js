@@ -39,15 +39,16 @@ const refuse = (code, m) => new Refusal(code, m);
 // and named, with the reason, so one bad file never costs the whole theme. Not taken: right-to-left and editor/admin/customizer
 // styles, other plugins' styles (there is nothing for them to style), and vendor libraries.
 const EXTRA_SKIP_DIR = /(^|\/)(node_modules|vendor|vendors|libs?|plugins?|demos?|admin|inc|includes?|customi[sz]er|editor|woocommerce|elementor|tests?|languages)\//i;
-const EXTRA_SKIP_NAME = /(^|[\/._-])(rtl|editor|block-editor|admin|wp-admin|customi[sz]er|woocommerce|elementor|bbpress|buddypress|jetpack|gravity|wpforms|learndash|lifter|tutor|dokan|bakery|siteorigin|beaver|kirki|print|rtl)([._-]|\.css$)/i;
+const EXTRA_SKIP_NAME = /(^|[\/._-])(rtl|editor|block-editor|admin|wp-admin|customi[sz]er|woocommerce|elementor|bbpress|buddypress|jetpack|gravity|wpforms|learndash|lifter|tutor|dokan|bakery|siteorigin|beaver|kirki|print|ie|rtl)([._-]|\.css$)/i;
 const MAIN_NAME = /(^|\/)(main|style|styles|theme|frontend|front|global|base|common|app|blog|layout|content|header|footer|components)(\.min)?\.css$/i;
 const EXTRA_MAX_FILES = 7; // theme.json lists at most 8 stylesheets, style.css being one
-const CSS_BUDGET = 700_000; // characters in all of them: a published theme.css may not exceed what the app reads
-const ASSET_MAX = 300;
-const ASSET_BYTES = 6_000_000;
+const CSS_BUDGET = 450_000; // characters in all of them: a published theme.css may not exceed what the app reads
+const ASSET_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/; // what theme.json accepts as a file path
+const ASSET_MAX = 60; // every one of them is fetched when the theme is chosen or previewed, so a theme stays a small read
+const ASSET_BYTES = 1_500_000;
 
 // -> { taken: [{ rel, assets: [paths] }], skipped: [{ rel, why }] }
-function pickExtraCss(zip, styleLength) {
+function pickExtraCss(zip, styleLength, styleAssets) {
   const all = [...zip.keys()].filter((n) => /\.css$/i.test(n) && n !== 'style.css');
   const byBase = new Map();
   for (const n of all) {
@@ -59,9 +60,9 @@ function pickExtraCss(zip, styleLength) {
   const candidates = [...byBase.values()].sort((a, b) => rank(b) - rank(a) || zip.get(b).length - zip.get(a).length || (a < b ? -1 : 1));
   const taken = [];
   const skipped = [];
-  const haveAssets = new Set();
+  const haveAssets = new Set(styleAssets);
   let chars = styleLength;
-  let bytes = 0;
+  let bytes = styleAssets.reduce((n, r) => n + zip.get(r).length, 0);
   for (const rel of candidates) {
     if (taken.length >= EXTRA_MAX_FILES) break;
     let css;
@@ -81,6 +82,10 @@ function pickExtraCss(zip, styleLength) {
       if (a.startsWith('data:') || a.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(a) || a.startsWith('//')) continue;
       const r = resolvePath(rel, a.split(/[?#]/)[0]);
       if (r && zip.has(r)) refs.add(r);
+    }
+    if ([...refs].some((r) => !ASSET_PATH.test(r))) {
+      skipped.push({ rel, why: 'refers to a file whose name theme.json cannot list' });
+      continue;
     }
     const newAssets = [...refs].filter((r) => !haveAssets.has(r));
     const addBytes = newAssets.reduce((n, r) => n + zip.get(r).length, 0);
@@ -143,7 +148,7 @@ export function convertWordPressTheme({ slug, info, zip }) {
     }
   }
   if (missing.length) throw refuse('bad-theme', `${slug}: style.css refers to files that are not in the theme: ${[...new Set(missing)].slice(0, 5).join(', ')}`);
-  const extra = pickExtraCss(zip, style.length);
+  const extra = pickExtraCss(zip, style.length, assets);
   for (const { rel, assets: used } of extra.taken) {
     files[rel] = zip.get(rel);
     for (const a of used) if (!assets.includes(a)) {

@@ -62,6 +62,30 @@ test('X6: a directory theme is ingested; source, licence, attribution and what w
   await assert.rejects(fs.stat(path.join(dir, 'index.php')));
 });
 
+test("X6: a theme's other front-end stylesheets are taken, with their assets; editor, rtl, plugin and bad files are not, and each is named", async () => {
+  const dir = await out();
+  await run(fakeWordPress({ files: {
+    'assets/css/main.css': '.site-header{background:url(../img/hero.png);color:#111}',
+    'assets/css/main.min.css': '.site-header{color:#111}',
+    'assets/css/main-rtl.css': '.site-header{direction:rtl}',
+    'assets/css/editor-style.css': '.editor{color:red}',
+    'assets/css/woocommerce.css': '.woocommerce{color:red}',
+    'assets/css/slider.css': '@import url(x.css);',
+    'assets/css/ie.css': '.ie{color:red}',
+    'assets/css/widgets.css': '.widget{background:url(https://evil.test/x.png)}',
+    'assets/img/hero.png': 'png',
+    'inc/admin/panel.css': '.panel{color:red}',
+  } }), dir);
+  const m = JSON.parse(await fs.readFile(path.join(dir, 'theme.json'), 'utf8'));
+  assert.deepEqual(m.css, ['assets/css/main.min.css', 'style.css'], 'the minified copy of main.css, then style.css last');
+  assert.deepEqual(m.assets, ['img/bg.png'], 'only what the taken files use');
+  assert.ok(m.dropped.css.some((x) => x.startsWith('assets/css/slider.css (') && x.length > 30), 'a file that fails the rules is named with the reason');
+  assert.ok(m.dropped.css.some((x) => x.startsWith('assets/css/widgets.css (') && /outside the theme/.test(x)));
+  for (const left of ['assets/css/main-rtl.css', 'assets/css/editor-style.css', 'assets/css/woocommerce.css', 'assets/css/ie.css', 'inc/admin/panel.css', 'assets/css/main.css']) assert.ok(m.dropped.css.includes(left), `${left} is listed as dropped`);
+  assert.ok((await fs.stat(path.join(dir, 'assets/css/main.min.css'))).size > 0);
+  await assert.rejects(fs.stat(path.join(dir, 'assets/css/slider.css')));
+});
+
 test('X6: only wordpress.org directory themes, and only from wordpress.org hosts', async () => {
   for (const info of [{ homepage: 'https://evil.example/themes/demo/' }, { download_link: 'https://evil.example/demo.zip' }, { slug: 'other' }, { error: 'Theme not found' }]) {
     await assert.rejects(run(fakeWordPress({ info }), await out()), refused('not-in-directory'), JSON.stringify(info));
