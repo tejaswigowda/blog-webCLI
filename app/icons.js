@@ -10,6 +10,7 @@ const pg = (points) => ['polygon', { points }];
 const c = (cx, cy, r) => ['circle', { cx, cy, r }];
 
 export const ICONS = {
+  eye: [p('M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'), c(12, 12, 3)],
   user: [p('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'), c(12, 7, 4)],
   'log-in': [p('M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4'), pl('10 17 15 12 10 7'), l(15, 12, 3, 12)],
   'log-out': [p('M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'), pl('16 17 21 12 16 7'), l(21, 12, 9, 12)],

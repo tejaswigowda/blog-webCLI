@@ -323,3 +323,6 @@ dialog.media-dialog .media-tile:hover,dialog.media-dialog .media-tile:focus{bord
 .loading{display:flex;align-items:center;justify-content:center;gap:.75rem;min-height:50vh;color:var(--muted);font-size:1.05rem}
 .loading .spinner{width:1.4rem;height:1.4rem}
 .stuck button {border: none; background:transparent}
+/* theme preview */
+dialog.theme-preview{max-width:64rem;width:calc(100% - 2rem)}
+.tp-frame{display:block;max-height:65vh;overflow:auto;border:1px solid var(--rule);border-radius:var(--r);background:#fff;margin:.5rem 0}

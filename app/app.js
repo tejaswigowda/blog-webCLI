@@ -27,8 +27,8 @@ import { FONTS, resolveLogo, themeCss } from '../lib/customize.js';
 import { blogToForm, formToBlog } from '../lib/settings.js';
 import { DATE_FORMAT_EXAMPLES, DEFAULT_DATE_FORMAT } from '../lib/datefmt.js';
 import { validateBlog } from '../lib/blog.js';
-import { indexBody } from '../lib/contracts.js';
-import { loadPinnedTheme } from './packs.js';
+import { indexBody, postBody } from '../lib/contracts.js';
+import { loadPinnedTheme, readThemeToPin } from './packs.js';
 import { loadRegistry } from './registry-client.js';
 import { highlightedTextarea } from './highlight.js';
 import { config } from './config.js';
@@ -833,6 +833,53 @@ function parseAddress(text) {
   return { where: parseRepoRef(t.slice(0, i)).ref, ref: t.slice(i + 1).trim() };
 }
 
+// A look at the blog in a theme before choosing it: the theme is fetched and checked exactly as choosing it would (so a theme that would be
+// refused is refused here), then the blog's own posts and a sample post are drawn with it. Nothing is saved or sent.
+const SAMPLE_POST = '<p>This is how a post reads in this theme: the paragraph text, <a href="#">a link</a>, <strong>strong</strong> and <em>emphasis</em>.</p><h2>A heading</h2><blockquote><p>A quotation, set the way the theme sets one.</p></blockquote><ul><li>A list of things</li><li>And another thing</li></ul><pre><code>const code = "in a block";</code></pre><p>The last paragraph, to show the spacing before the footer.</p>';
+async function previewTheme(repo, spec, label) {
+  const dlg = h('dialog', { class: 'theme-preview' });
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.append(h('h2', {}, `Preview: ${label}`), progressLine('Fetching and checking the theme…'));
+  document.body.append(dlg);
+  dlg.showModal();
+  try {
+    const { blog, lock } = cache;
+    const memo = blogMemo;
+    const all = memo && memo.entries ? memo.entries : await loadIndex(gh, repo, undefined, { blog });
+    const entries = all.slice(0, 8);
+    const { pin, theme } = await readThemeToPin(gh, spec.where, spec.ref, { expect: spec.expect });
+    const shown = { ...blog, theme: pin };
+    let logoUrl = null;
+    try {
+      logoUrl = resolveLogo(shown, lock);
+    } catch {
+      /* an unpinned logo is simply not drawn */
+    }
+    const frame = h('div', { class: 'tp-frame' });
+    const shadow = frame.attachShadow({ mode: 'open' });
+    const css = forShadow(themeCss(shown, theme));
+    const draw = (kind) => {
+      const first = entries[0] || { slug: 'sample', title: 'A sample post', date: today(), tags: ['sample'] };
+      const body = kind === 'index'
+        ? indexBody(theme.contract, { blog: shown, entries: entries.length ? entries : [first], hrefFor: () => '#', home: '#', feed: '#', logoUrl })
+        : postBody(theme.contract, { blog: shown, meta: { slug: first.slug, title: first.title, date: first.date, tags: first.tags || [], author: shown.author }, bodyHtml: SAMPLE_POST, coverUrl: null, home: '#', feed: '#', logoUrl, footerExtra: '', nav: null, page: false, after: '' });
+      shadow.innerHTML = `<style>${css}</style><style>.pv{padding:0 1.25rem 1rem;overflow-x:hidden;word-wrap:break-word}</style><div class="pv ${esc(body.bodyClass)}" style="pointer-events:none">${body.html}</div>`;
+    };
+    const tabs = [['index', 'Your posts'], ['post', 'A post']].map(([k, t]) => h('button', { type: 'button', role: 'tab', onclick: () => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.k === k))); draw(k); } }, t));
+    tabs.forEach((b, i) => { b.dataset.k = ['index', 'post'][i]; b.setAttribute('aria-selected', String(i === 0)); });
+    draw('index');
+    dlg.replaceChildren(
+      h('h2', {}, `Preview: ${theme.manifest ? theme.manifest.name : label}`),
+      h('div', { class: 'tabs', role: 'tablist' }, ...tabs),
+      h('p', { class: 'hint' }, `${pin.licence} · ${pin.repo}@${pin.ref}. Follows your system light/dark setting. Nothing is saved.`),
+      frame,
+      h('div', { class: 'actions' }, h('button', { icon: 'x', onclick: () => dlg.close() }, 'Close')),
+    );
+  } catch (e) {
+    dlg.replaceChildren(h('h2', {}, `Preview: ${label}`), errBox(e), h('div', { class: 'actions' }, h('button', { icon: 'x', onclick: () => dlg.close() }, 'Close')));
+  }
+}
+
 function needSignIn(what) {
   return h('div', {}, h('h2', {}, `Sign in to change ${what}`), h('p', {}, 'This is saved to blog.json, so it needs a fine-grained token.'), h('button', { class: 'primary', onclick: () => signInDialog() }, 'Sign in'));
 }
@@ -893,11 +940,11 @@ async function themesView(repo, r) {
     h('h3', {}, 'By address'),
     h('p', { class: 'hint' }, 'Any repository works, listed or not.'),
     input,
-    h('div', { class: 'actions' }, go, builtin),
+    h('div', { class: 'actions' }, go, h('button', { icon: 'eye', onclick: () => { try { const a = parseAddress(input.value); previewTheme(repo, a, input.value.trim()); } catch (e) { fail(e); } } }, 'Preview'), builtin),
     h('h3', {}, 'Listed'),
     listNote(registry),
     listed.length
-      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', { icon: 'check' }, 'Use…'); b.disabled = !canPush; b.addEventListener('click', () => { try { use({ ...parseAddress(`${e.repo}@${e.ref}`), expect: { sha256: e.sha256, licence: e.licence } }, b); } catch (err) { fail(err); } }); return h('li', {}, e.screenshot && /^https:\/\//.test(e.screenshot) ? h('img', { src: e.screenshot, alt: '', style: 'max-width:12rem;float:right;margin-left:1rem' }) : null, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.blurb ? h('p', {}, e.blurb) : null, b); }))
+      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', { icon: 'check' }, 'Use…'); b.disabled = !canPush; b.addEventListener('click', () => { try { use({ ...parseAddress(`${e.repo}@${e.ref}`), expect: { sha256: e.sha256, licence: e.licence } }, b); } catch (err) { fail(err); } }); const pv = h('button', { icon: 'eye', onclick: () => { try { previewTheme(repo, { ...parseAddress(`${e.repo}@${e.ref}`), expect: { sha256: e.sha256, licence: e.licence } }, e.name); } catch (err) { fail(err); } } }, 'Preview'); return h('li', {}, e.screenshot && /^https:\/\//.test(e.screenshot) ? h('img', { src: e.screenshot, alt: '', style: 'max-width:12rem;float:right;margin-left:1rem' }) : null, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.blurb ? h('p', {}, e.blurb) : null, h('div', { class: 'actions' }, pv, b)); }))
       :       h('p', { class: 'muted' }, 'The list could not be read. Any theme repository still works by its address.'),
   );
 }

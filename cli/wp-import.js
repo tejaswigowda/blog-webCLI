@@ -1,5 +1,6 @@
 // Ingesting a WordPress theme: from the wordpress.org directory only, with the licence rules the
-// work order sets out. What transfers is the CSS, its images and fonts, and design tokens; the PHP
+// work order sets out. What transfers is the CSS (style.css and the theme's other front-end stylesheets, where many themes keep their
+// real styling), its images and fonts, and design tokens; the PHP
 // templates, functions.php and JavaScript are not converted (the markup contract replaces the
 // templates, and a reader runs no theme code), and the manifest says so.
 //
@@ -9,7 +10,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { Refusal } from '../lib/errors.js';
 import { checkLicence, isGplFamily, normaliseGpl, splitLicensingLanguage } from '../lib/licence.js';
-import { loadTheme, pinFor, themeDigest, themeFilePaths, tokenOk } from '../lib/theme-pack.js';
+import { loadTheme, pinFor, processThemeCss, themeDigest, themeFilePaths, tokenOk } from '../lib/theme-pack.js';
 import { resolvePath, stripComments, urlTokens } from '../lib/css.js';
 import { readZip } from './zip.js';
 
@@ -31,6 +32,75 @@ export function parseStyleHeader(css) {
 }
 
 const refuse = (code, m) => new Refusal(code, m);
+
+// ---- a theme's other stylesheets ----
+// Many themes (Astra, GeneratePress, Kadence, Neve, …) keep style.css as little more than a header and put the real styling in
+// assets/css/*.css. The front-end ones are taken too, as long as each passes the same rules style.css does; one that does not is left out
+// and named, with the reason, so one bad file never costs the whole theme. Not taken: right-to-left and editor/admin/customizer
+// styles, other plugins' styles (there is nothing for them to style), and vendor libraries.
+const EXTRA_SKIP_DIR = /(^|\/)(node_modules|vendor|vendors|libs?|plugins?|demos?|admin|inc|includes?|customi[sz]er|editor|woocommerce|elementor|tests?|languages)\//i;
+const EXTRA_SKIP_NAME = /(^|[\/._-])(rtl|editor|block-editor|admin|wp-admin|customi[sz]er|woocommerce|elementor|bbpress|buddypress|jetpack|gravity|wpforms|learndash|lifter|tutor|dokan|bakery|siteorigin|beaver|kirki|print|rtl)([._-]|\.css$)/i;
+const MAIN_NAME = /(^|\/)(main|style|styles|theme|frontend|front|global|base|common|app|blog|layout|content|header|footer|components)(\.min)?\.css$/i;
+const EXTRA_MAX_FILES = 7; // theme.json lists at most 8 stylesheets, style.css being one
+const CSS_BUDGET = 700_000; // characters in all of them: a published theme.css may not exceed what the app reads
+const ASSET_MAX = 300;
+const ASSET_BYTES = 6_000_000;
+
+// -> { taken: [{ rel, assets: [paths] }], skipped: [{ rel, why }] }
+function pickExtraCss(zip, styleLength) {
+  const all = [...zip.keys()].filter((n) => /\.css$/i.test(n) && n !== 'style.css');
+  const byBase = new Map();
+  for (const n of all) {
+    if (EXTRA_SKIP_DIR.test(n) || EXTRA_SKIP_NAME.test(n)) continue;
+    const base = n.replace(/\.min\.css$/i, '.css');
+    if (!byBase.has(base) || /\.min\.css$/i.test(n)) byBase.set(base, n); // the minified copy is the smaller one
+  }
+  const rank = (n) => (MAIN_NAME.test(n) ? 100 : 0) + (/(^|\/)(assets\/)?(css|dist|styles?)\//i.test(n) ? 50 : 0);
+  const candidates = [...byBase.values()].sort((a, b) => rank(b) - rank(a) || zip.get(b).length - zip.get(a).length || (a < b ? -1 : 1));
+  const taken = [];
+  const skipped = [];
+  const haveAssets = new Set();
+  let chars = styleLength;
+  let bytes = 0;
+  for (const rel of candidates) {
+    if (taken.length >= EXTRA_MAX_FILES) break;
+    let css;
+    try {
+      css = new TextDecoder('utf-8', { fatal: true }).decode(zip.get(rel));
+    } catch {
+      skipped.push({ rel, why: 'not UTF-8 text' });
+      continue;
+    }
+    if (chars + css.length > CSS_BUDGET) {
+      skipped.push({ rel, why: 'over the size budget' });
+      continue;
+    }
+    const refs = new Set();
+    for (const t of urlTokens(stripComments(css))) {
+      const a = t.arg.trim();
+      if (a.startsWith('data:') || a.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(a) || a.startsWith('//')) continue;
+      const r = resolvePath(rel, a.split(/[?#]/)[0]);
+      if (r && zip.has(r)) refs.add(r);
+    }
+    const newAssets = [...refs].filter((r) => !haveAssets.has(r));
+    const addBytes = newAssets.reduce((n, r) => n + zip.get(r).length, 0);
+    if (haveAssets.size + newAssets.length > ASSET_MAX || bytes + addBytes > ASSET_BYTES) {
+      skipped.push({ rel, why: 'its images and fonts are over the size budget' });
+      continue;
+    }
+    try {
+      processThemeCss(css, { file: rel, assets: new Set([...haveAssets, ...refs]), pin: { repo: 'upstream/ingest', ref: 'v0.0.0' } });
+    } catch (e) {
+      skipped.push({ rel, why: String(e.detail || e.message).replace(new RegExp(`^${rel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:?\\s*`), '').slice(0, 110) });
+      continue;
+    }
+    taken.push({ rel, assets: [...refs] });
+    newAssets.forEach((r) => haveAssets.add(r));
+    chars += css.length;
+    bytes += addBytes;
+  }
+  return { taken, skipped };
+}
 
 // info: the wordpress.org API record; zip: Map path -> bytes (paths relative to the theme folder).
 export function convertWordPressTheme({ slug, info, zip }) {
@@ -73,6 +143,14 @@ export function convertWordPressTheme({ slug, info, zip }) {
     }
   }
   if (missing.length) throw refuse('bad-theme', `${slug}: style.css refers to files that are not in the theme: ${[...new Set(missing)].slice(0, 5).join(', ')}`);
+  const extra = pickExtraCss(zip, style.length);
+  for (const { rel, assets: used } of extra.taken) {
+    files[rel] = zip.get(rel);
+    for (const a of used) if (!assets.includes(a)) {
+      assets.push(a);
+      files[a] = zip.get(a);
+    }
+  }
 
   // ---- design tokens from a block theme's theme.json ----
   const tokens = {};
@@ -102,6 +180,11 @@ export function convertWordPressTheme({ slug, info, zip }) {
   // ---- be honest about what was not taken ----
   for (const name of [...zip.keys()].sort()) {
     if (name in files || name === 'theme.json') continue;
+    const why = extra.skipped.find((x) => x.rel === name);
+    if (why) {
+      dropped.css.push(`${name} (${why.why})`);
+      continue;
+    }
     if (/\.php$/i.test(name)) dropped.php.push(name);
     else if (/\.m?js$/i.test(name)) dropped.js.push(name);
     else if (/^(templates|parts|patterns)\/.+\.(html|php)$/i.test(name)) dropped.templates.push(name);
@@ -123,7 +206,7 @@ export function convertWordPressTheme({ slug, info, zip }) {
     attribution: `${info.name || slug} ${info.version} by ${author} (${header['theme uri'] || info.homepage}); licence ${spdx}${header['license uri'] ? ` (${header['license uri']})` : ''}. Ingested from wordpress.org; PHP templates and scripts were not converted.`.slice(0, 600),
     description: (header.description || '').slice(0, 300) || undefined,
     class_contract: 'wordpress-classic',
-    css: ['style.css'],
+    css: [...extra.taken.map((x) => x.rel), 'style.css'], // the theme's own base styles first, style.css (its overrides) last
     ...(assets.length ? { assets: assets.sort() } : {}),
     ...(Object.keys(tokens).length ? { tokens } : {}),
     ...(Object.keys(dropped).length ? { dropped } : {}),

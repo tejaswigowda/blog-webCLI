@@ -1024,7 +1024,7 @@ the manifest lists them under `dropped`, so the conversion is honest about being
 * Tokens are lifted from a block theme's `theme.json` palette, font families, font sizes and spacing.
 
 Commit the folder to a repository, tag a release, then `node cli/blog.js theme pin owner/repo@v2.9.0`
-(or use the **Theme** screen). A GPL theme repository beside this MIT tool is coherent: the licences
+(or use the **Theme** screen, where every listed theme, and any address you type, has a **Preview**: the theme is fetched and checked exactly as choosing it would be, then your own posts and a sample post are drawn with it, following your light/dark setting; nothing is saved or sent). A GPL theme repository beside this MIT tool is coherent: the licences
 stay in their own repositories and neither infects the other. *Tried for real* on
 `twentytwentyone` 2.9: GPL-2.0-or-later detected, 48 PHP files, 12 scripts and 9 other CSS files
 recorded as dropped, and all 25 core classes its CSS styles are emitted by the generator, so the
