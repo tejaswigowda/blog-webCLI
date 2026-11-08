@@ -1446,6 +1446,10 @@ upload, and nothing is uploaded until you confirm.
 * Sign in with a **fine-grained** token (see [Token permissions](#token-permissions)).
   Classic `ghp_` tokens are refused. The token is held per tab unless you tick "remember"
   (then `localStorage`).
+* **Post list** (`#repo=owner/blog`): a **Sort** control and a **Search posts** box sit above the list. Search filters as you
+  type, matching every word against a post's title, excerpt and tags (not the full text), and works with any sort order. It is
+  for you alone: nothing is written and the address does not change. **Show drafts** and **Pages** open above the list, not
+  below it, and scroll into view.
 * The page has a strict CSP (scripts only from this origin; it may read `https:` addresses only so the WordPress import can fetch
   pictures, see [Importing from WordPress](#importing-from-wordpress)) and never inserts blog content except through the escaping
   renderer, because blog content is untrusted and shares an origin with the token.

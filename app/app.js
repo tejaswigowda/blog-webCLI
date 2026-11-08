@@ -881,7 +881,15 @@ async function showDrafts(btn, repo, ref, wrap) {
       /* skip unreadable */
     }
   }
-  wrap.append(h('h2', {}, 'Drafts'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts.'));
+  placeAboveList(wrap, h('h2', {}, 'Drafts'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts.'));
+}
+
+// Drafts and pages open above the (possibly very long) post list, not after it, and are scrolled into view.
+function placeAboveList(wrap, ...nodes) {
+  const anchor = wrap.querySelector('.sortbar') || wrap.querySelector('ul.posts');
+  const section = h('section', {}, ...nodes);
+  if (anchor) anchor.before(section); else wrap.append(section);
+  section.scrollIntoView({ block: 'start' });
 }
 
 // The standalone pages (about, contact, …): not posts, so not in the list above. Listed on request, since reading them
@@ -898,7 +906,7 @@ async function showPages(btn, repo, ref, wrap) {
       /* skip unreadable */
     }
   }
-  wrap.append(h('h2', {}, 'Pages'), h('div', { class: 'actions' }, h('button', { icon: 'plus', onclick: () => (location.hash = link(repo, '&newpage')) }, 'New page')), out.children.length ? out : h('p', { class: 'muted' }, 'No pages yet.'));
+  placeAboveList(wrap, h('h2', {}, 'Pages'), h('div', { class: 'actions' }, h('button', { icon: 'plus', onclick: () => (location.hash = link(repo, '&newpage')) }, 'New page')), out.children.length ? out : h('p', { class: 'muted' }, 'No pages yet.'));
 }
 
 async function postView(repo, r) {
