@@ -114,9 +114,12 @@ for (const [what, dir, file, listFile, key, repo, skip] of [
       assert.ok(tags.includes(e.ref), `${e.repo}: tag ${e.ref} exists in the repository (git tag; push it before the list is useful)`);
       assert.ok(existsSync(path.join(dir, folder, 'LICENSE')), `${e.repo} has a LICENSE`);
       if (what === 'themes') {
-        assert.equal(e.screenshot, `https://cdn.jsdelivr.net/gh/${repo}@${e.ref}/${folder}/screenshot.png`);
-        const png = await fs.readFile(path.join(dir, folder, 'screenshot.png'));
-        assert.equal(png.subarray(1, 4).toString(), 'PNG', `${e.repo} has a screenshot`);
+        // a screenshot is listed only where the folder has one (the imported WordPress themes are CSS and tokens only)
+        if (existsSync(path.join(dir, folder, 'screenshot.png'))) {
+          assert.equal(e.screenshot, `https://cdn.jsdelivr.net/gh/${repo}@${e.ref}/${folder}/screenshot.png`);
+          const png = await fs.readFile(path.join(dir, folder, 'screenshot.png'));
+          assert.equal(png.subarray(1, 4).toString(), 'PNG', `${e.repo} has a screenshot`);
+        } else assert.equal(e.screenshot, undefined, `${e.repo}: no screenshot file, none listed`);
       }
     }
   });
@@ -131,8 +134,8 @@ test('built in themes: each loads under the app rules, builds a real blog, and s
     const { manifest, pin, theme } = await pinTheme(folder);
     const label = `${folder} (${manifest.name})`;
     assert.ok(['blog-webcli-v1', 'wordpress-classic'].includes(manifest.class_contract), label);
-    assert.ok(/^(MIT|GPL-2\.0-or-later)$/.test(manifest.licence), label);
-    if (folder.startsWith('wp/')) assert.equal(manifest.licence, 'GPL-2.0-or-later', 'only the wp/ themes are GPL');
+    assert.ok(/^(MIT|GPL-2\.0-or-later|GPL-3\.0-or-later|GPL-3\.0-only)$/.test(manifest.licence), label);
+    if (folder.startsWith('wp/')) assert.match(manifest.licence, /^GPL-/, 'only the wp/ themes are GPL');
     else assert.equal(manifest.licence, 'MIT', label);
 
     const out = buildSite({ ...(await input({ theme: pin })), theme });
