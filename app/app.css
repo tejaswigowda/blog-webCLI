@@ -64,7 +64,7 @@ article.post code{background:var(--code);padding:.1em .3em;border-radius:3px}
 article.post pre code{background:none;padding:0}
 article.post blockquote{margin:1em 0;padding:.1em 1em;border-left:3px solid var(--rule);color:var(--muted)}
 .unresolved{color:var(--muted);font-style:italic}
-#ledger{max-width:80rem;margin:0 auto;padding:.75rem 1.5rem 2rem;border-top:1px solid var(--rule);font-size:.8rem;color:var(--muted)}
+#ledger{max-width:80rem;margin:0 auto;padding:.75rem 1.5rem 2rem;border-top:1px solid var(--rule);font-size:.8rem;color:var(--muted);text-align: center;}
 #ledger summary{cursor:pointer}
 #ledger .up-zero{color:var(--ok)}
 #ledger .up-some{color:var(--amber);font-weight:600}
