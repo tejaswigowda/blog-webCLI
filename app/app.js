@@ -640,7 +640,7 @@ async function settingsView(repo, r) {
       themeNote = ` The pinned theme could not be loaded for the preview (${e.detail || e.message}).`;
     }
   }
-  const contract = themePack ? themePack.contract : 'blog-webcli-v1';
+  const contract = themePack ? themePack.contractSpec : 'blog-webcli-v1';
 
   const found = await detectAddress(gh, repo).catch(() => null);
   const addr = addressView(repo, found, current.domain);
@@ -861,8 +861,8 @@ async function previewTheme(repo, spec, label) {
     const draw = (kind) => {
       const first = entries[0] || { slug: 'sample', title: 'A sample post', date: today(), tags: ['sample'] };
       const body = kind === 'index'
-        ? indexBody(theme.contract, { blog: shown, entries: entries.length ? entries : [first], hrefFor: () => '#', home: '#', feed: '#', logoUrl })
-        : postBody(theme.contract, { blog: shown, meta: { slug: first.slug, title: first.title, date: first.date, tags: first.tags || [], author: shown.author }, bodyHtml: SAMPLE_POST, coverUrl: null, home: '#', feed: '#', logoUrl, footerExtra: '', nav: null, page: false, after: '' });
+        ? indexBody(theme.contractSpec, { blog: shown, entries: entries.length ? entries : [first], hrefFor: () => '#', home: '#', feed: '#', logoUrl })
+        : postBody(theme.contractSpec, { blog: shown, meta: { slug: first.slug, title: first.title, date: first.date, tags: first.tags || [], author: shown.author }, bodyHtml: SAMPLE_POST, coverUrl: null, home: '#', feed: '#', logoUrl, footerExtra: '', nav: null, page: false, after: '' });
       shadow.innerHTML = `<style>${css}</style><style>.pv{padding:0 1.25rem 1rem;overflow-x:hidden;word-wrap:break-word}</style><div class="pv ${esc(body.bodyClass)}" style="pointer-events:none">${body.html}</div>`;
     };
     const tabs = [['index', 'Your posts'], ['post', 'A post']].map(([k, t]) => h('button', { type: 'button', role: 'tab', onclick: () => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.k === k))); draw(k); } }, t));

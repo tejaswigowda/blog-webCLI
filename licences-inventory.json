@@ -71,6 +71,7 @@
     "lib/seo.js",
     "lib/sha256.js",
     "lib/site-model.js",
+    "lib/skeleton.js",
     "lib/taxonomy.js",
     "lib/theme-pack.js",
     "lib/theme.js",

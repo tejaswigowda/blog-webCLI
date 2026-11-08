@@ -13,6 +13,7 @@ import { checkLicence, isGplFamily, normaliseGpl, splitLicensingLanguage } from 
 import { loadTheme, pinFor, processThemeCss, themeDigest, themeFilePaths, tokenOk } from '../lib/theme-pack.js';
 import { resolvePath, stripComments, urlTokens } from '../lib/css.js';
 import { readZip } from './zip.js';
+import { harvestSkeleton } from './wp-skeleton.js';
 
 const API = 'https://api.wordpress.org/themes/info/1.2/';
 const dec = new TextDecoder();
@@ -61,7 +62,7 @@ export function parseDemo(html, slug) {
     const id = m[1].replace(/-inline-css$/, '');
     if ((id === 'global-styles' || !INLINE_SKIP.test(id)) && m[2].trim()) inline.push({ id, css: m[2] });
   }
-  return { links, inline };
+  return { links, inline, page: String(html) };
 }
 
 // Inline CSS from the demo page -> one stylesheet the app's rules accept. What points outside the theme (web fonts, uploads) is removed;
@@ -235,6 +236,10 @@ export function convertWordPressTheme({ slug, info, zip, demo = null }) {
       }
     }
   }
+  // the theme's page structure, from the same demo page (best effort: a page with no recognisable main area has none)
+  const skeleton = demo && demo.page ? harvestSkeleton(demo.page) : null;
+  if (skeleton) files['skeleton.html'] = enc.encode(skeleton.html);
+  else if (demo && demo.page) warnings.push('no page skeleton could be taken from the demo page, so pages use the generic classic structure');
   for (const { rel, assets: used } of extra.taken) {
     files[rel] = zip.get(rel);
     for (const a of used) if (!assets.includes(a)) {
@@ -300,6 +305,7 @@ export function convertWordPressTheme({ slug, info, zip, demo = null }) {
     class_contract: 'wordpress-classic',
     css: [...extra.taken.filter((x) => !x.after).map((x) => x.rel), 'style.css', ...extra.taken.filter((x) => x.after).map((x) => x.rel), ...(inline.css ? ['wp-inline.css'] : [])], // the theme's own order; what its PHP generates last
     ...(assets.length ? { assets: assets.sort() } : {}),
+    ...(skeleton ? { skeleton: 'skeleton.html', ...(skeleton.bodyClass ? { body_class: skeleton.bodyClass } : {}) } : {}),
     ...(Object.keys(tokens).length ? { tokens } : {}),
     ...(Object.keys(dropped).length ? { dropped } : {}),
     upstream: { slug, version: String(info.version || ''), directory: info.homepage },
@@ -351,7 +357,7 @@ export async function importWordPressTheme(slug, outDir, { fetchImpl = (...a) =>
   const zipHash = crypto.createHash('sha256').update(zipBytes).digest('hex');
   log(`imported ${manifest.name} ${manifest.version} (${manifest.licence}) into ${outDir}`);
   log(`  source   ${manifest.source}\n  archive  ${info.download_link}\n  sha256   ${zipHash}`);
-  log(`  taken    ${manifest.css.length} stylesheet(s)${manifest.assets ? `, ${manifest.assets.length} asset file(s)` : ''}${manifest.tokens ? ', design tokens' : ''}, LICENSE`);
+  log(`  taken    ${manifest.css.length} stylesheet(s)${manifest.skeleton ? ', page skeleton' : ''}${manifest.assets ? `, ${manifest.assets.length} asset file(s)` : ''}${manifest.tokens ? ', design tokens' : ''}, LICENSE`);
   const d = manifest.dropped || {};
   log(`  dropped  ${Object.entries(d).map(([k, v]) => `${v.length} ${k}`).join(', ') || 'nothing'} (recorded in theme.json)`);
   for (const w of warnings) log(`  note     ${w}`);

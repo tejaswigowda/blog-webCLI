@@ -996,6 +996,19 @@ owner/theme-name[/folder]
 | `blog-webcli-v1` | this app's own markup (`.wrap`, `header.site`, `ul.posts`, …) |
 | `wordpress-classic` | the de facto classic-theme contract: `#page.site`, `#masthead.site-header`, `.site-title`, `.site-description`, `#site-navigation.primary-navigation` > `ul.menu-wrapper`, `#content.site-content` > `main#main.site-main`, `article.post.hentry.tag-…` with `.entry-header.alignwide`, `.entry-title`, `.entry-meta`, `.entry-content`, `.entry-summary`, `.entry-footer`, `.post-thumbnail`, `#colophon.site-footer`; `body` classes `home blog` / `single single-post postid-N`; content blocks `wp-block-heading`, `wp-block-quote`, `wp-block-code`, `wp-block-list`, `wp-block-image`, `wp-block-embed` |
 
+**A page skeleton** (`"skeleton": "skeleton.html"`, with an optional `"body_class"`, on a `wordpress-classic` theme) gives a theme
+its own page structure. Many themes target their own class names (`.ast-container`, `.main-header-bar`, `.site-branding`, …), not the
+classic ones, so their CSS finds nothing to style. The skeleton is the theme's page as it draws it (header, navigation, containers and
+footer as elements and classes) with every word of demo text removed and holes where the blog goes: `{{content}}` (the page's main
+area, exactly once), `{{menu}}` (the menu items, up to three times: a desktop and a mobile menu), `{{site-title}}`,
+`{{site-description}}`, `{{footer}}`, and `{{home}}` as the one link it may carry. The generator builds each page with the classic
+contract as always and pours the pieces into the skeleton, in a single pass over the skeleton only, so a placeholder-looking word in a
+post or a title is just text. The skeleton is data from a theme repository and, committed as `theme-skeleton.json`, from the blog's own, so
+it is read as untrusted by an allow-list (a few structural elements; `class`, `id`, `data-*`, a few `role`s; no scripts, images,
+forms, text, inline styles or links but `{{home}}` and `#`; 60,000 characters), and it is part of the digest a blog pins. The importer
+takes it from the theme's demo page (`theme import`, [below](#ingesting-a-wordpress-theme)); the body classes it keeps are the theme's own
+(routing, sidebar, transparent-header and post-specific ones are dropped, `no-sidebar` is added). (`test/skeleton.test.js`)
+
 The static pages and the `/blog/` reader build their `<body>` from the same code, so a theme styles
 both identically. Post ids (`post-N`) derive from the slug, so adding a post renumbers nothing.
 Not emitted (there is nothing behind them): comments, search, sidebars/widgets, pagination, category
@@ -1013,7 +1026,8 @@ stylesheets**, up to eight files and 450,000 characters, with the images and fon
 the markup contract. The stylesheets are the ones the theme really enqueues, in its order, and the CSS its PHP generates
 (the Customizer's colours and fonts as custom properties, a block theme's global styles) is kept as `wp-inline.css`: both are
 read, as text, from the theme's demo page on wordpress.org (`wp-themes.com/<slug>/`); without that page the stylesheets are
-chosen by name. A stylesheet is left out, and named with its reason under `dropped.css`, when it is right-to-left,
+chosen by name. The same page gives the theme's [page skeleton](#markup-contracts): its structure with the demo text taken out, so the
+imported theme lays out the way the original does (a page with no recognisable main area gets none and uses the generic classic structure). A stylesheet is left out, and named with its reason under `dropped.css`, when it is right-to-left,
 for the editor, admin or customizer, for another plugin, a vendor library, or fails the rules `style.css` must meet (so one
 bad file never costs the theme); the PHP templates, `functions.php` and JavaScript are **not converted** and
 the manifest lists them under `dropped`, so the conversion is honest about being partial.
