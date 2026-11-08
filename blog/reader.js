@@ -194,7 +194,7 @@ async function route() {
       return;
     }
   }
-  page.innerHTML = '<p class="notice">Loading…</p>';
+  page.innerHTML = '<div class="loading" role="status"><span class="spin" aria-hidden="true"></span><span>Loading the blog…</span></div>';
   tools.innerHTML = '';
   let blog = null;
   // the published site's own page, made by the code that makes it; a blog with no generated site yet is read from its source

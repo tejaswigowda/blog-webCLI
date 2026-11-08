@@ -7,7 +7,7 @@ import { insertionPoint } from '../lib/selection.js';
 import { licenceRecords } from '../lib/licences.js';
 import { createEditor, setAssetResolver, setVideoResolver } from './editor.js';
 import { Refusal } from '../lib/errors.js';
-import { describeError, progressLine, toast, working } from './ui.js';
+import { describeError, progressLine, spinner, toast, working } from './ui.js';
 import { describeDate, loadMoment, nowTime, today } from './dates.js';
 import { icon } from './icons.js';
 import { fmtClock, pollDeploy } from '../lib/deploy.js';
@@ -407,7 +407,7 @@ async function route() {
   renderTop(r.repo, r.ref);
   renderLedger(net.ledger);
   document.title = 'blog.webcli.app';
-  view.replaceChildren(progressLine('Loading…'));
+  view.replaceChildren(h('div', { class: 'loading', role: 'status' }, spinner(), h('span', {}, r.repo ? 'Loading the blog…' : 'Loading…')));
   // the header names the user on every page, the start page included
   if (gh.token && !login && !asking) {
     asking = true;

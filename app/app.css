@@ -318,3 +318,7 @@ dialog.media-dialog .media-tile:hover,dialog.media-dialog .media-tile:focus{bord
 /* a title with a button that stays in view at the top right (Settings: Save) */
 .sticky-bar{position:sticky;top:var(--top-h,0px);z-index:5;display:flex;align-items:center;justify-content:space-between;gap:1rem;background:var(--bg);padding:.5rem 0;border-bottom:1px solid transparent}
 .sticky-bar h1{margin:0}
+
+/* the page-sized loading state: centred, so it is never mistaken for an empty page */
+.loading{display:flex;align-items:center;justify-content:center;gap:.75rem;min-height:50vh;color:var(--muted);font-size:1.05rem}
+.loading .spinner{width:1.4rem;height:1.4rem}
