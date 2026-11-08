@@ -3,6 +3,7 @@
 //   build [dir]   regenerate index, pages and feed (refuses on any error)
 //   check [dir]   regenerate in memory and fail on any difference (CI, gate B8)
 //   fmt   [dir]   rewrite posts into canonical markdown
+//   publish-due [dir] [--now <ISO time>]   publish the scheduled posts whose time has come, then build (the schedule workflow runs this)
 //   pin   [dir]   pin unpinned asset: references to commits, and verify video: release tags, via the GitHub API
 //   theme pin <owner/repo[/folder]@ref> [dir]   pin a theme (a tag or commit; a branch is refused)
 //   theme clear [dir]                           go back to the built-in theme
@@ -34,6 +35,7 @@ import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs } from '../lib/customize.js';
 import { resolveOrder } from '../lib/order.js';
+import { dueOf, publishText } from '../lib/schedule.js';
 
 const exists = (p) => fs.access(p).then(() => true, () => false);
 
@@ -68,8 +70,10 @@ async function load(dir) {
 // Anonymous GitHub reads, for fetching a pinned theme or extension as data.
 const github = () => new GitHub(createNet((...a) => globalThis.fetch(...a)));
 
-async function generate(dir) {
-  const { blog, posts, lock, outputs, orderList } = await load(dir);
+async function generate(dir, { instead } = {}) {
+  const loaded = await load(dir);
+  const { blog, lock, outputs, orderList } = loaded;
+  const posts = instead || loaded.posts;
   const validated = validateBlog(blog);
   let packs = { theme: null, extensions: [] };
   if ((validated.theme && typeof validated.theme === 'object') || (validated.extensions || []).length) {
@@ -202,6 +206,30 @@ async function fmt(dir) {
   return 0;
 }
 
+// Flip every due scheduled post to published, then build once. Nothing is written unless the whole site builds with them
+// published: a missing extension output (or any other refusal) leaves the posts scheduled and fails the run, loudly.
+async function publishDue(dir, args) {
+  const i = args.indexOf('--now');
+  const now = i >= 0 ? Date.parse(args[i + 1]) : Date.now();
+  if (Number.isNaN(now)) throw new Refusal('bad-blog-json', '--now needs a time like 2026-11-08T16:00:00Z');
+  const { blog, posts } = await load(dir);
+  const due = dueOf(posts, validateBlog(blog), now);
+  if (!due.length) {
+    console.log('nothing is due');
+    return 0;
+  }
+  const flipped = posts.map((p) => (due.includes(p.path) ? { ...p, text: publishText(p.text, p.path) } : p));
+  const r = await generate(dir, { instead: flipped });
+  report(r);
+  if (r.errors.length) {
+    console.error(`${due.length} post(s) are due and were left scheduled: ${due.join(', ')}`);
+    return 1;
+  }
+  for (const p of flipped) if (due.includes(p.path)) await fs.writeFile(path.join(dir, p.path), p.text);
+  for (const p of due) console.log(`published ${p}`);
+  return build(dir);
+}
+
 async function pin(dir) {
   const { blog: raw, posts, lock } = await load(dir);
   const blog = validateBlog(raw);
@@ -312,9 +340,9 @@ async function licences(dir) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const commands = { build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
+const commands = { build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
 if (!commands[cmd]) {
-  console.error('usage: blog-webcli <build|check|fmt|pin|theme|ext|licences|import> …');
+  console.error('usage: blog-webcli <build|check|fmt|publish-due|pin|theme|ext|licences|import> …');
   process.exit(2);
 }
 try {

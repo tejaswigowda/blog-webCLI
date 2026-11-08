@@ -15,6 +15,9 @@ import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs } from '../lib/customize.js';
 import { resolveOrder } from '../lib/order.js';
+import { imagePaths, mediaItems, tileUrl } from '../lib/media.js';
+import { daysUntil } from '../lib/schedule.js';
+import { affectedBy, relatedCount } from '../lib/related.js';
 import { blogJsonText, makeBlogJson } from '../lib/init.js';
 import { formToBlog } from '../lib/settings.js';
 import { gitBlobSha } from './github.js';
@@ -38,6 +41,24 @@ export async function listVideoReleases(gh, blog) {
   }
   return out.filter((r) => { try { parseVideoRef(r.ref); return true; } catch { return false; } })
     .sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : b.version - a.version));
+}
+
+// The images in each of the blog's asset repositories, with the pinned address a page would load them from. Listing is reading
+// (the ledger counts it): nothing is uploaded. A repository that cannot be read is reported, not fatal.
+export async function listMedia(gh, { blog, lock, index }) {
+  const items = [];
+  const problems = [];
+  for (const [key, where] of Object.entries((blog.assets && blog.assets.repos) || {})) {
+    try {
+      const { repo } = parseRepoRef(where);
+      const head = await gh.headCommit(repo, (await gh.repoInfo(repo)).default_branch);
+      const tree = await gh.tree(repo, head.treeSha);
+      for (const it of mediaItems({ key, paths: imagePaths(tree, where), lock, index })) items.push({ ...it, url: tileUrl(blog, key, it.path, lock[`${key}/${it.path}`] || head.sha) });
+    } catch (e) {
+      problems.push(`${key} (${where}): ${e.message || e}`);
+    }
+  }
+  return { items, problems };
 }
 
 // ---------- publishing ----------
@@ -138,7 +159,7 @@ async function incrementalChanges(gh, ctx) {
     if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
   }
   for (const path of res.remove) if (tree.has(path)) changes.push({ path: prefix + path, delete: true, size: 0, action: 'delete' });
-  return { site: { files: out, index: null, unlisted: [] }, changes };
+  return { site: { files: out, index: null, unlisted: [], related: prep.related }, changes };
 }
 
 async function computeChanges(gh, ctx) {
@@ -228,7 +249,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
     if (stagedByKey.has(lk)) {
       lockPlan[lk] = PLACEHOLDER_SHA;
       pending.push(lk);
-    } else if (newPost.status === 'published' || blogAssetRefs(blog).includes(ref)) {
+    } else if (newPost.status !== 'draft' || blogAssetRefs(blog).includes(ref)) {
       const assetWhere = blog.assets && blog.assets.repos[key];
       if (!assetWhere) throw new Refusal('unresolved-asset', `${ref}: blog.json has no asset repo "${key}"`, target);
       const a = parseRepoRef(assetWhere);
@@ -239,8 +260,8 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
     lockChanged = true;
   }
 
-  // A published post may only embed a release that exists; a tag never moves, so that is the pin.
-  if (newPost.status === 'published') {
+  // A published (or scheduled) post may only embed a release that exists; a tag never moves, so that is the pin.
+  if (newPost.status !== 'draft') {
     for (const ref of collectVideoRefs(newPost.delta)) {
       const { key, tag } = parseVideoRef(ref);
       const videoRepo = blog.video && blog.video.repos[key];
@@ -257,6 +278,14 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
     if (gone >= 0) changes.splice(gone, 1);
     changes.push({ path: prefix + target, delete: true, size: 0, action: 'delete' });
     if (orderText !== undefined) changes.push({ path: prefix + resolveOrder(blog).list, content: orderText, size: enc.encode(orderText).length, action: 'update' });
+  }
+
+  // Related posts make a page depend on every post sharing a tag with it: say how many pages this one change rewrites.
+  const rc = relatedCount(blog);
+  let relatedPages = 0;
+  if (rc && !remove) {
+    if (site.related !== undefined) relatedPages = site.related;
+    else if (prevIndex && Array.isArray(site.index)) relatedPages = affectedBy({ oldEntries: prevIndex.posts || [], oldSequence: prevIndex.sequence || (prevIndex.posts || []).map((e) => e.slug), newEntries: site.index, newSequence: site.index.map((e) => e.slug), slug, count: rc }).length;
   }
 
   const assetGroups = [];
@@ -278,7 +307,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const sizeOf = (f) => f.size;
   summary.push({ repo, folder, branch: mode === 'pr' ? `new branch from ${branch}` : branch, files: changes.length, bytes: changes.reduce((n, f) => n + sizeOf(f), 0) });
 
-  return { repo, folder, branch, mode, slug, kind, path: target, removed: remove, status: newPost.status, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
+  return { repo, folder, branch, mode, slug, kind, path: target, removed: remove, status: newPost.status, schedule: newPost.status === 'scheduled' ? { at: newPost.meta.publish_at, zone: blog.timezone || null, days: daysUntil(newPost.meta, blog), extensionsRun: !!(blog.extensions && blog.extensions.length) } : null, related: rc ? relatedPages : null, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
 }
 
 // Commit a (new or changed) blog.json together with the site regenerated from it: every page
@@ -483,7 +512,7 @@ export async function executePlan(gh, plan, { pullBody = '' } = {}) {
   if (plan.pending.length) ({ changes } = await computeChanges(gh, { ...plan.ctx, lock: finalLock, lockChanged: true }));
   if (!changes.length) return receipt;
 
-  const verb = plan.removed ? 'Delete' : plan.mode === 'pr' ? 'Correct' : plan.status === 'draft' ? 'Draft' : plan.existed ? 'Update' : 'Publish';
+  const verb = plan.removed ? 'Delete' : plan.mode === 'pr' ? 'Correct' : plan.status === 'draft' ? 'Draft' : plan.status === 'scheduled' ? 'Schedule' : plan.existed ? 'Update' : 'Publish';
   const message = plan.message || `${verb}: ${plan.title}`;
   const newBranch = plan.mode === 'pr' ? `correction/${plan.slug}-${Date.now().toString(36)}` : null;
   // thousands of files are a long send: wait out GitHub's limits rather than fail halfway

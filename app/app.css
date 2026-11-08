@@ -290,3 +290,15 @@ dialog.blk-dialog{max-width:56rem}
 .blk-grid input.blk-head{font-weight:700}
 .blk-grid button{font-size:.72rem;padding:3px 7px;white-space:nowrap}
 .blk-msg{color:var(--warn);min-height:1.2em;margin:.4rem 0;font-size:.85rem}
+
+/* media view and picker */
+.media-bar{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin:1rem 0}
+.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(10rem,1fr));gap:.75rem}
+.media-tile{margin:0;border:1px solid var(--rule);border-radius:var(--r);background:var(--panel);overflow:hidden}
+.media-tile img{display:block;width:100%;height:7.5rem;object-fit:cover;background:var(--surface2)}
+.media-tile img.broken{visibility:hidden}
+.media-tile figcaption{padding:.4rem .5rem;font-size:.8rem;display:flex;flex-wrap:wrap;gap:.25rem .5rem;align-items:center}
+.media-tile .name{overflow-wrap:anywhere}
+dialog.media-dialog{max-width:56rem}
+dialog.media-dialog .media-tile{cursor:pointer}
+dialog.media-dialog .media-tile:hover,dialog.media-dialog .media-tile:focus{border-color:var(--accent-h);outline:none}

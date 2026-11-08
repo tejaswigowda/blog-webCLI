@@ -59,7 +59,7 @@ title: Static HLS in git     # change freely
 date: 2026-11-05             # authored; the index is ordered by this (or 2026-11-05T14:30: see below)
 author: Ada Example
 tags: [video, git]
-status: draft | published    # draft = in no index, page or feed
+status: draft | scheduled | published    # draft and scheduled = in no index, page or feed
 cover: asset:images/hls-cover.png   # or: auto
 description: optional; defaults to the first paragraph
 ---
@@ -440,6 +440,8 @@ four keys are required, and the real file is plain JSON (no comments):
 | `content` | no | the live copy that makes publishing feel instant: [below](#content) | off: pages carry no script and there is no `404.html` |
 | `order` | no | how posts are sequenced: [below](#order) | newest first (`date`, `desc`) |
 | `search` | no | `true` adds a [search page](#site-features) | off |
+| `timezone` | no | an IANA zone name (`America/Phoenix`), used **only** to read a scheduled post's `publish_at` | UTC |
+| `related` | no | `{ "count": 1-10 }` lists that many [related posts](#related-posts) under each post | none |
 | `pagination` | no | `{ "size": N }`: [pages of the index](#search-pagination-seo) | one list |
 | `stylesheet` | no | `"linked"`: every page links one `style.css` instead of carrying the CSS ([below](#linked-stylesheet)) | `"inline"`: the CSS is in every page |
 | `dateFormat` | no | how a post's date reads: a [moment.js format](#dates) | `MMMM D, YYYY` ("November 5, 2026") |
@@ -725,7 +727,8 @@ description: Optional; defaults to the first paragraph.
 | `slug` | yes | lowercase letters, digits and single hyphens; must equal the file name; set once and never changed (it is the URL). `posts`, `pages`, `index`, `feed`, `assets`, `static`, `node_modules`, `p`, `tags`, `authors`, `archive`, `search` and `page` are reserved, as is the first folder of any media folder inside the blog |
 | `title` | yes | text; change it freely |
 | `date` | yes | a real `YYYY-MM-DD`; posts are ordered by it, not by commit time |
-| `status` | yes | `draft` (in no index, page, feed, sitemap or search) or `published` |
+| `status` | yes | `draft` (in no index, page, feed, sitemap or search), `scheduled` (a draft with a time: [scheduled publishing](#scheduled-publishing)) or `published` |
+| `publish_at` | with `scheduled` | `YYYY-MM-DDTHH:MM`, a wall clock in the blog's `timezone` (UTC with none). Only on a scheduled post; it is removed when the post publishes |
 | `author` | no | text; the blog's `author` if left out. With more than one distinct author the byline links to an author page |
 | `tags` | no | a list of non-empty text, `[a, b]` or one `- item` per line. Each tag of a published post has a page |
 | `aliases` | no | old addresses this page used to have, as paths below the blog's root: `[2020/05/old-post, legacy.html]`. Each gets a [redirect page](#old-addresses-redirects) |
@@ -778,6 +781,70 @@ times of your recent publishes per repository (`blog.webcli.builds:<repo>`, `loc
 build-limit warning); and nothing else. A published blog's pages keep one `sessionStorage` flag per page
 (`webcli-checked:…`) so a page checks the live copy once per session. See [Token permissions](#token-permissions) for what the
 token needs.
+
+## Scheduled publishing
+
+`status: scheduled` is a draft plus a date: it behaves exactly as `draft` everywhere (in no index, page, feed, sitemap, search, listing or
+previous/next; its aliases are not written; the live script does not draw it; and it never soft-renders at its address or from `404.html`),
+and one workflow flips it to `published` when its time comes.
+
+```
+status: scheduled
+publish_at: 2026-11-08T09:00
+```
+
+* **The zone.** `date` is deliberately zoneless; `publish_at` is compared with *now*, so it is a real instant. `blog.json`'s `timezone`
+  (an IANA name) is used only to read it; with none it is UTC, and the editor says so. `publish_at` never becomes `date` (one field, one
+  job: `date` is authored and drives ordering; set both if you want the post dated at go-live), and it is removed from the file when the
+  post publishes.
+* **The workflow.** Copy [`templates/schedule.yml`](templates/schedule.yml) to `.github/workflows/`. It runs hourly, at minute 23 (not :00,
+  when GitHub's `schedule` is most delayed), and `blog-webcli publish-due` flips every due post, regenerates **once**, and commits **once**.
+  With nothing due it commits nothing. If a due post cannot be published, it stays scheduled, nothing is written, and the workflow
+  **fails**, so a refusal is never mistaken for an empty run.
+* **Extensions.** They run only in the editor's sandbox, so scheduling a post runs them **then** and commits `extension-outputs.json`
+  with it (the pre-flight says so). The workflow runs none; a scheduled post whose output was never recorded is refused, loudly, at go-live.
+  Scheduling also pins the post's images and videos now, like publishing.
+* **The guarantee** is *not before `publish_at`, and normally within the hour*: bounded by the cron interval and by Actions' own delay,
+  which is not yours to control. It is not "published at 09:00".
+* **Limits.** GitHub disables scheduled workflows in a public repository after **60 days** with no repository activity, so a post scheduled
+  further out may never publish; the editor warns above 50 days. And a scheduled post's **source is public** in a public repository before it
+  goes live: `scheduled` hides it from the site, not from GitHub. Fine for a deals post; not an embargo.
+
+`blog-webcli publish-due [dir] [--now <ISO time>]` is the step the workflow runs (`--now` is for testing). The editor offers **scheduled** in
+the Status list with a *Publish at* field, and **Show drafts** lists scheduled posts too.
+(`test/schedule.test.js`)
+
+## Related posts
+
+`"related": { "count": 3 }` in `blog.json` lists up to that many posts under each post. Absent, nothing changes. The rank is a total order:
+**shared tags, most first; then the post's place in the blog's resolved sequence; then slug**. All three are in `index/posts.json`, so the
+generator, the live renderer and the `/blog/` reader make the same block with the same code, and regenerating in any input order is
+byte-identical. A post with no tag in common is never listed; drafts and scheduled posts are never candidates.
+
+**The cost is not the computation but the blast radius.** A post's page now depends on every post sharing a tag with it, so adding one post
+rewrites the block of each of those pages: on a blog where a tag covers three thousand posts, one publish is three thousand pages. The
+incremental publish stays exact (the affected set is computed from the index: the posts sharing a tag with the changed post, before or
+after, plus any that listed it), and the **pre-flight states the count**: *related posts: 2,840 pages change*. If that is routinely too many,
+turn the feature off, or link the tag page instead of listing posts. `stylesheet: "linked"` does not help: this is content, not CSS.
+(`test/related.test.js`)
+
+## Media
+
+**Media** (a button on the blog's page, `#repo=owner/blog&media`) shows the images in the blog's asset repositories, for four jobs and nothing
+more:
+
+1. **pick** an image that already exists (the editor's image button, and **Choose…** beside Cover and Share image, open the same grid, with
+   *Upload a new image…* for one that does not), so it is not uploaded twice;
+2. **see** what is in the repository;
+3. **copy** an image's `asset:` reference;
+4. **show unused**: images that neither `assets.lock.json` (which pins every asset a published or scheduled post or a `blog.json` field
+   references) nor a post's cover in the index names. A draft may still plan to use one that is not pinned yet.
+
+The grid is lazy: every tile is `loading="lazy"` with explicit `width` and `height`, loads from the pinned CDN address a page would use, and
+is drawn a page at a time, because an import can leave thousands of files under `images/wp/`. Listing counts as *read* in the egress ledger;
+opening the view uploads nothing. A tree GitHub will not list in one request is read a folder at a time. Out of scope: rename, move, crop and
+any editing; deleting is safe but later (a pinned page keeps working after a delete, because its URL names the commit the file was in).
+(`test/media.test.js`)
 
 ## Settings screen
 
@@ -1378,6 +1445,7 @@ so the commit that holds it cannot be named inside it.
 node cli/blog.js build [dir]   regenerate index, pages, tags, archive, search, sitemap, feed (writes nothing if anything is refused)
 node cli/blog.js check [dir]   regenerate in memory; non-zero on any difference — for CI
 node cli/blog.js fmt   [dir]   rewrite posts into canonical markdown
+node cli/blog.js publish-due [dir] [--now T]   publish the scheduled posts whose time has come, then build once (a refusal leaves them scheduled and exits non-zero)
 node cli/blog.js pin   [dir]   pin unpinned asset: references, verify video: release tags (GitHub API, $GITHUB_TOKEN optional)
 node cli/blog.js theme pin owner/repo[/folder]@ref [dir]   pin a theme (a tag or commit; a branch is refused)
 node cli/blog.js theme clear [dir]                         back to the default theme
@@ -1395,7 +1463,7 @@ that is now off left behind (`check` lists it as `stale`). They fetch a pinned t
 code**, they use the recorded `extension-outputs.json`. `node cli/build-live.js` rebuilds the two scripts a page can load
 (`lib/live-source.js`, `lib/search-source.js`) after any change under `lib/`; CI runs it with `--check`.
 
-CI: copy [templates/blog-check.yml](templates/blog-check.yml) into the blog repo.
+CI: copy [templates/blog-check.yml](templates/blog-check.yml) into the blog repo; for [scheduled posts](#scheduled-publishing) also [templates/schedule.yml](templates/schedule.yml).
 Serve generated pages by enabling GitHub Pages on the blog repo (root of the default
 branch); `.nojekyll` is generated so Pages does not process `posts/*.md`.
 
@@ -1593,6 +1661,18 @@ upload, and nothing is uploaded until you confirm.
 | K10 a date may carry a time: refused when not real; posts of one day newest first, a post with no time the oldest of its day; pages show the day, the feed the moment, the sitemap the day; a day-only blog is unchanged; a timed post published to a big blog equals a full build; a new post starts with the time | `test/datetime.test.js`, `test/e2e/cover.e2e.mjs` |
 | K11 an editor tab opened before an update refuses to offer a pre-flight or send a commit (`stale-app`); app-build.json is what app/ and lib/ build to | `test/app-build.test.js`, `test/e2e/stale.e2e.mjs` |
 | K12 a blog of more than 500 posts keeps its archive by year and its sitemap as an index of yearly sitemaps (every post in the archive page and the sitemap of its year, every address in exactly one sitemap); 500 or fewer is unchanged; the reader makes the same pages; publishing or deleting changes one year, equals a full build, and removes the files of a year that is gone | `test/split.test.js` |
+| N1 `scheduled` is invisible everywhere `draft` is: index, feed, sitemap, search, listings, prev/next, aliases (a build with it equals a build without it) | `test/schedule.test.js` |
+| N2 a scheduled post never soft-renders: not at its URL, not via `404.html` (the draft rule, for both values) | `test/schedule.test.js` |
+| N3 scheduling computes and commits extension outputs; the go-live step refuses and leaves the post scheduled if one is missing, and fails the run | `test/schedule.test.js` |
+| N4 `publish_at` is read in `blog.json`'s `timezone`; with none it is UTC | `test/schedule.test.js` |
+| N5 `publish_at` never sets `date`, and is removed from the file when the post publishes | `test/schedule.test.js` |
+| N6 the workflow step makes no commit when nothing is due; it flips every due post, builds once, and is idempotent | `test/schedule.test.js` |
+| N7 the editor warns when `publish_at` is more than 50 days out, naming the 60-day workflow deactivation | `test/schedule.test.js` |
+| N8 the README states the guarantee (not before `publish_at`, normally within the hour) and that a scheduled post's source is public; the workflow runs off the hour | `test/schedule.test.js` |
+| N9 related posts are a total order (shared tags, sequence position, slug); regenerating in any input order is byte-identical; drafts and scheduled posts are never candidates | `test/related.test.js` |
+| N10 the generator, the live renderer and the `/blog/` reader produce identical related blocks from the index | `test/related.test.js` |
+| N11 the incremental path rewrites exactly the pages whose related block changes, equals a full build, and the pre-flight states how many | `test/related.test.js` |
+| N12 the media grid is lazy with explicit dimensions, opening it uploads nothing, and "unused" is computed from the index and the lock file | `test/media.test.js` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves

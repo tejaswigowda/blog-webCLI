@@ -1,6 +1,6 @@
 import { createNet, fmtBytes } from './net.js';
 import { BULK_AT, GitHub, assertToken } from './github.js';
-import { NotFound, describePlan, detectAddress, executePlan, listPageFiles, listPostFiles, listVideoReleases, loadBlog, loadIndex, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planTheme } from './site.js';
+import { NotFound, describePlan, detectAddress, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planTheme } from './site.js';
 import { createSandbox } from './sandbox.js';
 import { describeRelease, executeRelease, listReleaseFolders, planTagRelease, videoRepositories } from './release.js';
 import { insertionPoint } from '../lib/selection.js';
@@ -17,6 +17,8 @@ import { READER_SORTS, readerSort, saveSort, savedSort } from '../lib/sort.js';
 import { mdToDelta, deltaToMarkdownChecked } from '../lib/markdown.js';
 import { SLUG_RE, joinFile, newFront, parseMeta, setMeta, splitFile } from '../lib/frontmatter.js';
 import { parsePost } from '../lib/blog.js';
+import { filterMedia } from '../lib/media.js';
+import { SCHEDULE_WARN_DAYS, daysUntil } from '../lib/schedule.js';
 import { resolveAsset } from '../lib/assets.js';
 import { videoBase, videoEmbedUrl } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
@@ -236,7 +238,7 @@ function errBox(e) {
 
 const parseHash = () => {
   const p = new URLSearchParams(location.hash.slice(1));
-  const mode = p.has('import') ? 'import' : p.has('themes') ? 'themes' : p.has('extensions') ? 'extensions' : p.has('licences') ? 'licences' : p.has('settings') ? 'settings' : p.has('new') || p.has('newpage') ? 'new' : p.has('correct') || p.has('correctpage') ? 'correct' : p.has('edit') || p.has('editpage') ? 'edit' : null;
+  const mode = p.has('import') ? 'import' : p.has('themes') ? 'themes' : p.has('extensions') ? 'extensions' : p.has('licences') ? 'licences' : p.has('settings') ? 'settings' : p.has('media') ? 'media' : p.has('new') || p.has('newpage') ? 'new' : p.has('correct') || p.has('correctpage') ? 'correct' : p.has('edit') || p.has('editpage') ? 'edit' : null;
   // a standalone page (pages/<slug>.md) is edited, or corrected by pull request, with the same editor as a post
   const kind = p.has('newpage') || p.has('editpage') || p.has('correctpage') ? 'page' : 'post';
   return { repo: p.get('repo'), post: p.get('post') || p.get('edit') || p.get('editpage') || p.get('correct') || p.get('correctpage'), ref: p.get('ref') || undefined, mode, kind };
@@ -349,6 +351,7 @@ async function route() {
     else if (r.mode === 'extensions') node = await extensionsView(repo, r);
     else if (r.mode === 'licences') node = licencesView(repo, r);
     else if (r.mode === 'settings') node = await settingsView(repo, r);
+    else if (r.mode === 'media') node = await mediaView(repo, r);
     else if (r.mode === 'new' || r.mode === 'edit' || r.mode === 'correct') node = await editorView(repo, r);
     else if (r.post) node = await postView(repo, r);
     else node = await listView(repo, r);
@@ -593,6 +596,8 @@ async function settingsView(repo, r) {
       check('search', 'Add a search page'),
       h('div', { class: 'hint' }, 'Search runs in the reader\'s browser against a file written at publish (search.json). It adds one same-origin script, on the search page only; nothing is sent anywhere.'),
       h('div', { class: 'row' }, field('Date format', input('dateFormat', { placeholder: DEFAULT_DATE_FORMAT, list: 'date-formats', spellcheck: 'false' }), h('div', { class: 'hint' }, 'How a post\'s date reads on every page and in the /blog/ reader: a ', outbound('moment.js format', 'https://momentjs.com/docs/#/displaying/format/', { class: 'link' }), ', such as MMM D, YYYY or D MMMM YYYY. YYYY-MM-DD shows the plain date. The preview shows it as you type; feeds and search engines always get the ISO date.'), h('datalist', { id: 'date-formats' }, DATE_FORMAT_EXAMPLES.map((x) => h('option', { value: x }))))),
+      h('div', { class: 'row' }, field('Time zone', input('timezone', { placeholder: 'UTC' }), 'An IANA name like America/Phoenix. Used only to read the time of a scheduled post (publish_at); with none, that time is UTC.')),
+      h('div', { class: 'row' }, field('Related posts', input('related', { type: 'number', min: 1, max: 10, placeholder: 'none' }), 'Lists this many posts that share tags with each post. Every post then depends on the posts sharing its tags: publishing one rewrites each of their pages, and the pre-flight says how many.')),
       h('div', { class: 'row' }, field('Posts per page', input('pageSize', { type: 'number', min: 1, max: 100, placeholder: 'all on one page' }), 'Splits the index and the tag and author pages. The feed and the /blog/ reader still list everything.')),
       h('div', { class: 'row' }, h('div', {}, check('pageStable', 'Stable page addresses (for a big blog)'), h('div', { class: 'hint' }, 'Counts pages from the oldest post, so publishing a post changes the front page and nothing else, instead of every page: far fewer files to send. The addresses of the older pages (page/1/ is the oldest) then never change. Turning it on or off renames the pages once.'))),
       h('div', { class: 'row' }, h('div', {}, check('linkStyle', 'Link the stylesheet instead of putting it in every page (for a big blog)'), h('div', { class: 'hint' }, 'Every page carries the blog\'s CSS, so changing a colour, a font or the custom CSS rewrites every page of the blog. Linked, the CSS is one file (style.css) and that change is one file. Turning it on or off rewrites every page once.'))),
@@ -826,6 +831,65 @@ function licencesView(repo, r) {
   );
 }
 
+// ---------- media ----------
+
+// Every image in the blog's asset repositories, with the pinned address a page would load it from. Listing is reading: the
+// ledger counts it, and nothing is uploaded by opening the view.
+async function loadMedia(repo, ref) {
+  const { blog, lock } = cache;
+  return listMedia(gh, { blog, lock, index: await loadIndexFull(gh, repo, ref, { blog }) });
+}
+
+// A searchable grid of tiles. Lazy images with explicit dimensions, so a repository of thousands of pictures is not fetched at full
+// size; the grid is drawn a page at a time. `onPick` makes a tile choosable (the editor's picker); without it a tile copies its reference.
+function mediaGrid(items, { onPick = null } = {}) {
+  const PAGE = 120;
+  let shown = PAGE;
+  const search = h('input', { type: 'search', placeholder: 'Search images…', 'aria-label': 'Search images', autocomplete: 'off' });
+  const unusedOnly = h('input', { type: 'checkbox' });
+  const count = h('span', { class: 'muted' });
+  const grid = h('div', { class: 'media-grid' });
+  const more = h('button', { type: 'button' }, 'Show more');
+  const tile = (it) => {
+    const img = h('img', { src: it.url || '', alt: '', loading: 'lazy', width: 160, height: 120 });
+    img.addEventListener('error', () => img.classList.add('broken'));
+    const copy = h('button', { type: 'button', class: 'link', onclick: async (e) => { e.stopPropagation(); try { await navigator.clipboard.writeText(it.ref); toast({ kind: 'success', title: 'Copied', message: it.ref }); } catch { toast({ kind: 'error', title: 'Could not copy', message: it.ref }); } } }, 'Copy reference');
+    const box = h('figure', { class: 'media-tile', title: it.ref }, img, h('figcaption', {}, h('span', { class: 'name' }, it.path), it.unused ? h('span', { class: 'badge' }, 'unused') : null, onPick ? null : copy));
+    if (onPick) {
+      box.tabIndex = 0;
+      box.addEventListener('click', () => onPick(it));
+      box.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(it); } });
+    }
+    return box;
+  };
+  const draw = () => {
+    const all = filterMedia(items, { query: search.value, onlyUnused: unusedOnly.checked });
+    grid.replaceChildren(...all.slice(0, shown).map(tile));
+    more.hidden = all.length <= shown;
+    count.textContent = `${all.length.toLocaleString()} of ${items.length.toLocaleString()} image${items.length === 1 ? '' : 's'}${items.some((i) => i.unused) ? `, ${items.filter((i) => i.unused).length.toLocaleString()} unused` : ''}`;
+    if (!all.length) grid.replaceChildren(h('p', { class: 'muted' }, items.length ? 'No images match.' : 'No images yet.'));
+  };
+  search.addEventListener('input', () => { shown = PAGE; draw(); });
+  unusedOnly.addEventListener('change', () => { shown = PAGE; draw(); });
+  more.addEventListener('click', () => { shown += PAGE; draw(); });
+  draw();
+  return { root: h('div', {}, h('div', { class: 'media-bar' }, search, h('label', { class: 'check' }, unusedOnly, ' Unused only'), count), grid, more), search };
+}
+
+async function mediaView(repo, r) {
+  const { blog } = cache;
+  document.title = `Media · ${blog.title}`;
+  const { items, problems } = await loadMedia(repo, r.ref);
+  const grid = mediaGrid(items);
+  return h('div', {},
+    h('p', {}, nav(blog.title, link(repo), { icon: 'arrow-left' })),
+    h('h1', {}, 'Media'),
+    h('p', { class: 'muted' }, 'The images in this blog\'s images repositories. Unused means no published or scheduled post and no blog.json setting references the image (a draft may still plan to). Opening this view uploads nothing.'),
+    problems.map((p) => h('div', { class: 'err' }, p)),
+    !Object.keys((blog.assets && blog.assets.repos) || {}).length ? h('p', { class: 'muted' }, 'This blog has no images repository yet. Name one in Settings.') : grid.root,
+  );
+}
+
 // ---------- reading ----------
 
 async function listView(repo, r) {
@@ -835,7 +899,7 @@ async function listView(repo, r) {
   const wrap = h('div', {}, h('h1', {}, blog.title), h('p', { class: 'muted' }, blog.description));
   // View blog opens the GitHub Pages site when GitHub is serving one, else the reader (which needs no Pages)
   const viewBlog = outbound('View blog', `blog/${link(repo, r.ref ? `&ref=${r.ref}` : '')}`, { icon: 'external-link', title: 'Opens the reader: GitHub Pages is not serving this blog' });
-  if (gh.token) wrap.append(h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'sliders', onclick: () => (location.hash = link(repo, '&settings')) }, 'Settings'), viewBlog, h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, wrap) }, 'Show drafts'), h('button', { icon: 'file-text', onclick: (e) => showPages(e.currentTarget, repo, r.ref, wrap) }, 'Pages')));
+  if (gh.token) wrap.append(h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'sliders', onclick: () => (location.hash = link(repo, '&settings')) }, 'Settings'), h('button', { icon: 'file-text', onclick: () => (location.hash = link(repo, '&media')) }, 'Media'), viewBlog, h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, wrap) }, 'Show drafts'), h('button', { icon: 'file-text', onclick: (e) => showPages(e.currentTarget, repo, r.ref, wrap) }, 'Pages')));
   if (gh.token) {
     detectAddress(gh, repo).then((found) => {
       if (found.live && found.exact && found.built) {
@@ -876,12 +940,12 @@ async function showDrafts(btn, repo, ref, wrap) {
   for (const n of await listPostFiles(gh, repo, ref)) {
     try {
       const m = parseMeta(splitFile(await gh.readText(slugRepo, at(folder, `posts/${n}`), ref), n).front, n);
-      if (m.status === 'draft') out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(`${m.title} (draft)`, link(repo, `&edit=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(m.date))));
+      if (m.status !== 'published') out.append(h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'scheduled' ? `${m.title} (scheduled for ${m.publish_at})` : `${m.title} (draft)`, link(repo, `&edit=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(m.date))));
     } catch {
       /* skip unreadable */
     }
   }
-  placeAboveList(wrap, h('h2', {}, 'Drafts'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts.'));
+  placeAboveList(wrap, h('h2', {}, 'Drafts and scheduled'), out.children.length ? out : h('p', { class: 'muted' }, 'No drafts or scheduled posts.'));
 }
 
 // Drafts and pages open above the (possibly very long) post list, not after it, and are scrolled into view.
@@ -968,9 +1032,11 @@ async function editorView(repo, r) {
   const canPush = !!(info.permissions && info.permissions.push);
   const deploy = deployPanel({ gh, repo: plainRepo, hasPages: !!info.has_pages });
 
+  const picked = new Map(); // existing images chosen in the picker, not pinned yet: shown from the address the picker loaded
   setAssetResolver((ref) => {
     const s = staged.get(ref.replace(/^asset:/, ''));
     if (s) return s.url;
+    if (picked.has(ref) && !(cache && cache.lock && cache.lock[ref.replace(/^asset:/, '')])) return picked.get(ref);
     try {
       return resolveAsset(ref, blog, cache.lock);
     } catch {
@@ -988,7 +1054,8 @@ async function editorView(repo, r) {
     tags: h('input', { value: (m.tags || []).join(', '), placeholder: 'video, git', disabled: correcting }),
     author: h('input', { value: m.author || '', placeholder: blog.author || 'Defaults to the blog\'s author', disabled: correcting }),
     menu: h('input', { type: 'number', min: 0, max: 99, value: m.menu || '', placeholder: 'not in the menu', disabled: correcting }),
-    status: h('select', { disabled: correcting }, ['draft', 'published'].map((s) => h('option', { value: s, selected: s === m.status }, s))),
+    publish_at: h('input', { type: 'datetime-local', value: m.publish_at || '', disabled: correcting, 'aria-label': 'Publish at' }),
+    status: h('select', { disabled: correcting }, (isPageKind ? ['draft', 'published'] : ['draft', 'scheduled', 'published']).map((s) => h('option', { value: s, selected: s === m.status }, s))),
     cover: h('input', { value: m.cover || '', placeholder: 'auto, or asset:images/cover.png', disabled: correcting, style: 'flex:1' }),
     description: h('input', { value: m.description || '', placeholder: 'Optional; defaults to the first paragraph', disabled: correcting }),
     seo_title: h('input', { value: m.seo_title || '', placeholder: 'Optional; defaults to the title', disabled: correcting }),
@@ -1001,9 +1068,9 @@ async function editorView(repo, r) {
   f.date.addEventListener('input', showDate);
   f.date.addEventListener('change', showDate);
   showDate();
-  const coverUpload = h('button', { type: 'button', icon: 'upload', disabled: correcting, onclick: () => chooseImage((ref) => { f.cover.value = ref; }) }, 'Upload…');
+  const coverUpload = h('button', { type: 'button', icon: 'upload', disabled: correcting, onclick: () => chooseImage((ref) => { f.cover.value = ref; }) }, 'Choose…');
   const coverAuto = h('button', { type: 'button', icon: 'zap', disabled: correcting, onclick: () => { f.cover.value = 'auto'; } }, 'Auto');
-  const imageUpload = h('button', { type: 'button', icon: 'upload', disabled: correcting, onclick: () => chooseImage((ref) => { f.image.value = ref; }) }, 'Upload…');
+  const imageUpload = h('button', { type: 'button', icon: 'upload', disabled: correcting, onclick: () => chooseImage((ref) => { f.image.value = ref; }) }, 'Choose…');
   setVideoResolver((ref) => {
     try {
       return videoEmbedUrl(ref, blog);
@@ -1017,11 +1084,26 @@ async function editorView(repo, r) {
   const field = (label, el, hint) => h('div', {}, h('label', {}, label), el, hint ? h('div', { class: 'hint' }, hint) : null);
   const note = h('textarea', { rows: 2, placeholder: 'What did you correct, and why?', style: 'width:100%', 'aria-label': 'Correction note' });
   const go = h('button', { class: 'primary', icon: 'send' }, correcting ? 'Propose correction (pull request)' : 'Publish');
+  const scheduleHint = h('div', { class: 'hint' });
+  const scheduleRow = h('div', {}, field('Publish at', f.publish_at, undefined), scheduleHint);
+  const showSchedule = () => {
+    const zone = (cache && cache.blog ? cache.blog : blog).timezone;
+    const v = f.publish_at.value;
+    let text = `Read as ${zone || 'UTC (set a time zone in Settings to use yours)'}. Goes live not before this time, normally within the hour. Needs the schedule workflow; the post's source is public meanwhile.`;
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) {
+      const days = daysUntil({ publish_at: v }, cache && cache.blog ? cache.blog : blog);
+      if (days > SCHEDULE_WARN_DAYS) text += ` Warning: ${Math.floor(days)} days away. GitHub disables scheduled workflows after 60 days without repository activity.`;
+    }
+    scheduleHint.textContent = text;
+  };
+  f.publish_at.addEventListener('input', showSchedule);
   const refreshLabel = () => {
     if (correcting) return;
     const published = f.status.value === 'published';
     go.dataset.icon = published ? 'send' : 'save';
-    relabel(go, published ? 'Publish' : 'Save draft');
+    relabel(go, published ? 'Publish' : f.status.value === 'scheduled' ? 'Schedule' : 'Save draft');
+    scheduleRow.hidden = f.status.value !== 'scheduled';
+    showSchedule();
   };
   f.status.addEventListener('change', refreshLabel);
   refreshLabel();
@@ -1050,7 +1132,7 @@ async function editorView(repo, r) {
         correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', outbound('Propose the change on GitHub instead', `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `${isPageKind ? 'pages' : 'posts'}/${r.post}.md`)}`, { class: 'link' }), ' — it forks and opens the pull request for you.')) : null,
         isPageKind
           ? h('div', { class: 'row' }, field('Menu position', f.menu, 'A number puts the page in the header menu, lowest first. Leave blank to keep it out of the menu.'), field('Status', f.status))
-          : [field('Author', f.author, 'Posts by more than one author get an author page each.'), h('div', { class: 'row' }, field('Date', h('div', { style: 'display:flex;gap:.4rem' }, f.date, f.time), dateNote), field('Tags', f.tags), field('Status', f.status))],
+          : [field('Author', f.author, 'Posts by more than one author get an author page each.'), h('div', { class: 'row' }, field('Date', h('div', { style: 'display:flex;gap:.4rem' }, f.date, f.time), dateNote), field('Tags', f.tags), field('Status', f.status)), scheduleRow],
         h('div', { class: 'actions' }, go, !isNew && !correcting && existing ? h('button', { type: 'button', class: 'danger', icon: 'trash', onclick: (e) => deleteContent(repo, { slug: existing.post.slug, kind, ref: r.ref, button: e.currentTarget }) }, `Delete ${word}`) : null),
         deploy.el,
       ))),
@@ -1094,8 +1176,33 @@ async function editorView(repo, r) {
     return `asset:${key}/${path}`;
   }
 
-  // A file chooser for an image; `use` receives the staged asset reference.
-  function chooseImage(use) {
+  // The picker: an image already in the images repository (so it is not uploaded twice), or a new one. `use` receives an asset reference.
+  async function chooseImage(use) {
+    const have = Object.keys((blog.assets && blog.assets.repos) || {}).length;
+    if (!have) return uploadImage(use);
+    let media;
+    try {
+      media = await working('Looking at the images…', () => loadMedia(repo, r.ref));
+    } catch (e) {
+      return fail(e);
+    }
+    const dlg = h('dialog', { class: 'media-dialog' });
+    const finish = (ref) => { dlg.close(); dlg.remove(); if (ref) use(ref); };
+    const grid = mediaGrid(media.items, { onPick: (it) => { if (it.url) picked.set(it.ref, it.url); finish(it.ref); } });
+    dlg.append(
+      h('h2', {}, 'Choose an image'),
+      h('div', { class: 'actions' }, h('button', { type: 'button', class: 'primary', icon: 'upload', onclick: () => { dlg.close(); dlg.remove(); uploadImage(use); } }, 'Upload a new image…'), h('button', { type: 'button', icon: 'x', onclick: () => finish(null) }, 'Cancel')),
+      media.problems.map((p) => h('div', { class: 'err' }, p)),
+      grid.root,
+    );
+    dlg.addEventListener('cancel', () => dlg.remove(), { once: true });
+    document.body.append(dlg);
+    dlg.showModal();
+    grid.search.focus();
+  }
+
+  // A file chooser for a new image; `use` receives the staged asset reference.
+  function uploadImage(use) {
     const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp' });
     input.addEventListener('change', async () => {
       const file = input.files[0];
@@ -1139,6 +1246,7 @@ async function editorView(repo, r) {
     const common = {
       title: f.title.value.trim(),
       status: f.status.value,
+      publish_at: !isPageKind && f.status.value === 'scheduled' ? f.publish_at.value : '',
       cover: f.cover.value.trim(),
       description: f.description.value.trim(),
       seo_title: f.seo_title.value.trim(),
@@ -1176,7 +1284,7 @@ async function editorView(repo, r) {
       }
       if (!(await confirmPlan(plan))) return;
       const receipt = await heavy('Committing…', () => executePlan(gh, plan, { pullBody: note.value.trim() }), { button: go });
-      sent(receipt, { title: correcting ? 'Correction proposed' : f.status.value === 'published' ? 'Published' : 'Draft saved' });
+      sent(receipt, { title: correcting ? 'Correction proposed' : f.status.value === 'published' ? 'Published' : f.status.value === 'scheduled' ? 'Scheduled' : 'Draft saved' });
       const pushed = [...receipt.commits].reverse().find((c) => c.repo === plainRepo);
       if (!correcting && pushed) {
         const now = cache && cache.blog ? cache.blog : blog;
@@ -1479,6 +1587,17 @@ function releaseReceipt(r) {
   });
 }
 
+// What a scheduled post promises, and what it does not.
+function scheduleNote(s) {
+  return [
+    `Scheduled for ${s.at.replace('T', ' ')} ${s.zone || 'UTC (set a time zone in Settings to use yours)'}. It goes live not before then, and normally within the hour: the workflow runs hourly and GitHub may delay it.`,
+    'Its source is public in a public repository until then: scheduled hides it from the site, not from GitHub.',
+    s.extensionsRun ? 'Extensions are being run now and their output recorded, because the workflow that publishes it runs none.' : '',
+    s.days > SCHEDULE_WARN_DAYS ? `That is ${Math.floor(s.days)} days away. GitHub turns scheduled workflows off after 60 days without activity in a public repository, so it may never publish unless the repository is touched before then.` : '',
+    'Needs the schedule workflow (templates/schedule.yml) in the repository.',
+  ].filter(Boolean).join(' ');
+}
+
 async function confirmPlan(plan) {
   await ensureCurrent(); // before the pre-flight, so a plan made by old scripts is not even offered
   const dlg = $('#dlg');
@@ -1501,6 +1620,8 @@ async function confirmPlan(plan) {
       h('div', { class: 'files' }, rows.slice(0, SHOWN).map((c) => h('div', {}, `${c.action.padEnd(6)} ${c.repo}/${c.path}  ${fmtBytes(c.size)}`)), rows.length > SHOWN ? h('div', { class: 'muted' }, `… and ${rows.length - SHOWN} more files`) : null),
       plan.licences ? h('div', {}, h('h3', {}, 'Licences this blog will depend on'), h('div', { class: 'files' }, plan.licences.map((l) => h('div', {}, `${l.kind.padEnd(10)} ${l.name} ${l.version || ''}  ${l.licence}${l.repo ? `  ${l.repo}@${l.ref}` : '  (built in)'}`)))) : null,
       buildNote(plan),
+      plan.schedule ? h('div', { class: 'caution' }, scheduleNote(plan.schedule)) : null,
+      plan.related !== null && plan.related !== undefined ? h('div', { class: 'caution' }, `Related posts: ${plan.related.toLocaleString()} ${plan.related === 1 ? 'page changes' : 'pages change'} besides the post's own.`) : null,
       plan.unlisted && plan.unlisted.length ? h('div', { class: 'caution' }, `${plan.unlisted.length === 1 ? 'This post is' : `${plan.unlisted.length} published posts are`} not in ${plan.orderFile || 'the order list'}, so ${plan.unlisted.length === 1 ? 'it' : 'they'} will be added at the end, by date: ${plan.unlisted.join(', ')}. Add ${plan.unlisted.length === 1 ? 'it' : 'them'} to ${plan.orderFile || 'the list'} to place ${plan.unlisted.length === 1 ? 'it' : 'them'}.`) : null,
       plan.removed ? h('div', { class: 'caution' }, `"${plan.title}" is removed from the blog and from its index, listings, feed and search. The file stays in the repository's history, so a revert brings it back.`) : null,
       h('p', { class: 'hint' }, plan.mode === 'pr' ? 'This opens a pull request; the default branch is not changed.' : 'Nothing has been uploaded yet.'),
