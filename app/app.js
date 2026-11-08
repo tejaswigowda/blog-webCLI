@@ -32,6 +32,7 @@ import { loadPinnedTheme } from './packs.js';
 import { loadRegistry } from './registry-client.js';
 import { highlightedTextarea } from './highlight.js';
 import { config } from './config.js';
+import { kvClear, kvGet, kvSet } from './idb.js';
 import { authorizeUrl, canRefresh, exchangeCode, installUrl, needsRefresh, newState, oauthConfigured, readCallback, redirectUri, refreshRecord, revokeToken } from './oauth.js';
 import { createImportView } from './import-view.js';
 
@@ -153,7 +154,7 @@ let cache = null; // { repo, ref, blog, lock }
 // from this tab or another, changes the answer, so nothing stale is ever shown and nothing is read twice.
 const memos = new Map();
 const defaultBranches = new Map();
-let current = null;
+let blogMemo = null;
 async function headShaOf(repo, ref) {
   try {
     const { repo: r } = parseRepoRef(repo);
@@ -172,11 +173,11 @@ async function syncCurrent(repo, ref) {
   const sha = await headShaOf(repo, ref);
   const hit = memos.get(key);
   if (sha && hit && hit.sha === sha) {
-    current = hit;
+    blogMemo = hit;
     return true;
   }
-  current = { key, sha, cache: null, entries: null, drafts: null, pages: null, media: null };
-  if (sha) memos.set(key, current);
+  blogMemo = { key, sha, cache: null, entries: null, drafts: null, pages: null, media: null };
+  if (sha) memos.set(key, blogMemo);
   else memos.delete(key);
   return false;
 }
@@ -383,6 +384,8 @@ function signOut({ quiet = false } = {}) {
   }
   gh.token = null;
   login = null;
+  memos.clear();
+  kvClear().catch(() => {});
   if (!quiet) route();
   else renderTop(parseHash().repo, parseHash().ref);
 }
@@ -461,10 +464,14 @@ async function route() {
     }
     if (!r.repo) return home();
     const repo = parseRepo(r.repo);
+    // the latest-commit question and the blog's own files are asked together; the files are used only if the commit has changed
+    const known = memos.get(`${repo}@${r.ref || ''}`);
+    const loading = known && known.cache ? null : loadBlog(gh, repo, r.ref);
+    loading && loading.catch(() => {});
     const unchanged = await syncCurrent(repo, r.ref);
-    if (unchanged && current.cache) cache = current.cache;
-    else if (!unchanged || !cache || cache.repo !== repo || cache.ref !== r.ref) cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
-    if (mine === seq && current && !current.cache && current.sha) current.cache = cache;
+    if (unchanged && blogMemo.cache) cache = blogMemo.cache;
+    else cache = { repo, ref: r.ref, ...(await (loading || loadBlog(gh, repo, r.ref))) };
+    if (mine === seq && blogMemo && !blogMemo.cache && blogMemo.sha) blogMemo.cache = cache;
     if (mine !== seq) return;
     let node;
     if (r.mode === 'themes') node = await themesView(repo, r);
@@ -615,7 +622,7 @@ async function settingsView(repo, r) {
   const canPush = !!(info.permissions && info.permissions.push);
   let entries = [];
   try {
-    const memo = current;
+    const memo = blogMemo;
     entries = memo && memo.entries ? memo.entries : await loadIndex(gh, repo, r.ref);
     if (memo && !memo.entries) memo.entries = entries;
   } catch {
@@ -959,7 +966,7 @@ function licencesView(repo, r) {
 // ledger counts it, and nothing is uploaded by opening the view.
 async function loadMedia(repo, ref) {
   const { blog, lock } = cache;
-  const memo = current;
+  const memo = blogMemo;
   if (memo && memo.media) return memo.media;
   const media = await listMedia(gh, { blog, lock, index: await loadIndexFull(gh, repo, ref, { blog }) });
   if (memo && !media.problems.length) memo.media = media;
@@ -1021,9 +1028,19 @@ async function mediaView(repo, r) {
 async function listView(repo, r) {
   const { blog } = cache;
   document.title = blog.title;
-  const memo = current;
-  const entries = memo && memo.entries ? memo.entries : await loadIndex(gh, repo, r.ref, { blog });
-  if (memo && !memo.entries) memo.entries = entries;
+  const memo = blogMemo;
+  let entries = memo && memo.entries;
+  if (!entries) {
+    // kept on this device with the commit it was read at: unchanged since, it is not read again (not even after a reload)
+    const key = `index:${repo}@${r.ref || ''}`;
+    const saved = memo && memo.sha ? await kvGet(key).catch(() => null) : null;
+    if (saved && saved.sha === memo.sha && Array.isArray(saved.entries)) entries = saved.entries;
+    else {
+      entries = await loadIndex(gh, repo, r.ref, { blog });
+      if (memo && memo.sha) kvSet(key, { sha: memo.sha, entries }).catch(() => {});
+    }
+    if (memo) memo.entries = entries;
+  }
   const wrap = h('div', {}, h('h1', {}, blog.title), h('p', { class: 'muted' }, blog.description));
   // View blog opens the GitHub Pages site when GitHub is serving one, else the reader (which needs no Pages)
   const viewBlog = outbound('View blog', `blog/${link(repo, r.ref ? `&ref=${r.ref}` : '')}`, { icon: 'external-link', title: 'Opens the reader: GitHub Pages is not serving this blog' });
@@ -1047,7 +1064,21 @@ async function listView(repo, r) {
     const hay = `${e.title} ${e.excerpt || ''} ${(e.tags || []).join(' ')}`.toLowerCase();
     return tokens.every((t) => hay.includes(t));
   };
-  const drawList = (mode) => list.replaceChildren(...readerSort(entries, mode).filter(found).map((e) => h('li', { class: 'card-link' }, h('h3', {}, nav(e.title, link(repo, `&post=${e.slug}${r.ref ? `&ref=${r.ref}` : ''}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(e.date), (e.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))), e.excerpt ? h('p', {}, e.excerpt) : null)));
+  // A blog of thousands is drawn a screenful at a time (the rest on "Show more", or as you scroll), not as thousands of elements.
+  const PAGE = 100;
+  let shown = PAGE;
+  const more = h('button', { type: 'button' }, 'Show more');
+  more.hidden = true;
+  const sortedFor = new Map();
+  const drawList = (mode, keep = false) => {
+    if (!keep) shown = PAGE;
+    if (!sortedFor.has(mode)) sortedFor.set(mode, readerSort(entries, mode));
+    const all = sortedFor.get(mode).filter(found);
+    list.replaceChildren(...all.slice(0, shown).map((e) => h('li', { class: 'card-link' }, h('h3', {}, nav(e.title, link(repo, `&post=${e.slug}${r.ref ? `&ref=${r.ref}` : ''}`), { class: 'link' })), h('div', { class: 'muted' }, dateEl(e.date), (e.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))), e.excerpt ? h('p', {}, e.excerpt) : null)));
+    more.hidden = all.length <= shown;
+    more.textContent = `Show more (${(all.length - shown).toLocaleString()} left)`;
+  };
+  more.addEventListener('click', () => { shown += PAGE; drawList(picker.value, true); });
   const mode0 = savedSort(sessionStorage, repo);
   const picker = h('select', { 'aria-label': 'Sort posts', onchange: () => { saveSort(sessionStorage, repo, picker.value); drawList(picker.value); } }, READER_SORTS.map(([k, label]) => h('option', { value: k, selected: k === mode0 }, label)));
   sortLabel.append(picker);
@@ -1063,7 +1094,7 @@ async function listView(repo, r) {
   const postsPanel = h('div', { role: 'tabpanel', id: 'tab-posts' },
     gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&new')) }, 'New post'), h('button', { icon: 'file-text', onclick: (e) => showDrafts(e.currentTarget, repo, r.ref, draftsBox, new Set(entries.map((x) => x.slug)), memo) }, 'Show drafts')) : null,
     draftsBox,
-    ...(entries.length > 1 ? [sortLabel] : []), list, none,
+    ...(entries.length > 1 ? [sortLabel] : []), list, more, none,
     !entries.length ? h('p', { class: 'muted' }, 'No published posts yet.') : null);
   const pagesPanel = h('div', { role: 'tabpanel', id: 'tab-pages', hidden: true });
   let pagesLoaded = false;
@@ -1097,6 +1128,7 @@ async function listView(repo, r) {
     new IntersectionObserver(([e]) => bar.classList.toggle('stuck', !e.isIntersecting && e.boundingClientRect.top < under), { rootMargin: `-${under}px 0px 0px 0px` }).observe(sentinel);
   }
   wrap.append(sentinel, bar, postsPanel, pagesPanel);
+  if (typeof IntersectionObserver !== 'undefined') new IntersectionObserver(([e]) => { if (e.isIntersecting && !more.hidden) more.click(); }, { rootMargin: '600px' }).observe(more);
   return wrap;
 }
 

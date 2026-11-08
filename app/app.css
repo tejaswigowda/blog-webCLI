@@ -322,3 +322,4 @@ dialog.media-dialog .media-tile:hover,dialog.media-dialog .media-tile:focus{bord
 /* the page-sized loading state: centred, so it is never mistaken for an empty page */
 .loading{display:flex;align-items:center;justify-content:center;gap:.75rem;min-height:50vh;color:var(--muted);font-size:1.05rem}
 .loading .spinner{width:1.4rem;height:1.4rem}
+.stuck button {border: none; background:transparent}
