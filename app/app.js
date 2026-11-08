@@ -24,6 +24,7 @@ import { videoBase, videoEmbedUrl } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { DEFAULT_CONTENT_BASE, defaultDomain, defaultTitle } from '../lib/init.js';
 import { FONTS, resolveLogo, themeCss } from '../lib/customize.js';
+import { THEMES } from '../lib/theme.js';
 import { blogToForm, formToBlog } from '../lib/settings.js';
 import { DATE_FORMAT_EXAMPLES, DEFAULT_DATE_FORMAT } from '../lib/datefmt.js';
 import { validateBlog } from '../lib/blog.js';
@@ -836,10 +837,32 @@ function parseAddress(text) {
 // A look at the blog in a theme before choosing it: the theme is fetched and checked exactly as choosing it would (so a theme that would be
 // refused is refused here), then the blog's own posts and a sample post are drawn with it. Nothing is saved or sent.
 const SAMPLE_POST = '<p>This is how a post reads in this theme: the paragraph text, <a href="#">a link</a>, <strong>strong</strong> and <em>emphasis</em>.</p><h2>A heading</h2><blockquote><p>A quotation, set the way the theme sets one.</p></blockquote><ul><li>A list of things</li><li>And another thing</li></ul><pre><code>const code = "in a block";</code></pre><p>The last paragraph, to show the spacing before the footer.</p>';
+// A stylesheet pinned to one colour scheme: the blocks written for the other one are removed and the ones for this one unwrapped, so a theme
+// is shown light or dark by choice, not by the reader's system (which would put a light theme's dark text on the default's dark page).
+function pickScheme(css, mode) {
+  let out = '';
+  let i = 0;
+  const re = /@media([^{;]*)\{/g;
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    const q = m[1];
+    if (!/prefers-color-scheme\s*:\s*dark/i.test(q)) continue;
+    let depth = 1;
+    let j = re.lastIndex;
+    for (; j < css.length && depth; j++) depth += css[j] === '{' ? 1 : css[j] === '}' ? -1 : 0;
+    const dark = !/^\s*not\b/i.test(q);
+    out += css.slice(i, m.index) + ((mode === 'dark') === dark ? css.slice(re.lastIndex, j - 1) : '');
+    i = j;
+    re.lastIndex = j;
+  }
+  return out + css.slice(i);
+}
+const SCHEME_BASE = { light: 'background:#fff;color:#1a1a1a', dark: 'background:#14161a;color:#e8eaed' }; // what a theme that sets neither still reads on
+
 async function previewTheme(repo, spec, label) {
   const dlg = h('dialog', { class: 'theme-preview' });
   dlg.addEventListener('close', () => dlg.remove());
-  dlg.append(h('h2', {}, `Preview: ${label}`), progressLine('Fetching and checking the theme…'));
+  const head = (title) => h('div', { class: 'tp-head' }, h('h2', {}, title), h('button', { type: 'button', class: 'icon-btn', icon: 'x', title: 'Close', 'aria-label': 'Close', onclick: () => dlg.close() }));
+  dlg.append(head(`Preview: ${label}`), progressLine('Fetching and checking the theme…'));
   document.body.append(dlg);
   dlg.showModal();
   try {
@@ -857,26 +880,35 @@ async function previewTheme(repo, spec, label) {
     }
     const frame = h('div', { class: 'tp-frame' });
     const shadow = frame.attachShadow({ mode: 'open' });
-    const css = forShadow(themeCss(shown, theme));
+    // the standard stylesheet every theme sits on (the default theme's), then the theme's own
+    const raw = `${THEMES.default}\n${themeCss(shown, theme)}`;
+    let mode = 'light';
+    let kind0 = 'index';
     const draw = (kind) => {
+      kind0 = kind;
+      const css = forShadow(pickScheme(raw, mode));
+      frame.style.background = mode === 'dark' ? '#14161a' : '#fff';
       const first = entries[0] || { slug: 'sample', title: 'A sample post', date: today(), tags: ['sample'] };
       const body = kind === 'index'
         ? indexBody(theme.contractSpec, { blog: shown, entries: entries.length ? entries : [first], hrefFor: () => '#', home: '#', feed: '#', logoUrl })
         : postBody(theme.contractSpec, { blog: shown, meta: { slug: first.slug, title: first.title, date: first.date, tags: first.tags || [], author: shown.author }, bodyHtml: SAMPLE_POST, coverUrl: null, home: '#', feed: '#', logoUrl, footerExtra: '', nav: null, page: false, after: '' });
-      shadow.innerHTML = `<style>${css}</style><style>.pv{padding:0 1.25rem 1rem;overflow-x:hidden;word-wrap:break-word}</style><div class="pv ${esc(body.bodyClass)}" style="pointer-events:none">${body.html}</div>`;
+      shadow.innerHTML = `<style>.pv{${SCHEME_BASE[mode]}}</style><style>${css}</style><style>.pv{padding:0 1.25rem 1rem;overflow-x:hidden;word-wrap:break-word}</style><div class="pv ${esc(body.bodyClass)}" style="pointer-events:none">${body.html}</div>`;
     };
     const tabs = [['index', 'Your posts'], ['post', 'A post']].map(([k, t]) => h('button', { type: 'button', role: 'tab', onclick: () => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.k === k))); draw(k); } }, t));
     tabs.forEach((b, i) => { b.dataset.k = ['index', 'post'][i]; b.setAttribute('aria-selected', String(i === 0)); });
     draw('index');
+    // a dark view only where the theme itself has one: a light theme's dark text would sit on the dark page
+    const hasDark = /prefers-color-scheme\s*:\s*dark/i.test(theme.css);
+    const modeBtns = (hasDark ? ['light', 'dark'] : []).map((m) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(m === mode), onclick: () => { mode = m; modeBtns.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.m === m))); draw(kind0); } }, m === 'light' ? 'Light' : 'Dark'));
+    modeBtns.forEach((b, i) => { b.dataset.m = ['light', 'dark'][i]; });
     dlg.replaceChildren(
-      h('h2', {}, `Preview: ${theme.manifest ? theme.manifest.name : label}`),
-      h('div', { class: 'tabs', role: 'tablist' }, ...tabs),
-      h('p', { class: 'hint' }, `${pin.licence} · ${pin.repo}@${pin.ref}. Follows your system light/dark setting. Nothing is saved.`),
+      head(`Preview: ${theme.manifest ? theme.manifest.name : label}`),
+      h('div', { class: 'tp-bar' }, h('div', { class: 'tabs', role: 'tablist' }, ...tabs), modeBtns.length ? h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Colour scheme' }, ...modeBtns) : null),
+      h('p', { class: 'hint' }, `${pin.licence} · ${pin.repo}@${pin.ref}. ${hasDark ? 'Shown light or dark as you choose.' : 'This theme has no dark version.'} Nothing is saved.`),
       frame,
-      h('div', { class: 'actions' }, h('button', { icon: 'x', onclick: () => dlg.close() }, 'Close')),
     );
   } catch (e) {
-    dlg.replaceChildren(h('h2', {}, `Preview: ${label}`), errBox(e), h('div', { class: 'actions' }, h('button', { icon: 'x', onclick: () => dlg.close() }, 'Close')));
+    dlg.replaceChildren(head(`Preview: ${label}`), errBox(e));
   }
 }
 
