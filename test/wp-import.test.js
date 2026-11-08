@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { importWordPressTheme } from '../cli/wp-import.js';
+import { importWordPressTheme, parseDemo } from '../cli/wp-import.js';
 import { writeZip } from '../cli/zip.js';
 
 const style = (extra = '', license = 'GNU General Public License v2 or later') => `/*
@@ -84,6 +84,41 @@ test("X6: a theme's other front-end stylesheets are taken, with their assets; ed
   for (const left of ['assets/css/main-rtl.css', 'assets/css/editor-style.css', 'assets/css/woocommerce.css', 'assets/css/ie.css', 'inc/admin/panel.css', 'assets/css/main.css']) assert.ok(m.dropped.css.includes(left), `${left} is listed as dropped`);
   assert.ok((await fs.stat(path.join(dir, 'assets/css/main.min.css'))).size > 0);
   await assert.rejects(fs.stat(path.join(dir, 'assets/css/slider.css')));
+});
+
+const DEMO_HTML = `<html><head>
+<link rel='stylesheet' id='demo-main' href='https://wp-themes.com/wp-content/themes/demo/assets/main.css?ver=1.4' media='all' />
+<link rel='stylesheet' href='https://wp-themes.com/wp-content/themes/demo/style.css?ver=1.4'>
+<link rel='stylesheet' href='https://wp-themes.com/wp-content/themes/demo/assets/late.css'>
+<link rel='stylesheet' href='https://fonts.googleapis.com/css?family=Inter'>
+<link rel='stylesheet' href='https://wp-themes.com/wp-content/plugins/other/x.css'>
+<style id='demo-theme-css-inline-css'>:root{--demo-accent:#123456;--demo-font:Inter,sans-serif}.x{background:url(https://wp-themes.com/wp-content/themes/demo/img/bg.png)}@font-face{font-family:F;src:url(https://fonts.gstatic.com/f.woff2)}.y{background:url(https://elsewhere.test/u.png);color:#111}</style>
+<style id='wp-block-library-inline-css'>.wp-block{color:red}</style>
+<style id='global-styles-inline-css'>body{--wp--preset--color--primary:#8a3b12}</style>
+<style id='core-block-supports-inline-css'>.wp-container-1{display:flex}</style>
+</head></html>`;
+
+test('X6: the demo page gives the stylesheets the theme enqueues, in order, and the CSS its PHP generates', () => {
+  const d = parseDemo(DEMO_HTML, 'demo');
+  assert.deepEqual(d.links, ['assets/main.css', 'style.css', 'assets/late.css'], "only this theme's own stylesheets, in page order");
+  assert.deepEqual(d.inline.map((x) => x.id), ['demo-theme-css', 'global-styles'], "the theme's inline CSS and the global styles; not core block CSS");
+});
+
+test('X6: with the demo page, the theme takes its real stylesheets and generated CSS, and what points outside is removed', async () => {
+  const wp = fakeWordPress({ files: { 'assets/main.css': '.a{color:#111}', 'assets/late.css': '.b{color:#222}', 'assets/unused.css': '.c{color:#333}', 'img/bg.png': 'png' } });
+  const plain = wp.fetchImpl;
+  wp.fetchImpl = async (url) => (String(url) === 'https://wp-themes.com/demo/' ? { ok: true, text: async () => DEMO_HTML } : plain(url));
+  const dir = await out();
+  await run(wp, dir);
+  const m = JSON.parse(await fs.readFile(path.join(dir, 'theme.json'), 'utf8'));
+  assert.deepEqual(m.css, ['assets/main.css', 'style.css', 'assets/late.css', 'wp-inline.css'], "the page's order, style.css where it sat, the generated CSS last");
+  const inline = await fs.readFile(path.join(dir, 'wp-inline.css'), 'utf8');
+  assert.match(inline, /--demo-accent:#123456/);
+  assert.match(inline, /--wp--preset--color--primary/);
+  assert.ok(!/fonts\.gstatic|elsewhere\.test|wp-themes\.com/.test(inline), 'web fonts and outside images are removed; the theme\'s own files become relative');
+  assert.match(inline, /url\(img\/bg\.png\)|url\("img\/bg\.png"\)|url\('img\/bg\.png'\)/);
+  assert.ok(m.assets.includes('img/bg.png'));
+  assert.ok(!m.css.includes('assets/unused.css'), 'a stylesheet the theme does not enqueue is not taken');
 });
 
 test('X6: only wordpress.org directory themes, and only from wordpress.org hosts', async () => {

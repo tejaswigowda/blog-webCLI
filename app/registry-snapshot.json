@@ -37,695 +37,695 @@
     {
       "name": "Twenty Twenty-One",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentytwentyone",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Twenty Twenty-One 2.9 from wordpress.org (GPL), CSS only; uses the wordpress-classic markup.",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentytwentyone/screenshot.png",
-      "sha256": "0482dec27d6381e2a50d193d495c5f35267cae55c9f16d9f460a4235db637ed2"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentytwentyone/screenshot.png",
+      "sha256": "3544f43d7bb5390268b536fd19a1bc893031165472dab8313fa0089c9cac62b0"
     },
     {
       "name": "Ashe",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/ashe",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Personal and Multi-Author Free WordPress Blog Theme. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/ashe/screenshot.png",
-      "sha256": "076f29412652f047141af87a4a04f716dea301a14463959aab9031488bbaa83f"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/ashe/screenshot.png",
+      "sha256": "34a001e6db9de1499cf2fcccfce0e116482b2f3dc9498f86415e0c6d7a7f5d14"
     },
     {
       "name": "Astra",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/astra",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "The Astra WordPress theme is lightning-fast and highly customizable. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/astra/screenshot.png",
-      "sha256": "d96e21a2ddac2da09d40bd1ad13e05983c8f1a5c43d42af5885c1b96bfe284c7"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/astra/screenshot.png",
+      "sha256": "23c2edc645e439cb1f9f1a61a44b69f671c0a67a9debb328bebe578edaddf0e8"
     },
     {
       "name": "Atelier WP",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/atelier-wp",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "An innovative, easily customizable, multi-purpose theme, focused on empowering users to build astonishing WordPress websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/atelier-wp/screenshot.png",
-      "sha256": "783d9e5c31e1e777b200fc2f1473f7f6eef4811e42e8f817619c469d7cd57e83"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/atelier-wp/screenshot.png",
+      "sha256": "da201c8264128d9b076252398e8bbaf5192d5ce2c5a04fb1c46c6dae19a07152"
     },
     {
       "name": "Basin",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/basin",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "Basin is an innovative, easily customizable, multi-purpose theme, focused on empowering users to build astonishing WordPress websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/basin/screenshot.png",
-      "sha256": "4479340a8b96ef28fba9b88620ebab1e888357971eeba4b25f1eab3cc286f446"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/basin/screenshot.png",
+      "sha256": "fc8a432ca0d37d89e078180c648a3a758064b7d5f14988737ea7b49445d3191e"
     },
     {
       "name": "Blocksy",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/blocksy",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Blocksy is a fast, modern WordPress theme with advanced WooCommerce support and full compatibility with the block editor. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/blocksy/screenshot.png",
-      "sha256": "9f7c6bc9e0eed05015db1417fa1381c688f91830ab09011e029087864ddb91d0"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/blocksy/screenshot.png",
+      "sha256": "37bdc374b07973ca71f081c0224a37af60f2d53308877354ed73956740357967"
     },
     {
       "name": "BlogChrome",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/blogchrome",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "BlogChrome is a customizable WordPress blog, news, and magazine theme built as a child theme of ChromeNews. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/blogchrome/screenshot.png",
-      "sha256": "64b4fdc8d4af9dc79b3c1331361d1fd4b042c713d40d6da6ab6cd77d6a559fa7"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/blogchrome/screenshot.png",
+      "sha256": "3d21ff1dfdca906654f69f515f6aba536a87e08b3c309f7fd211ae72357bb11d"
     },
     {
       "name": "BlogHash",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/bloghash",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "BlogHash is the perfect pick for bloggers seeking a lightweight, customizable theme that suits them just right. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/bloghash/screenshot.png",
-      "sha256": "b02c54d53db70a7944c67363e9ae190bff34e7abdbb299e59bac1c13243387e4"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/bloghash/screenshot.png",
+      "sha256": "9c8ce2d53a0faaa3b041ec743bac4362a44b2cbda6c990fe87c5e7db31fcbb52"
     },
     {
       "name": "Blogsy",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/blogsy",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Blogsy is a modern, high-performance WordPress theme designed for bloggers, news publishers, and content creators who demand style and… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/blogsy/screenshot.png",
-      "sha256": "3a231345b6418eb186d930dbcd0b46023c3060f1d1f85fa3044db896945fe5d0"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/blogsy/screenshot.png",
+      "sha256": "8c62900a9bf4f0a4af0f768349d8a8a14f8f6be46149f271205513759d1c1a69"
     },
     {
       "name": "Blogsy News",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/blogsy-news",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Blogsy News is a modern, high-performance WordPress theme designed for bloggers, news publishers, and content creators who demand style… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/blogsy-news/screenshot.png",
-      "sha256": "309a5aabffe1e3e43cb4999d1653b4a9c167493c00463ecaac96efb44e5d234b"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/blogsy-news/screenshot.png",
+      "sha256": "2e0582bfd0c85eb8777e1bc5da4b726523410bc483ea12ed92e566496041a085"
     },
     {
       "name": "Bluehost Blueprint",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/bluehost-blueprint",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Bluehost Blueprint is a block-based, multi-purpose, WordPress theme. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/bluehost-blueprint/screenshot.png",
-      "sha256": "937d38f818715241265f0ab1a95a794a49f3977dc2134000fb561edaa1e55260"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/bluehost-blueprint/screenshot.png",
+      "sha256": "67dc70fcba1653ddfc45eb4dc482f495c22802afa104cde005db111596d22f4e"
     },
     {
       "name": "Botiga",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/botiga",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Botiga is a fast, lightweight WooCommerce theme for building modern online stores and eCommerce websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/botiga/screenshot.png",
-      "sha256": "04e98cb4d9d73192d32cf1616185c85e8e0de1376171ff8a38cb91530bd47267"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/botiga/screenshot.png",
+      "sha256": "ff0430ce5e3a848f3cf4c84d44126d6b34522ff79b3610645e134c59582850a6"
     },
     {
       "name": "Colibri WP",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/colibri-wp",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "A beautiful, very customizable, multipurpose theme that you can use to create amazing websites through drag and drop. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/colibri-wp/screenshot.png",
-      "sha256": "e6fff038dd9d894c3c345bb5bd787c10a7c1ce159cb307392003bd4e41ea40a0"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/colibri-wp/screenshot.png",
+      "sha256": "5519f3c0ac4f87f0a1c171b9c95b17e7af3a06b535f98b8a1e331580b233f0bf"
     },
     {
       "name": "ColorMag",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/colormag",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "ColorMag is a fast, flexible WordPress theme built for news portals, online magazines, personal blogs, and publishing sites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/colormag/screenshot.png",
-      "sha256": "0aa5b0b6103f88665f0e254250f34d1db58e5461a4b192ee6adbb88b6500181d"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/colormag/screenshot.png",
+      "sha256": "16fabaae05e7e65960658d0be8e7aa5b00ab38d5e3c874a2af2fcd02bf16e836"
     },
     {
       "name": "Customify",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/customify",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Customify is fast, lightweight, responsive and super flexible multipurpose theme built with SEO, speed, and usability in mind. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/customify/screenshot.png",
-      "sha256": "c79c073ce333d3d685ee86e5cca3f376abb62479595d51a7cbed5df31822323f"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/customify/screenshot.png",
+      "sha256": "784636a8924712083c3d2363d850510c4bf184c0db248eef251c954e0806b89e"
     },
     {
       "name": "Customizr",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/customizr",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Customizr is a simple and fast WordPress theme designed to help you attract and engage more visitors. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/customizr/screenshot.png",
-      "sha256": "2d562a513cc0a916276a1c9fc9bfd97516e074af22e6bdbcd3bf0b300757939d"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/customizr/screenshot.png",
+      "sha256": "79e0ff06bfeba78613f19d07c05d65bc462ca4f21f9c5d613aa9c1b9a0f6caea"
     },
     {
       "name": "Denovr Lite",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/denovr-lite",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Denovr Lite is a Interior Remodeling WordPress Block Theme designed for businesses that want to build a modern and professional online… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/denovr-lite/screenshot.png",
-      "sha256": "38e8c4f145f9756a2dcc0da1d783e83329d655524121ed4ad871b765cadbddb4"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/denovr-lite/screenshot.png",
+      "sha256": "aad2a7d4aa9145aa78b11feb7e17d0281db7f4ee1c0fb980d706f1de2b5ba237"
     },
     {
       "name": "Elastra",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/elastra",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Elastra is block based theme with full support for the WordPress Block Editor includng custom colors, typography and full customisation… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/elastra/screenshot.png",
-      "sha256": "ebb6a51f45846b02fb860dc2852c07360d4cd4bf0e86e1bfb1aee1a9cd546a79"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/elastra/screenshot.png",
+      "sha256": "c42626cc46261faca7cc3359df8df6ae508824708e65b41628a92b830c8e5b29"
     },
     {
       "name": "Envo One",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/envo-one",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Envo One is a fast, clean, lightweight, customizable and modern-looking free responsive WooCommerce WordPress theme for e-commerce… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/envo-one/screenshot.png",
-      "sha256": "c4ad1f3852995c1e96aed76274a5cdff15845e4f77bdfa3b32f6cd3a6878bb9f"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/envo-one/screenshot.png",
+      "sha256": "a61f8dd47e3409c7ae720cc5fa8f99eae5f189ac7b40bdbb71afc559124b066a"
     },
     {
       "name": "Futurio Storefront",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/futurio-storefront",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "Futurio Storefront is a lightweight, fast and customizable free multi-purpose and WooCommerce WordPress theme, suitable for business,… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/futurio-storefront/screenshot.png",
-      "sha256": "62bbbc18e3b1b8070284afe27471f506e84e91bbcbb813727ec757374d447f15"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/futurio-storefront/screenshot.png",
+      "sha256": "9c1027d84ad854118d652040c0646f3864bf9f58b3340c0b5684a59fc5956b17"
     },
     {
       "name": "GeneratePress",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/generatepress",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "GeneratePress is a lightweight WordPress theme built with a focus on speed and usability. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/generatepress/screenshot.png",
-      "sha256": "cf6162121fc6e58f4096f00e6194c9cdf70a05a6e70e1852191c366d4b123b0c"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/generatepress/screenshot.png",
+      "sha256": "7ad764f8439d9c7099f526578335ffe69107cf6ad8b4350da6eaad9b8fa106b8"
     },
     {
       "name": "Hello Biz",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/hello-biz",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Hello Biz is a free, user-friendly Hybrid WordPress Theme that was crafted for seamless integration with the Elementor site builder and… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/hello-biz/screenshot.png",
-      "sha256": "30667405fa04a5ec988c889f849cafa0a416c8d7f6ab59530e96c611c121c158"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/hello-biz/screenshot.png",
+      "sha256": "2c2e305b7e6ea04ec74de983fd2db9dd973ff1a125c904909597109cbfe0d5f4"
     },
     {
       "name": "Hello Commerce",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/hello-commerce",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Sell smart from the start with Hello Commerce. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/hello-commerce/screenshot.png",
-      "sha256": "0e016756d82970f4a8d70d7a31231903095708ffdea030d84ec00458c0d03a72"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/hello-commerce/screenshot.png",
+      "sha256": "40ee65d93f7bd14678f031ff81a6534d696c0ed1b373cb5f1c3118c1dba25acf"
     },
     {
       "name": "Hello Elementor",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/hello-elementor",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Hello Elementor is a lightweight and minimalist WordPress theme that was built specifically to work seamlessly with the Elementor site… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/hello-elementor/screenshot.png",
-      "sha256": "dd869502ec8368923c9ae0bd3eebce81fb76753b3852b73f5daae19ffee4181c"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/hello-elementor/screenshot.png",
+      "sha256": "7fefc7938e63c882d147e1d761b224e0a77c4ae07ed483e68a83c5463b5c50a8"
     },
     {
       "name": "Hestia",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/hestia",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Hestia is a modern WordPress theme for professionals. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/hestia/screenshot.png",
-      "sha256": "41fa1c0e9f331bf30fff16ec3cbe67f2001c9da2aafce780042a7e51d14cffc2"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/hestia/screenshot.png",
+      "sha256": "2b74a4d52c2a021ea319774563f11e4ebe9cea599bd6bb87a06e00ead31f01fb"
     },
     {
       "name": "HybridMag",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/hybridmag",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "HybridMag is a modern and stylish WordPress theme for blogs, newspapers, and magazine websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/hybridmag/screenshot.png",
-      "sha256": "ba347693fff25bec4353020b199abbc0bd01b06c413063da01d883770faf2314"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/hybridmag/screenshot.png",
+      "sha256": "3792a16879b678cd60059825e87e613efbbb876662a49cbbb3ffe9dae08b383e"
     },
     {
       "name": "Inspiro",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/inspiro",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Inspiro is a fast, ultra-lightweight, and versatile WordPress theme for small businesses, creative professionals, photographers, and… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/inspiro/screenshot.png",
-      "sha256": "521fac9bc00a3de4f8bf8f79c203d3edaa9e4031b955da8e3b4ce09096132a71"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/inspiro/screenshot.png",
+      "sha256": "75b21c827e450513ced3ad512f6c778af14df64e5a8357b68284127c2885e948"
     },
     {
       "name": "Kadence",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/kadence",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "Kadence Theme is a lightweight yet full featured WordPress theme for creating beautiful fast loading and accessible websites, easier… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/kadence/screenshot.png",
-      "sha256": "98cc7422e3133f083eb96caec05402b049a776f411e453b6e12013e413936f87"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/kadence/screenshot.png",
+      "sha256": "dff0b2b8f8e4ef35cc42496746929e32d36b72beddcf4f7ab3c4f85fd3316bdc"
     },
     {
       "name": "Kitchio Lite",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/kitchio-lite",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Kitchio Lite is a Kitchen Cabinets and Furniture WordPress Block Theme designed for businesses that want a modern and professional… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/kitchio-lite/screenshot.png",
-      "sha256": "9385e824f24c256f71166fdf0bf3155ab46993444e741b3a7c4b251264c0fea4"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/kitchio-lite/screenshot.png",
+      "sha256": "de597e7dddad871f02d33e6d4162c1e07eb3e1de3ece7461f924bc4eed9430d7"
     },
     {
       "name": "Kubio",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/kubio",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "Kubio is an innovative, easily customizable, multi-purpose theme, focused on empowering users to build astonishing WordPress websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/kubio/screenshot.png",
-      "sha256": "e23dab92b476179f5c6d242505b79c97027cf82ccec1c12826e0cf05275c6540"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/kubio/screenshot.png",
+      "sha256": "95e73a02a16a4b4d6b92ca242c04803cb03ee276ffe8860495455fe7b8363a1c"
     },
     {
       "name": "Lightning",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/lightning",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Lightning is a very simple & easy to customize theme which is based on the Bootstrap. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/lightning/screenshot.png",
-      "sha256": "c4f4aeedf91a97a040d2a90d8a1d80ba1001619bee041ab33b9e371814fdf07e"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/lightning/screenshot.png",
+      "sha256": "c238ebef9af5987d6a4c37809fe03e236d5002f6b0ad78bc5bafca57e574610d"
     },
     {
       "name": "Miles WP",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/miles-wp",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "An innovative, easily customizable, multi-purpose theme, focused on empowering users to build astonishing WordPress websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/miles-wp/screenshot.png",
-      "sha256": "21e58d2a5489aad4300f6ea1b5f80c5d3e3ed347a23ece6007c9f3a529f11863"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/miles-wp/screenshot.png",
+      "sha256": "4c278b936be153aa633a2499146b62bc2b6b47049a937e4c8cc74c980b3c7685"
     },
     {
       "name": "Neve",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/neve",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Neve is a next-generation, ultra-fast WordPress theme designed for top performance, SEO, and Core Web Vitals. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/neve/screenshot.png",
-      "sha256": "bd300b3e52b0cbdb4832413c2a4a2a24888fbac0648003a642916e424f1476a4"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/neve/screenshot.png",
+      "sha256": "64c138ae74b0e476e37a6684931aed29aedefe957c8c6b52f0653d7e1f18e026"
     },
     {
       "name": "Neve FSE",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/neve-fse",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Neve FSE is an experimental sister theme of Neve, for the ones that are ready to go full speed on full site editing, without backwards… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/neve-fse/screenshot.png",
-      "sha256": "6fcef761cdb21583d8a414ff48188ac349032f18b20d37bb2a5b16307765c5f9"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/neve-fse/screenshot.png",
+      "sha256": "b750e37c33c482017dc84a0ce246b45a63459c93f72b89ae9d0ccb3098b8ff72"
     },
     {
       "name": "News Magazine X",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/news-magazine-x",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Easy to use Personal and Multi-Author Free WordPress Blog Magazine Theme - Suitable for WordPress Beginners and for Professionals as Well. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/news-magazine-x/screenshot.png",
-      "sha256": "310a56e01446b4adcd4643c0fc887574a6c6b7c585cf4ac774f75619888dd300"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/news-magazine-x/screenshot.png",
+      "sha256": "ee971e64bf59aabffe5ae585ff0949195e5faae8eb0dfe5ec216a52074dd8366"
     },
     {
       "name": "NewsBlogger",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/newsblogger",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "NewsBlogger is a dynamic and versatile child theme for the popular NewCrunch WordPress theme. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/newsblogger/screenshot.png",
-      "sha256": "78e49b33d54cfb4c1f5cdd298d6f673717d950a5683b06982336ef49aa526bec"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/newsblogger/screenshot.png",
+      "sha256": "42d02a56ee00b7f1d7ca24d58e95794994edc1f0076ad43036b91edcec9acabf"
     },
     {
       "name": "NewsCircuit",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/newscircuit",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "NewsCircuit is a powerful, feature-rich, and SEO-optimized WordPress theme designed for news, blogs, magazines, and online publishing… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/newscircuit/screenshot.png",
-      "sha256": "129a14f032db621db7e7ea48b0c4790b1ffacd03e3a18d709fc0d5296945d4fc"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/newscircuit/screenshot.png",
+      "sha256": "ec526a3a8ff490e8a32bd951e21775c5492459980a00c8f4e21fbee152b873f2"
     },
     {
       "name": "NewsGoal",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/newsgoal",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "NewsGoal is a fast, clean, modern-looking Best Responsive News Magazine WordPress theme. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/newsgoal/screenshot.png",
-      "sha256": "28ea35ae4da06d8dfc86148c9ea200078912ddc2f4107261a4ac6ad8d6be221c"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/newsgoal/screenshot.png",
+      "sha256": "0762a7a264e68ba6d9a072718dd643be6eb5b8df661d327933b316b00df71435"
     },
     {
       "name": "Newsup",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/newsup",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Newsup is a fast, clean, modern-looking Best Responsive News Magazine WordPress theme. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/newsup/screenshot.png",
-      "sha256": "e43e43fd94148283d4cd84b741d61b50c7cebfbee4c661c58ece5005a6914a14"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/newsup/screenshot.png",
+      "sha256": "3a991b7707d14a877ffe41fb2535fb13426a11757165323e567b2570426b0f54"
     },
     {
       "name": "Oceanly Green",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/oceanly-green",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Oceanly Green is a clean, fresh, and thoughtfully designed WordPress theme for blogging, news sites, educational platforms, and… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/oceanly-green/screenshot.png",
-      "sha256": "09d6490def217d14cadb95cc7af02e2adad233567fd3b11ce0e5d5825338b7d9"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/oceanly-green/screenshot.png",
+      "sha256": "ae63d013a9eb8b9d07415b0b2e8c1efe327b466b142839ff162eab5d4d95547a"
     },
     {
       "name": "Ona Architecture",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/ona-architecture",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Ona Architecture is a sleek and sophisticated WordPress theme designed specifically for architects, interior designers, design studios,… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/ona-architecture/screenshot.png",
-      "sha256": "ca4f1a47e31775ec7b6cd9046f15d1c203e58116ecae86b0d5a95c11ae15d4de"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/ona-architecture/screenshot.png",
+      "sha256": "03333a00066a4a06736185b070bd4aec68395b4495497a0392a5341ae5f3c293"
     },
     {
       "name": "Online Toys Shop",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/online-toys-shop",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Online Toys Shop Theme provides a structured storefront for displaying products, categories, offers, and essential shopping information. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/online-toys-shop/screenshot.png",
-      "sha256": "d73bd273342a953f7f0011a8ca4c53ec5f961b8a12191b4944e2e4ee131780e5"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/online-toys-shop/screenshot.png",
+      "sha256": "492e040acd6f4dae3f7357c45d93c5c2ed76114b74b2f5cdd4d3eab3739d80c9"
     },
     {
       "name": "Phlox",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/phlox",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Phlox is a modern, lightweight and customizable theme perfect for almost any type of website including, blog, portfolio, business,… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/phlox/screenshot.png",
-      "sha256": "a4ce48a89a7c62e331363baf75f8051c70200a037da2b17af3f30c95c0bab75b"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/phlox/screenshot.png",
+      "sha256": "22b8b3ad3e1e81abcb4271f3d6ad134cc4e1422f2a332354a58822aa13471563"
     },
     {
       "name": "Prespa",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/prespa",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Prespa is a next-generation multi-purpose WordPress theme. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/prespa/screenshot.png",
-      "sha256": "79c7ac259d2e123f78ed9a700135dfc3a48df65e3489ac3f2ed35f847d81ca81"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/prespa/screenshot.png",
+      "sha256": "8cdefd52e40bff6cacd4ca26a7cf93980888f8b89c4a5aa10d59b65d2b08077d"
     },
     {
       "name": "Prespa Wellness",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/prespa-wellness",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Prespa Wellness serves as a child theme of Prespa, inheriting all the features of Prespa. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/prespa-wellness/screenshot.png",
-      "sha256": "f116736a3cc483e944e9def7efe832326d1495107693b36a3dbe1aef5e544b21"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/prespa-wellness/screenshot.png",
+      "sha256": "55374027f34f6af47f4205e44a1e1ff5d51f713c3b7cf29f011e7b89672784a4"
     },
     {
       "name": "Purple",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/purple",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Purple is a WooCommerce starter theme made for the Site Editor and modern commerce. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/purple/screenshot.png",
-      "sha256": "c1543705c39e1dec0c30bdd9cf741f92f8c8925746b31aada66d6a2feb1302fd"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/purple/screenshot.png",
+      "sha256": "b380c8761db7ab2950772dbbb97b10579efbf548edda60f605b1a6ead0b8fe75"
     },
     {
       "name": "Raft",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/raft",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Raft is a lightweight, full-site-editing compatible (FSE) theme ready for your next website. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/raft/screenshot.png",
-      "sha256": "e97e9f68667a5147602d8b143baa870f3ec57bc7dd95180eeaafbdeba1129edb"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/raft/screenshot.png",
+      "sha256": "67b7029de2adc41ed23e858dafa45674a3d35cbfb952569b8e7cd9cb41794075"
     },
     {
       "name": "Rubik News",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/rubik-news",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Rubik News is a is a clean, modern, user-friendly, fast-loading, customizable, flexible, functional and fully responsive WordPress News,… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/rubik-news/screenshot.png",
-      "sha256": "2eae2389dfe529f1b36d3523b523c6eb47eeda814aa68010d4a1edace4bcffda"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/rubik-news/screenshot.png",
+      "sha256": "6370811d9c30b65e34a2bb44c8debae86ae455d80fed794f534f170a2e2b3e69"
     },
     {
       "name": "Rufous",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/rufous",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "Rufous is an innovative, easily customizable, multi-purpose theme, focused on empowering users to build astonishing WordPress websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/rufous/screenshot.png",
-      "sha256": "447ebbcb53419539cd26a5a065e7f4fedbd05bffeb5b6268b4ffb203a5eb3f46"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/rufous/screenshot.png",
+      "sha256": "ac33e0dbc643089bfa5f507abd23e756623831d574e541e7d8dfd60ac40a67d6"
     },
     {
       "name": "Savara Lite",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/savara-lite",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Savara Lite is a Luxury Resort Booking WordPress Block Theme designed for hospitality businesses that want to create an elegant and… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/savara-lite/screenshot.png",
-      "sha256": "9becf5ba006854934e4d0e59835467b713209b39a542345eddab56e0850392c9"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/savara-lite/screenshot.png",
+      "sha256": "3e77b9a994f196e32016973427bbe01aa36c99cdea1ea81fd8bb252216d13b6a"
     },
     {
       "name": "Silverstorm",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/silverstorm",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "A beautiful, very customizable, multipurpose theme that you can use to create amazing websites through drag and drop. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/silverstorm/screenshot.png",
-      "sha256": "d010eb697bd82774b4500039194adaca08fcfd4b551443e5c5f05777829be647"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/silverstorm/screenshot.png",
+      "sha256": "04edb64762d19b5fe6b2fdb18c332369505781ffbbc2f5c0bf2a0c7d530b53fe"
     },
     {
       "name": "Sinatra",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/sinatra",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Sinatra is a lightweight and highly customizable multi-purpose theme that makes it easy for anyone to create their perfect website. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/sinatra/screenshot.png",
-      "sha256": "6fa6e307e660aebb6193cfdd82369bc144a25cb432bc14dc345aa22ed7e93b6a"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/sinatra/screenshot.png",
+      "sha256": "d046c72bb2707ae5be5fbb72002dbedc6cd2714ade73830edfab7420b9c8d558"
     },
     {
       "name": "Solace",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/solace",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Solace is a minimalist, and lightweight WordPress theme for creating beautiful, fast-loading, and accessible websites, as well as a new… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/solace/screenshot.png",
-      "sha256": "d504348cff85d7d1cd8533af99fd44c922ae8513811b5afa985c45cf4cb6300d"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/solace/screenshot.png",
+      "sha256": "b559cdb309d53a85b3701acaa4dd7b6d7d0a29b658c57f8ba0966c5b71691243"
     },
     {
       "name": "Spacious",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/spacious",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Spacious is an incredible free business WordPress theme that fits small to medium businesses. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/spacious/screenshot.png",
-      "sha256": "800929a6898c594d89acb38822125ae5e10fa1d3dddd3fb2ffa6e67e44824fa0"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/spacious/screenshot.png",
+      "sha256": "0f568f4690d6d7d475b89cd94ae3e0e763305787dd8818cf3e6dcf6f2d873dff"
     },
     {
       "name": "Storefront",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/storefront",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Storefront is the perfect theme for your next WooCommerce project. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/storefront/screenshot.png",
-      "sha256": "fa538ecc7ce2fac37b2ea081d42b6184dba43d13a68862482485c4521426d5d0"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/storefront/screenshot.png",
+      "sha256": "371a25d1ade7c40e642cc9a19cf76a2f3a351025abfadd501a9ce2e5ed8f9659"
     },
     {
       "name": "Sydney",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/sydney",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Sydney is a fast, highly customizable WordPress theme for businesses, freelancers, and creative portfolios that want a professional… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/sydney/screenshot.png",
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/sydney/screenshot.png",
       "sha256": "2a10bec3c50b4d1715d82fe116a9c22bb87706cfa48e996551aa0e5cba291ac9"
     },
     {
       "name": "The Coffee Shop",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/the-coffee-shop",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "The Coffee Shop is an awesome free WordPress theme for coffee shops, restaurants and cafés - it also works great if you're a barista,… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/the-coffee-shop/screenshot.png",
-      "sha256": "9cd6fcd55ddf396df8c96ae95b93ed571ed99a5faa14af961652f1bbb62d228f"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/the-coffee-shop/screenshot.png",
+      "sha256": "94c208e5ce1b251cf60821c9506fba87db87ba267095e6b9cf8b2e4845c250de"
     },
     {
       "name": "Therapy Coach",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/therapy-coach",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Therapy Coach is a calm, modern WordPress block theme built for therapists, counselors, and life coaches. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/therapy-coach/screenshot.png",
-      "sha256": "cbee796ce51816597c93809ee2192fa121eeac8b3a467d330ee941b80caa9088"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/therapy-coach/screenshot.png",
+      "sha256": "8c67c96a7c0609c7488ebd3cc791438a1af79fefb5ad77d3c2d6840e4e0860df"
     },
     {
       "name": "Tourze Lite",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/tourze-lite",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Tourze Lite is a Travel Agency and Tour Booking WordPress Block Theme designed for businesses that want to create a modern and engaging… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/tourze-lite/screenshot.png",
-      "sha256": "5f157c46f2e7ce787c60788306a72fcfe62a86a855835bb39a67e3c7f15ef9ce"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/tourze-lite/screenshot.png",
+      "sha256": "a908c2bf27b997f3947774d88a27a80e8ab164a020ae5f83614324fbd8d212a4"
     },
     {
       "name": "Twenty Eleven",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentyeleven",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "The 2011 theme for WordPress is sophisticated, lightweight, and adaptable. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentyeleven/screenshot.png",
-      "sha256": "fdd3310eef68cbb14e352e822fcfcfd6d4b0477bcb34416de2ac26125662c71f"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentyeleven/screenshot.png",
+      "sha256": "3fbfa420efea5b78bfeabd9cfa15b6e5f9ef76767bac724b3bbe42821daa69ea"
     },
     {
       "name": "Twenty Fifteen",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentyfifteen",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Our 2015 default theme is clean, blog-focused, and designed for clarity. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentyfifteen/screenshot.png",
-      "sha256": "7878e0f4767f1df0fb8de403e3aa4248b1f2b5c4b51dabda546eb2441b57ce5c"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentyfifteen/screenshot.png",
+      "sha256": "730ef37219aae61753780ebc79d002d99dd76374a0712701937c3b471fc0bc8a"
     },
     {
       "name": "Twenty Fourteen",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentyfourteen",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "In 2014, our default theme lets you create a responsive magazine website with a sleek, modern design. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentyfourteen/screenshot.png",
-      "sha256": "7b1030052ad69284f463d24978bee40a914b094b01e7a5cc7cf7ce3c0a1a37e1"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentyfourteen/screenshot.png",
+      "sha256": "18f4735316f7a2e73e8e0cdd6ca76be202ff661a09da02e6f217757e1e9352b5"
     },
     {
       "name": "Twenty Seventeen",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentyseventeen",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Twenty Seventeen brings your site to life with header video and immersive featured images. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentyseventeen/screenshot.png",
-      "sha256": "e85686e1129b305351d28faad20787a8f29407e8512f06ce0a17025e16cff9c3"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentyseventeen/screenshot.png",
+      "sha256": "423e03c820597d834869a5e22f34806563aded5f90ccca293548b0caadb32f51"
     },
     {
       "name": "Twenty Sixteen",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentysixteen",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Twenty Sixteen is a modernized take on an ever-popular WordPress layout — the horizontal masthead with an optional right sidebar that… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentysixteen/screenshot.png",
-      "sha256": "32972707c2247b8f88e4718b76445a64b3421b53f397d4460060b0c39327b706"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentysixteen/screenshot.png",
+      "sha256": "537e21c740eb1c4d881d70fa32e91332e2db73322a1ae986082c3eca527c4327"
     },
     {
       "name": "Twenty Ten",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentyten",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "The 2010 theme for WordPress is stylish, customizable, simple, and readable -- make it yours with a custom menu, header image, and… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentyten/screenshot.png",
-      "sha256": "422df6b502271bb0ad85ebeb3a5c014674c471cdc3c0b715c5153181f2b05c09"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentyten/screenshot.png",
+      "sha256": "26ace064ebd02e24daa787b971e6fb846f3be03edf4e879a29ff2acc61d026b4"
     },
     {
       "name": "Twenty Thirteen",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentythirteen",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "The 2013 theme for WordPress takes us back to the blog, featuring a full range of post formats, each displayed beautifully in their own… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentythirteen/screenshot.png",
-      "sha256": "bda2d748fcac327aa169f7810529d78a2ec416c977be74c664d42c7fc5dbbe13"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentythirteen/screenshot.png",
+      "sha256": "8a67896549b40cb665627a692d55a2ec212f4c7b8c8ac646803d3c79807146ad"
     },
     {
       "name": "Twenty Twelve",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentytwelve",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "The 2012 theme for WordPress is a fully responsive theme that looks great on any device. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentytwelve/screenshot.png",
-      "sha256": "c45104db2ede076b156d398d38105f789ec6459576814633de0a1fdba6a08b11"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentytwelve/screenshot.png",
+      "sha256": "25b04d5df1d231911fc4991c0f1049001814ca1dfc454496768d3cae5fab98a0"
     },
     {
       "name": "Twenty Twenty-Five",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentytwentyfive",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Twenty Twenty-Five emphasizes simplicity and adaptability. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentytwentyfive/screenshot.png",
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentytwentyfive/screenshot.png",
       "sha256": "e37ae84e1e1fea38b8abaab40fa3e3eccaaf81a393cbb86d095497de5b1db71c"
     },
     {
       "name": "Twenty Twenty-Four",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentytwentyfour",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Twenty Twenty-Four is designed to be flexible, versatile and applicable to any website. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentytwentyfour/screenshot.png",
-      "sha256": "dec3a34884121549fbafef32d0ced72de56afc55da747cdce245429729381022"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentytwentyfour/screenshot.png",
+      "sha256": "78e0bc4641a2c4c23b820816f08415ef4167604ee239fa81267cf1c8a59900fd"
     },
     {
       "name": "Twenty Twenty-Three",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentytwentythree",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Twenty Twenty-Three is designed to take advantage of the new design tools introduced in WordPress 6.1. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentytwentythree/screenshot.png",
-      "sha256": "a6c23ab6e839416d1eb9f53b6eba76cb1a3b37e764578435e9770881dbb2aa3d"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentytwentythree/screenshot.png",
+      "sha256": "892e79601da7dda1fa435e28904313bd67ad598447874eba8c0244825e29085e"
     },
     {
       "name": "Twenty Twenty-Two",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/twentytwentytwo",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Built on a solidly designed foundation, Twenty Twenty-Two embraces the idea that everyone deserves a truly unique website. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/twentytwentytwo/screenshot.png",
-      "sha256": "921bfa2e4c793d4f84a57ddec58f71d668e96c7a494da2781ed873274e404fac"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/twentytwentytwo/screenshot.png",
+      "sha256": "6b9f7ba682e6796b3f9b64e4b45fa3acf979f212abe2d836bb14a5afc2777abe"
     },
     {
       "name": "Unibiz",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/unibiz",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Unibiz is a Multipurpose Business WordPress Block Theme built for professionals and businesses that want to create a modern,… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/unibiz/screenshot.png",
-      "sha256": "b03fda287a2ef5803c9f535f70f564c4f893e5a39c253956f2e8d96d8f6312f7"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/unibiz/screenshot.png",
+      "sha256": "c4daba64c2e4223d3e583b587e123c05382181032bd8576dd5a4893d2486fdef"
     },
     {
       "name": "Vantage",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/vantage",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Vantage is a flexible multipurpose theme. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/vantage/screenshot.png",
-      "sha256": "95fb4f45ae6c42d9bcc0170fc900cd0d7dd7219ffd6dcc00b986709de6abd0d1"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/vantage/screenshot.png",
+      "sha256": "cabe8fee3f69da2aa186c29d86ada04be6ee84735b92b47c6b6a481c3c1c9020"
     },
     {
       "name": "Variations",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/variations",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-2.0-or-later",
       "blurb": "Variations is a block theme and hopefully the last theme you will even have to install. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/variations/screenshot.png",
-      "sha256": "4c1e9166e9b4606b5c659111dc43922391b34949c31bc337a7849abfbbb3fc42"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/variations/screenshot.png",
+      "sha256": "b9a2d0ef7112fed5310642d6492ad3b47b8bef4d200ad804731dea240b525817"
     },
     {
       "name": "Vertice",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/vertice",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-only",
       "blurb": "Vertice is an innovative, easily customizable, multi-purpose theme, focused on empowering users to build astonishing WordPress websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/vertice/screenshot.png",
-      "sha256": "ec6c995913e87c894cffcdd52f909bd21e7cb1c6c502fd85cf76382bb64610a9"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/vertice/screenshot.png",
+      "sha256": "7a07cb4d3782a22a9745ed4eed6763d11e22b033ddf0d0de3d25d7e88d5d804f"
     },
     {
       "name": "Webrand Lite",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/webrand-lite",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Webrand Lite is a Brand Agency and Creative Portfolio WordPress Block Theme designed for agencies and professionals who want to present… (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/webrand-lite/screenshot.png",
-      "sha256": "bdb620bbec54b1e2f10a783ace468e583a401403d4d128ea0685fc343a26fb69"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/webrand-lite/screenshot.png",
+      "sha256": "09e81c82476de2fa4b8e3d226c8886efa8309413244f0db4c4bd886dfacdc638"
     },
     {
       "name": "Zakra",
       "repo": "tejaswigowda/blog-webCLI-themes/wp/zakra",
-      "ref": "v1.2.0",
+      "ref": "v1.3.0",
       "licence": "GPL-3.0-or-later",
       "blurb": "Zakra is a powerful and versatile multipurpose theme that makes it easy to create beautiful and professional websites. (WordPress theme.)",
-      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.2.0/wp/zakra/screenshot.png",
-      "sha256": "250cf5a8a0ac3673c276157e28433bea00f968edc3ad34f569cd67eb6183b5f4"
+      "screenshot": "https://cdn.jsdelivr.net/gh/tejaswigowda/blog-webCLI-themes@v1.3.0/wp/zakra/screenshot.png",
+      "sha256": "97cbd8c3e9f41852b2d7b5b559b9e08eae2e6c8c08fc4b65b49aef83c3791c63"
     }
   ],
   "extensions": [

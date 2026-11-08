@@ -1010,7 +1010,10 @@ node cli/blog.js theme import twentytwentyone ./my-theme-repo
 A classic theme is not just `style.css`: PHP templates do the structure, and many themes keep their real
 styling in other stylesheets (`assets/css/…`). What transfers is the CSS (`style.css` **and the theme's other front-end
 stylesheets**, up to eight files and 450,000 characters, with the images and fonts they use, within a size budget) and
-the markup contract. A stylesheet is left out, and named with its reason under `dropped.css`, when it is right-to-left,
+the markup contract. The stylesheets are the ones the theme really enqueues, in its order, and the CSS its PHP generates
+(the Customizer's colours and fonts as custom properties, a block theme's global styles) is kept as `wp-inline.css`: both are
+read, as text, from the theme's demo page on wordpress.org (`wp-themes.com/<slug>/`); without that page the stylesheets are
+chosen by name. A stylesheet is left out, and named with its reason under `dropped.css`, when it is right-to-left,
 for the editor, admin or customizer, for another plugin, a vendor library, or fails the rules `style.css` must meet (so one
 bad file never costs the theme); the PHP templates, `functions.php` and JavaScript are **not converted** and
 the manifest lists them under `dropped`, so the conversion is honest about being partial.

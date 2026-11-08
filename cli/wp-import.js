@@ -33,6 +33,71 @@ export function parseStyleHeader(css) {
 
 const refuse = (code, m) => new Refusal(code, m);
 
+// ---- the theme as WordPress itself draws it ----
+// wp-themes.com serves every directory theme with demo content. Its page says exactly which stylesheets the theme enqueues (and in
+// which order), and carries the CSS the theme and WordPress generate in PHP (the Customizer's colours and fonts as custom properties,
+// the block theme's global styles): the part of a theme's look that is in no .css file of its archive. Both are read from that one
+// page, as text; nothing in it is run.
+const DEMO = (slug) => `https://wp-themes.com/${slug}/`;
+const INLINE_SKIP = /^(wp-|core-block-supports|classic-theme-styles|woocommerce|elementor|jetpack|admin-bar|dashicons|global-styles-css-custom-properties)/i;
+const INLINE_MAX = 150_000;
+
+// -> { links: [path in the theme, in page order], inline: [{ id, css }] }
+export function parseDemo(html, slug) {
+  const prefix = `https://wp-themes.com/wp-content/themes/${slug}/`;
+  const links = [];
+  for (const m of String(html).matchAll(/<link\b[^>]*>/gi)) {
+    const tag = m[0];
+    if (!/rel=['"]stylesheet['"]/i.test(tag)) continue;
+    const href = /href=['"]([^'"]+)['"]/i.exec(tag);
+    if (!href) continue;
+    const u = href[1].replace(/&#038;|&amp;/g, '&');
+    if (!u.startsWith(prefix)) continue;
+    const rel = decodeURIComponent(u.slice(prefix.length).split(/[?#]/)[0]);
+    if (/\.css$/i.test(rel) && !links.includes(rel)) links.push(rel);
+  }
+  const inline = [];
+  for (const m of String(html).matchAll(/<style\b[^>]*\bid=['"]([^'"]+)['"][^>]*>([\s\S]*?)<\/style>/gi)) {
+    const id = m[1].replace(/-inline-css$/, '');
+    if ((id === 'global-styles' || !INLINE_SKIP.test(id)) && m[2].trim()) inline.push({ id, css: m[2] });
+  }
+  return { links, inline };
+}
+
+// Inline CSS from the demo page -> one stylesheet the app's rules accept. What points outside the theme (web fonts, uploads) is removed;
+// a block that still fails is left out whole and named.
+function buildInlineCss(slug, blocks, zip, haveAssets, budget) {
+  const pin = { repo: 'upstream/ingest', ref: 'v0.0.0' };
+  const own = new RegExp(`https?://wp-themes\\.com/wp-content/themes/${slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`, 'g');
+  let css = '';
+  const skipped = [];
+  const assets = [];
+  for (const b of blocks) {
+    let c = b.css.replace(own, '');
+    c = c.replace(/@import\b[^;]*;/gi, '').replace(/@font-face\s*\{[^{}]*url\(\s*['"]?(?:https?:)?\/\/[^{}]*\}/gi, '').replace(/[^;{}]*url\(\s*['"]?(?:https?:)?\/\/[^)]*\)[^;}]*/gi, '');
+    const refs = new Set();
+    for (const t of urlTokens(stripComments(c))) {
+      const a = t.arg.trim();
+      if (a.startsWith('data:') || a.startsWith('#')) continue;
+      const r = resolvePath('wp-inline.css', a.split(/[?#]/)[0]);
+      if (r && zip.has(r)) refs.add(r);
+    }
+    if (css.length + c.length > Math.min(INLINE_MAX, budget)) {
+      skipped.push({ rel: `inline ${b.id}`, why: 'over the size budget' });
+      continue;
+    }
+    try {
+      processThemeCss(c, { file: 'wp-inline.css', assets: new Set([...haveAssets, ...refs]), pin });
+    } catch (e) {
+      skipped.push({ rel: `inline ${b.id}`, why: String(e.detail || e.message).replace(/^wp-inline\.css:?\s*/, '').slice(0, 110) });
+      continue;
+    }
+    css += `/* ${b.id} (from the theme's demo page on wordpress.org) */\n${c.trim()}\n`;
+    for (const r of refs) if (!assets.includes(r)) assets.push(r);
+  }
+  return { css, assets, skipped };
+}
+
 // ---- a theme's other stylesheets ----
 // Many themes (Astra, GeneratePress, Kadence, Neve, …) keep style.css as little more than a header and put the real styling in
 // assets/css/*.css. The front-end ones are taken too, as long as each passes the same rules style.css does; one that does not is left out
@@ -48,23 +113,29 @@ const ASSET_MAX = 60; // every one of them is fetched when the theme is chosen o
 const ASSET_BYTES = 1_500_000;
 
 // -> { taken: [{ rel, assets: [paths] }], skipped: [{ rel, why }] }
-function pickExtraCss(zip, styleLength, styleAssets) {
+function pickExtraCss(zip, styleLength, styleAssets, ordered = null, maxFiles = EXTRA_MAX_FILES) {
   const all = [...zip.keys()].filter((n) => /\.css$/i.test(n) && n !== 'style.css');
   const byBase = new Map();
-  for (const n of all) {
+  for (const n of ordered ? [] : all) {
     if (EXTRA_SKIP_DIR.test(n) || EXTRA_SKIP_NAME.test(n)) continue;
     const base = n.replace(/\.min\.css$/i, '.css');
     if (!byBase.has(base) || /\.min\.css$/i.test(n)) byBase.set(base, n); // the minified copy is the smaller one
   }
   const rank = (n) => (MAIN_NAME.test(n) ? 100 : 0) + (/(^|\/)(assets\/)?(css|dist|styles?)\//i.test(n) ? 50 : 0);
-  const candidates = [...byBase.values()].sort((a, b) => rank(b) - rank(a) || zip.get(b).length - zip.get(a).length || (a < b ? -1 : 1));
+  const fromDemo = ordered ? ordered.filter((n) => n === 'style.css' || zip.has(n)) : null; // the page's own order, style.css marking where it sat
+  const candidates = fromDemo || [...byBase.values()].sort((a, b) => rank(b) - rank(a) || zip.get(b).length - zip.get(a).length || (a < b ? -1 : 1));
   const taken = [];
   const skipped = [];
   const haveAssets = new Set(styleAssets);
   let chars = styleLength;
   let bytes = styleAssets.reduce((n, r) => n + zip.get(r).length, 0);
+  let afterStyle = false;
   for (const rel of candidates) {
-    if (taken.length >= EXTRA_MAX_FILES) break;
+    if (rel === 'style.css') {
+      afterStyle = true;
+      continue;
+    }
+    if (taken.length >= maxFiles) break;
     let css;
     try {
       css = new TextDecoder('utf-8', { fatal: true }).decode(zip.get(rel));
@@ -99,16 +170,16 @@ function pickExtraCss(zip, styleLength, styleAssets) {
       skipped.push({ rel, why: String(e.detail || e.message).replace(new RegExp(`^${rel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:?\\s*`), '').slice(0, 110) });
       continue;
     }
-    taken.push({ rel, assets: [...refs] });
+    taken.push({ rel, assets: [...refs], after: afterStyle });
     newAssets.forEach((r) => haveAssets.add(r));
     chars += css.length;
     bytes += addBytes;
   }
-  return { taken, skipped };
+  return { taken, skipped, chars };
 }
 
 // info: the wordpress.org API record; zip: Map path -> bytes (paths relative to the theme folder).
-export function convertWordPressTheme({ slug, info, zip }) {
+export function convertWordPressTheme({ slug, info, zip, demo = null }) {
   if (!info || info.error || info.slug !== slug || !/^https:\/\/downloads\.wordpress\.org\//.test(info.download_link || '') || !/^https:\/\/wordpress\.org\/themes\//.test(info.homepage || '')) {
     throw refuse('not-in-directory', `"${slug}" is not a theme in the wordpress.org directory. Only directory themes are ingested: a listing there requires GPL-compatible code and assets.`);
   }
@@ -148,7 +219,22 @@ export function convertWordPressTheme({ slug, info, zip }) {
     }
   }
   if (missing.length) throw refuse('bad-theme', `${slug}: style.css refers to files that are not in the theme: ${[...new Set(missing)].slice(0, 5).join(', ')}`);
-  const extra = pickExtraCss(zip, style.length, assets);
+  // with the demo page, the stylesheets are the ones the theme really enqueues, in its order; without it, a best guess by name
+  const demoOrder = demo && demo.links && demo.links.length ? demo.links : null;
+  const wantInline = !!(demo && demo.inline && demo.inline.length);
+  const extra = pickExtraCss(zip, style.length, assets, demoOrder, wantInline ? EXTRA_MAX_FILES - 1 : EXTRA_MAX_FILES);
+  let inline = { css: '', assets: [], skipped: [] };
+  if (wantInline) {
+    inline = buildInlineCss(slug, demo.inline, zip, new Set([...assets, ...extra.taken.flatMap((x) => x.assets)]), CSS_BUDGET - extra.chars);
+    extra.skipped.push(...inline.skipped);
+    if (inline.css) {
+      files['wp-inline.css'] = enc.encode(inline.css);
+      for (const a of inline.assets) if (!assets.includes(a)) {
+        assets.push(a);
+        files[a] = zip.get(a);
+      }
+    }
+  }
   for (const { rel, assets: used } of extra.taken) {
     files[rel] = zip.get(rel);
     for (const a of used) if (!assets.includes(a)) {
@@ -196,6 +282,7 @@ export function convertWordPressTheme({ slug, info, zip }) {
     else if (/\.css$/i.test(name)) dropped.css.push(name);
     else if (!/^(screenshot\.(png|jpe?g)|readme\.txt|license\.txt|licen[cs]e(\.md|\.txt)?|changelog\.(txt|md)|languages\/.*|\.[^/]+)$/i.test(name)) dropped.other.push(name);
   }
+  for (const x of extra.skipped) if (x.rel.startsWith('inline ')) dropped.css.push(`${x.rel} (${x.why})`);
   if (droppedTokens.length) dropped.tokens = droppedTokens;
   for (const k of Object.keys(dropped)) {
     if (!dropped[k].length) delete dropped[k];
@@ -211,7 +298,7 @@ export function convertWordPressTheme({ slug, info, zip }) {
     attribution: `${info.name || slug} ${info.version} by ${author} (${header['theme uri'] || info.homepage}); licence ${spdx}${header['license uri'] ? ` (${header['license uri']})` : ''}. Ingested from wordpress.org; PHP templates and scripts were not converted.`.slice(0, 600),
     description: (header.description || '').slice(0, 300) || undefined,
     class_contract: 'wordpress-classic',
-    css: [...extra.taken.map((x) => x.rel), 'style.css'], // the theme's own base styles first, style.css (its overrides) last
+    css: [...extra.taken.filter((x) => !x.after).map((x) => x.rel), 'style.css', ...extra.taken.filter((x) => x.after).map((x) => x.rel), ...(inline.css ? ['wp-inline.css'] : [])], // the theme's own order; what its PHP generates last
     ...(assets.length ? { assets: assets.sort() } : {}),
     ...(Object.keys(tokens).length ? { tokens } : {}),
     ...(Object.keys(dropped).length ? { dropped } : {}),
@@ -240,7 +327,16 @@ export async function importWordPressTheme(slug, outDir, { fetchImpl = (...a) =>
   // the archive has one top-level folder, the slug
   const prefix = `${slug}/`;
   const zip = new Map([...all].filter(([n]) => n.startsWith(prefix)).map(([n, b]) => [n.slice(prefix.length), b]));
-  const { files, manifest, warnings } = convertWordPressTheme({ slug, info, zip });
+  // the theme as wordpress.org draws it: which stylesheets it enqueues, and the CSS its PHP generates (best effort; absent, the archive alone is used)
+  let demo = null;
+  try {
+    const res = await fetchImpl(DEMO(slug));
+    if (res.ok) demo = parseDemo(await res.text(), slug);
+  } catch {
+    /* no demo page: the archive alone */
+  }
+  const { files, manifest, warnings } = convertWordPressTheme({ slug, info, zip, demo });
+  if (!demo) warnings.push('the demo page on wordpress.org could not be read, so the stylesheets were chosen by name and the CSS the theme generates in PHP is not included');
 
   try {
     if ((await fs.readdir(outDir)).length) throw new Error(`${outDir} is not empty; choose a new folder`);
@@ -255,7 +351,7 @@ export async function importWordPressTheme(slug, outDir, { fetchImpl = (...a) =>
   const zipHash = crypto.createHash('sha256').update(zipBytes).digest('hex');
   log(`imported ${manifest.name} ${manifest.version} (${manifest.licence}) into ${outDir}`);
   log(`  source   ${manifest.source}\n  archive  ${info.download_link}\n  sha256   ${zipHash}`);
-  log(`  taken    style.css${manifest.assets ? `, ${manifest.assets.length} asset file(s)` : ''}${manifest.tokens ? ', design tokens' : ''}, LICENSE`);
+  log(`  taken    ${manifest.css.length} stylesheet(s)${manifest.assets ? `, ${manifest.assets.length} asset file(s)` : ''}${manifest.tokens ? ', design tokens' : ''}, LICENSE`);
   const d = manifest.dropped || {};
   log(`  dropped  ${Object.entries(d).map(([k, v]) => `${v.length} ${k}`).join(', ') || 'nothing'} (recorded in theme.json)`);
   for (const w of warnings) log(`  note     ${w}`);
