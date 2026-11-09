@@ -7,7 +7,36 @@ import { buildSite } from '../lib/blog.js';
 import { EXAMPLE_BLOG } from '../lib/sample.js';
 
 export const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const WIDE = process.env.WIDE_IMAGE || '/tmp/wide.png';
+import zlib from 'node:zlib';
+import os from 'node:os';
+export const WIDE = process.env.WIDE_IMAGE || path.join(os.tmpdir(), 'blog-webcli-wide.png');
+
+// the picture a post's remote images are swapped for, wider than any column (2400x600): written once, so the sweep needs nothing else on disk
+export async function ensureWide() {
+  try { await fs.access(WIDE); return; } catch { /* make it */ }
+  const w = 2400, h = 600;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3)]);
+  for (let x = 0; x < w; x++) { row[1 + x * 3] = 200; row[2 + x * 3] = 120; row[3 + x * 3] = 40; }
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (b) => { let c = 0xffffffff; for (const x of b) c = crcTable[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (t, d) => { const len = Buffer.alloc(4); len.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  await fs.writeFile(WIDE, Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]));
+}
+
+// Themes whose verdict got worse than the baseline's. A verdict has a rank: usable and usable (soft) are both fine, degraded is worse,
+// unportable? worse still, an error the worst. It is the change that fails, not the count: a theme that was already degraded is not news.
+export const VERDICT_RANK = Object.freeze({ usable: 0, 'usable (soft)': 0, degraded: 1, 'unportable?': 2, error: 3 });
+export function regressions(baseline, verdicts) {
+  const out = [];
+  for (const [slug, now] of Object.entries(verdicts)) {
+    const before = baseline[slug];
+    if (before === undefined) continue; // a theme added since: no baseline to regress from
+    if ((VERDICT_RANK[now] ?? 3) > (VERDICT_RANK[before] ?? 3)) out.push({ slug, before, now });
+  }
+  return out;
+}
 export const SIZES = { desktop: { width: 1280, height: 900, mobile: false }, phone: { width: 390, height: 844, mobile: true } };
 
 export const readDir = async (dir) => {
@@ -19,6 +48,7 @@ export const readDir = async (dir) => {
 
 // The corpus: the example posts, the golden and corpus files, the layout stress posts, and a standalone page; whatever the build refuses is left out.
 export async function loadCorpus(repo = REPO) {
+  await ensureWide();
   const ex = JSON.parse(await fs.readFile(path.join(repo, 'examples/blog/blog.json'), 'utf8'));
   const lock = JSON.parse(await fs.readFile(path.join(repo, 'examples/blog/assets.lock.json'), 'utf8'));
   const blog0 = { ...JSON.parse(JSON.stringify(EXAMPLE_BLOG)), assets: ex.assets, video: ex.video, pagination: { size: 3 } };

@@ -22,10 +22,12 @@ import { EX, localRunner, readDirFiles, stripData } from './helpers.js';
 const run = promisify(execFile);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const THEMES = process.env.BLOG_WEBCLI_THEMES || path.join(root, '..', 'blog-webCLI-themes');
+const CORPUS = process.env.BLOG_WEBCLI_CORPUS || path.join(root, '..', 'blog-webCLI-corpus');
 const EXTS = process.env.BLOG_WEBCLI_EXTENSIONS || path.join(root, '..', 'blog-webCLI-extensions');
 const THEMES_REPO = 'tejaswigowda/blog-webCLI-themes';
 const EXTS_REPO = 'tejaswigowda/blog-webCLI-extensions';
 const skipThemes = existsSync(path.join(THEMES, 'essay')) ? false : 'blog-webCLI-themes is not checked out next to this repository';
+const skipCorpus = existsSync(path.join(CORPUS, 'wp', 'twentytwentyone')) ? false : 'blog-webCLI-corpus is not checked out next to this repository';
 const skipExts = existsSync(path.join(EXTS, 'heading-anchors')) ? false : 'blog-webCLI-extensions is not checked out next to this repository';
 const dec = new TextDecoder();
 
@@ -43,8 +45,8 @@ async function folders(dir, file) {
   return out.sort();
 }
 
-async function pinTheme(folder, ref = 'v1.0.0') {
-  const files = await readDirFiles(path.join(THEMES, folder));
+async function pinTheme(folder, ref = 'v1.0.0', base = THEMES) {
+  const files = await readDirFiles(path.join(base, folder));
   const manifest = JSON.parse(dec.decode(files['theme.json']));
   const pin = pinFor(`${THEMES_REPO}/${folder}`, ref, manifest, themeDigest(files, themeFilePaths(manifest)));
   return { files, manifest, pin, theme: loadTheme(pin, files) };
@@ -101,7 +103,7 @@ for (const [what, dir, file, listFile, key, repo, skip] of [
     const list = JSON.parse(await fs.readFile(path.join(root, 'app', 'registry-snapshot.json'), 'utf8'));
     const entries = list[key];
     const found = await folders(dir, file);
-    assert.ok(found.length >= (what === 'themes' ? 5 : 6), `${found.length} ${what} found`);
+    assert.ok(found.length >= (what === 'themes' ? 4 : 6), `${found.length} ${what} found`);
     assert.deepEqual(entries.map((e) => e.repo).sort(), found.map((f) => `${repo}/${f}`).sort(), `every ${what.slice(0, -1)} folder is listed, and nothing else`);
     const tags = (await run('git', ['-C', dir, 'tag', '--list'])).stdout.split('\n').filter(Boolean);
     for (const e of entries) {
@@ -126,17 +128,17 @@ for (const [what, dir, file, listFile, key, repo, skip] of [
 }
 
 // ---------- themes ----------
-const CLASS_ALLOWED_EXTRA = new Set(['logo', 'unresolved']); // only with a logo / an unresolved asset
+const CLASS_ALLOWED_EXTRA = new Set(['logo', 'unresolved', 'home', 'home-after']); // only with a logo / an unresolved asset / a home page
 
 test('built in themes: each loads under the app rules, builds a real blog, and styles only markup that exists', { skip: skipThemes }, async () => {
   const found = await folders(THEMES, 'theme.json');
   for (const folder of found) {
     const { manifest, pin, theme } = await pinTheme(folder);
     const label = `${folder} (${manifest.name})`;
-    assert.ok(['blog-webcli-v1', 'wordpress-classic'].includes(manifest.class_contract), label);
-    assert.ok(/^(MIT|GPL-2\.0-or-later|GPL-3\.0-or-later|GPL-3\.0-only)$/.test(manifest.licence), label);
-    if (folder.startsWith('wp/')) assert.match(manifest.licence, /^GPL-/, 'only the wp/ themes are GPL');
-    else assert.equal(manifest.licence, 'MIT', label);
+    // M1: what ships is MIT, on this app's own markup. The GPL themes are a corpus (blog-webCLI-corpus), never in the product path.
+    assert.equal(manifest.class_contract, 'blog-webcli-v1', label);
+    assert.equal(manifest.licence, 'MIT', label);
+    assert.ok(!folder.startsWith('wp/'), `${label}: the wordpress.org themes live in the corpus repository`);
 
     const out = buildSite({ ...(await input({ theme: pin })), theme });
     assert.deepEqual(out.errors, [], label);
@@ -160,8 +162,8 @@ test('built in themes: each loads under the app rules, builds a real blog, and s
   }
 });
 
-test('built in themes: the WordPress theme is the classic contract and styles the classic markup', { skip: skipThemes }, async () => {
-  const { manifest, pin, theme } = await pinTheme('wp/twentytwentyone');
+test('corpus: a WordPress theme is the classic contract and styles the classic markup', { skip: skipThemes || skipCorpus }, async () => {
+  const { manifest, pin, theme } = await pinTheme('wp/twentytwentyone', 'v1.0.0', CORPUS);
   assert.equal(manifest.class_contract, 'wordpress-classic');
   assert.equal(manifest.upstream.slug, 'twentytwentyone');
   assert.match(manifest.source, /^https:\/\/wordpress\.org\/themes\//);
@@ -218,8 +220,8 @@ test('built in extensions: all together, in the order a blog would list them', {
   assert.deepEqual(again.files, done.files, 'regenerates identically from the recorded outputs');
 });
 
-test('built in extensions: the wordpress-classic contract is left alone by the two that need the v1 markup', { skip: skipExts || skipThemes }, async () => {
-  const t = await pinTheme('wp/twentytwentyone');
+test('built in extensions: the wordpress-classic contract is left alone by the two that need the v1 markup', { skip: skipExts || skipCorpus }, async () => {
+  const t = await pinTheme('wp/twentytwentyone', 'v1.0.0', CORPUS);
   const packs = await Promise.all(['archive-by-year', 'image-captions'].map((f) => pinExt(f)));
   const plain = buildSite({ ...(await input({ theme: t.pin })), theme: t.theme });
   const inp = await input({ theme: t.pin, extensions: packs.map((p) => p.pin) });

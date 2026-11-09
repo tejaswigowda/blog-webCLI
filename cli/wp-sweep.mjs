@@ -5,9 +5,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { loadTheme, pinFor, themeDigest, themeFilePaths } from '../lib/theme-pack.js';
 import { launch, openPage } from '../test/e2e/cdp.mjs';
-import { REPO, loadCorpus, POSTS, readDir, renderAndMeasure, verdictOf } from './sweep-core.mjs';
+import { REPO, loadCorpus, POSTS, readDir, regressions, renderAndMeasure, verdictOf } from './sweep-core.mjs';
 
-const THEMES = process.argv[2] || path.join(REPO, '..', 'blog-webCLI-themes');
+const THEMES = process.argv[2] || path.join(REPO, '..', 'blog-webCLI-corpus');
 const OUT = process.argv[3] || '/tmp/sweep';
 const corpus = await loadCorpus();
 
@@ -16,7 +16,8 @@ const again = !!process.env.VERDICTS_ONLY;
 const chrome = again ? null : await launch();
 if (!again) { await fs.rm(OUT, { recursive: true, force: true }); await fs.mkdir(path.join(OUT, 'shots'), { recursive: true }); }
 const WP = path.join(THEMES, 'wp');
-const only = process.argv.slice(4);
+const flags = process.argv.filter((a) => a.startsWith('--'));
+const only = process.argv.slice(4).filter((a) => !a.startsWith('--'));
 const slugs = (await fs.readdir(WP)).filter((n) => !n.includes('.') && (!only.length || only.includes(n))).sort();
 const results = again ? JSON.parse(await fs.readFile(path.join(OUT, 'sweep.json'), 'utf8')) : {};
 
@@ -72,3 +73,15 @@ const colour = { usable: '#2e7d32', 'usable (soft)': '#7cb342', degraded: '#ef6c
 const cards = Object.entries(verdicts).sort((a, b) => a[1].verdict.localeCompare(b[1].verdict) || a[0].localeCompare(b[0])).map(([slug, v]) => `<div class="c"><div class="h" style="background:${colour[v.verdict]}">${slug}: ${v.verdict}</div><div class="s"><img src="shots/${slug}-desktop.jpg"><img src="shots/${slug}-phone.jpg"></div><div class="n">${[...v.onPost, ...v.stress].join(' ')}</div></div>`).join('');
 await fs.writeFile(path.join(OUT, 'sheet.html'), `<!doctype html><meta charset=utf-8><style>body{font:11px system-ui;margin:6px;display:flex;flex-wrap:wrap;gap:6px}.c{width:480px;border:1px solid #ccc}.h{color:#fff;padding:2px 6px;font-weight:600}.s{display:flex;gap:4px;padding:3px;align-items:flex-start}.s img{display:block}.n{padding:0 6px 3px;color:#555;min-height:1.2em}</style>${cards}`);
 console.log(`${Object.keys(results).length} themes swept`);
+
+// --update-baseline records the verdicts as docs/layout-baseline.json; --check fails (exit 1) when any theme's verdict is worse than that
+// baseline (usable -> degraded, degraded -> unportable?). Run on a schedule and on any change under lib/ (.github/workflows/sweep.yml).
+const BASELINE = path.join(REPO, 'docs/layout-baseline.json');
+const now = Object.fromEntries(Object.entries(verdicts).map(([k, v]) => [k, v.verdict]));
+if (flags.includes('--update-baseline')) { await fs.writeFile(BASELINE, JSON.stringify(now, null, 1) + '\n'); console.log(`wrote ${BASELINE}`); }
+if (flags.includes('--check')) {
+  const bad = regressions(JSON.parse(await fs.readFile(BASELINE, 'utf8')), now);
+  for (const r of bad) console.error(`REGRESSION ${r.slug}: ${r.before} -> ${r.now}`);
+  console.log(bad.length ? `${bad.length} theme(s) got worse` : 'no verdict got worse than the baseline');
+  process.exit(bad.length ? 1 : 0);
+}

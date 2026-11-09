@@ -126,3 +126,27 @@ test('the theme checker and the sweep it uses have no GitHub, token, OAuth or de
     assert.ok(!/api\.github\.com|git push|--method (POST|PUT)/i.test(src), `${f} talks to GitHub`);
   }
 });
+
+// ---------- M10: a photograph in a GPL theme is under its own licence, and licences.json says so ----------
+
+import { licenceRecords, licenceComment, licencesJson } from '../lib/licences.js';
+
+test('M10: a kit header picture must declare its own licence, for every origin', () => {
+  const kit = { customize: { font: 'serif' }, home: 'Hi.', hero: { image: 'kit/hero.jpg', alt: 'A photograph', credit: { name: 'A', profile: 'https://unsplash.com/@a', source: 'https://unsplash.com/photos/x' } } };
+  const imported = { name: 'W', version: '1', licence: 'GPL-2.0-or-later', class_contract: 'wordpress-classic', css: ['style.css'], assets: ['kit/hero.jpg'], source: 'https://wordpress.org/themes/w/', kit };
+  assert.deepEqual(rules(imported), ['asset-no-licence']);
+  assert.deepEqual(rules({ ...imported, asset_licences: { 'kit/hero.jpg': 'LicenseRef-Unsplash' } }), []);
+  validateThemeManifest({ ...imported, asset_licences: { 'kit/hero.jpg': 'LicenseRef-Unsplash' } });
+  assert.throws(() => validateThemeManifest(imported), (e) => e.rule === 'asset-no-licence');
+});
+
+test('M10: licences.json and the page comment name the photograph\'s licence apart from the theme\'s', () => {
+  const blog = { title: 'B', author: 'A', theme: { name: 'W', version: '1', licence: 'GPL-2.0-or-later', repo: 'o/r', ref: 'v1.0.0', sha256: 'a'.repeat(64) } };
+  const manifest = { class_contract: 'wordpress-classic', asset_licences: { 'kit/hero.jpg': 'LicenseRef-Unsplash', 'fonts/a.woff2': 'OFL-1.1' } };
+  const [theme] = licenceRecords(blog, { theme: { manifest } });
+  assert.equal(theme.licence, 'GPL-2.0-or-later');
+  assert.deepEqual(theme.assets, [{ path: 'fonts/a.woff2', licence: 'OFL-1.1' }, { path: 'kit/hero.jpg', licence: 'LicenseRef-Unsplash' }]);
+  assert.match(licenceComment(blog, { theme: { manifest } }), /GPL-2\.0-or-later.*plus OFL-1\.1 for fonts\/a\.woff2, LicenseRef-Unsplash for kit\/hero\.jpg/);
+  assert.equal(JSON.parse(licencesJson(blog, { theme: { manifest } })).dependencies[0].assets.length, 2);
+  assert.equal(licenceRecords(blog, { theme: { manifest: { class_contract: 'wordpress-classic' } } })[0].assets, undefined);
+});

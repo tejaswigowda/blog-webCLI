@@ -1,0 +1,50 @@
+name: sweep
+
+# The 77 imported themes are a regression corpus (tejaswigowda/blog-webCLI-corpus), not products. This is the one check that says whether a
+# change to the markup contract, the validator or the generator broke a layout: it renders every theme over the layout corpus at 1280 and
+# 390 px, and fails when a theme's verdict gets WORSE than docs/layout-baseline.json (usable -> degraded, degraded -> unportable?).
+# It does not fail on the count. The regenerated docs are shown as a diff, so a change's effect on 77 themes is a diff, not an investigation.
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  push:
+    paths:
+      - 'lib/**'
+      - 'cli/sweep-core.mjs'
+      - 'cli/wp-sweep.mjs'
+      - 'cli/wp-gap.mjs'
+      - 'test/layout/**'
+      - 'test/golden/**'
+      - '.github/workflows/sweep.yml'
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: tejaswigowda/blog-webCLI-corpus
+          path: corpus
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Contract gap (docs/contract-gap.md)
+        run: node cli/wp-gap.mjs corpus /tmp/gap.json
+      - name: Layout sweep; fails if a theme's verdict regressed (docs/layout-sweep.md)
+        run: GAP_JSON=/tmp/gap.json node cli/wp-sweep.mjs corpus /tmp/sweep --check
+      - name: What the change did to the docs
+        if: always()
+        run: |
+          git diff --stat -- docs/ | tee -a "$GITHUB_STEP_SUMMARY"
+          git diff -- docs/ || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sweep
+          path: |
+            /tmp/sweep/verdicts.json
+            /tmp/sweep/sheet.html
+            /tmp/sweep/shots

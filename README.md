@@ -1015,6 +1015,22 @@ both identically. Post ids (`post-N`) derive from the slug, so adding a post ren
 Not emitted (there is nothing behind them): comments, search, sidebars/widgets, pagination, category
 and author archives, the mobile menu button.
 
+### Make a blog look like an existing site: measure it
+
+There is no theme catalogue. Five starters ship (`default`, built in, and [`essay`, `terminal`, `cards`, `wide`](https://github.com/tejaswigowda/blog-webCLI-themes), all MIT, on this app's own markup), spanning face, width, colour and list layout. To make a blog look like a site you already have, **measure it**:
+
+```
+node cli/measure.mjs https://my-old-site.example/ --out look.json
+```
+
+It opens one page in headless Chrome, reads the colours, type, width and list layout a reader sees, and writes a `customize` block: colours, one of five font stacks, a width, a size and a list layout. Paste it into **Theme → Match an existing site** (or merge it into `blog.json`'s `customize`). It never writes a stylesheet.
+
+- **The typeface will not match.** A webfont measures to the nearest of five system stacks (serif, sans, humanist, slab, mono) and renders in that. The grammar forces it; matching the face would need the font file.
+- **Measuring is not extracting.** Measuring reads computed values off a rendered page and may be pointed at any site. Extracting (lifting declarations, downloading fonts) is a derivative work and stays **directory-only** ([docs/theming-rules.md](docs/theming-rules.md)). The measuring path writes only `colors`, `font`, `headingFont`, `width`, `fontSize` and `list`, never `css`, and reads no stylesheet, font file or page text.
+- **Point it at a site politely.** The first case is your own old site. For anyone else's it is one page load, it identifies itself (`blog-webcli-measure`) and it obeys `robots.txt`.
+
+The importer (`node cli/blog.js theme import`) is a **maintainer tool**, for the regression corpus below. It only works on wordpress.org directory themes, which is why measurement, not import, is how a real site is migrated: it works on any site, however it was built.
+
 ### Theme bootstrap kits
 
 A theme may carry a `kit` in `theme.json`: what a blog becomes when it starts fresh with the theme, so it looks as the theme was designed.
@@ -1046,7 +1062,7 @@ A theme may carry a `kit` in `theme.json`: what a blog becomes when it starts fr
 
 ### Measuring themes
 
-Two maintainer tools judge a theme without a pixel comparison. Both read `<themes-repo>/wp/*`.
+Two maintainer tools judge a theme without a pixel comparison. Both read the **regression corpus**, [blog-webCLI-corpus](https://github.com/tejaswigowda/blog-webCLI-corpus) (the 77 imported themes, checked out next to this repository as `../blog-webCLI-corpus`; they are fixtures, not products). CI runs the sweep against it and fails when a theme's verdict gets worse (`.github/workflows/sweep.yml`; baseline in `docs/layout-baseline.json`).
 
 * `node cli/wp-gap.mjs` computes the **contract gap** statically: every class and id a theme's CSS targets, minus what the generator
   emits over a corpus of pages. It sorts what is left into markup that can be emitted, regions a blog does not have (sidebar, comments,
@@ -1066,6 +1082,8 @@ Two maintainer tools judge a theme without a pixel comparison. Both read `<theme
 `theme.json` records `origin` (`authored`, `imported`, `generated`) and, for a generated theme, its `reference`, `relation` (`inspired-by` or `derived-from`), `agent` and date. A `derived-from` theme needs a source licence that permits reuse, and every file of an authored or generated theme declares a licence that permits redistribution. These are declarations, not detections; `lib/overlap.js` warns when a theme shares many whole declaration blocks with its reference, as a signal and never as proof. Registry entries carry `origin`. See [docs/theme-generation.md](docs/theme-generation.md).
 
 ### Ingesting a WordPress theme
+
+*A maintainer tool.* It fills the regression corpus and is not how a user migrates a site: it works only on wordpress.org directory themes (the licence rule), while measuring works on any site. See [Make a blog look like an existing site](#make-a-blog-look-like-an-existing-site-measure-it).
 
 ```
 node cli/blog.js theme import twentytwentyone ./my-theme-repo

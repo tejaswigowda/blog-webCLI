@@ -12,7 +12,7 @@ import { EXAMPLE_BLOG } from '../lib/sample.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.join(HERE, '..');
-const THEMES = process.argv[2] || path.join(REPO, '..', 'blog-webCLI-themes');
+const THEMES = process.argv[2] || path.join(REPO, '..', 'blog-webCLI-corpus');
 const OUT = process.argv[3] || '/tmp/gap.json';
 
 const readDir = async (dir) => {

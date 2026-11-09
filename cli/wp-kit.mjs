@@ -12,10 +12,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { launch, openPage } from '../test/e2e/cdp.mjs';
-import { FONTS, validateCustomize } from '../lib/customize.js';
+import { customizeFromMeasure, fontKey } from '../lib/measure.js';
 import { validateThemeManifest } from '../lib/theme-pack.js';
-
-const HEX = (r, g, b) => `#${[r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')}`;
 
 // evaluated in the demo page
 const MEASURE = `(async () => {
@@ -65,50 +63,6 @@ const MEASURE = `(async () => {
   });
 })()`;
 
-const SERIF = /georgia|times|playfair|merriweather|lora|garamond|cambria|baskerville|source serif|libre|crimson|pt serif|noto serif|spectral|cormorant|bitter|dm serif|(^|[ ,"'])serif/;
-const SLAB = /roboto slab|rockwell|arvo|zilla|slab|museo/;
-const MONO = /mono|courier|consolas|menlo|fira code/;
-const HUMANIST = /seravek|gill sans|ubuntu|calibri|candara|source sans|nunito|fira sans/;
-export function fontKey(family) {
-  const f = String(family || '').toLowerCase();
-  if (MONO.test(f)) return 'mono';
-  if (SLAB.test(f)) return 'slab';
-  const first = f.split(',')[0];
-  if (SERIF.test(first) && !/sans/.test(first)) return 'serif';
-  if (HUMANIST.test(first)) return 'humanist';
-  return 'sans';
-}
-
-const lum = (c) => {
-  const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
-  return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
-};
-const contrast = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
-
-// measured -> { customize, hero? (the demo's picture: url, size, text) }
-export function kitFromMeasure(m) {
-  const bg = m.bg || { r: 255, g: 255, b: 255 };
-  let text = m.text || { r: 26, g: 26, b: 26 };
-  if (contrast(text, bg) < 4.5) text = lum(bg) > 0.4 ? { r: 26, g: 26, b: 26 } : { r: 236, g: 238, b: 241 };
-  let link = m.link || text;
-  if (contrast(link, bg) < 3) link = text;
-  let muted = m.muted || text;
-  if (contrast(muted, bg) < 3) muted = { r: (text.r + bg.r) / 2, g: (text.g + bg.g) / 2, b: (text.b + bg.b) / 2 };
-  const font = fontKey(m.font);
-  const headingFont = fontKey(m.headingFont);
-  const width = Math.max(400, Math.min(1280, Math.round((m.width || 720) / 10) * 10));
-  const customize = {
-    colors: { accent: HEX(link.r, link.g, link.b), text: HEX(text.r, text.g, text.b), background: HEX(bg.r, bg.g, bg.b), muted: HEX(muted.r, muted.g, muted.b) },
-    font,
-    ...(headingFont !== font ? { headingFont } : {}),
-    width: `${width}px`,
-    ...(m.size >= 14 && m.size <= 24 ? { fontSize: `${Math.round(m.size)}px` } : {}),
-    list: { layout: m.cards ? 'cards' : 'list' },
-  };
-  validateCustomize(customize);
-  return customize;
-}
-
 const plainText = (s, max) => String(s || '').replace(/[<>\r\n*_`~#\[\]\\|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max); // text a markdown page keeps as it is
 
 async function main() {
@@ -142,7 +96,7 @@ async function main() {
         report.push(`${slug}: could not be measured (${String(e.message).slice(0, 80)})`);
         continue;
       }
-      const customize = kitFromMeasure(m);
+      const customize = customizeFromMeasure(m);
       const kit = { customize };
       let heroNote = 'no header picture';
       if (m.hero) {

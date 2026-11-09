@@ -135,7 +135,7 @@ test('applySkeleton leaves a page alone when it is not in the classic structure'
 import { heroHtml } from '../lib/theme-pack.js';
 
 const KIT = { customize: { colors: { accent: '#89229b', text: '#1a1a1a', background: '#ffffff', muted: '#666666' }, font: 'sans', headingFont: 'slab', width: '720px', list: { layout: 'cards' } }, home: '## Welcome\n\nA short introduction.', hero: { image: 'kit/hero.jpg', alt: 'A mountain lake', credit: { name: 'Ada Photographer', profile: 'https://unsplash.com/@ada', source: 'https://unsplash.com/photos/lake-abc123' } } };
-const kitManifest = (kit) => ({ name: 'K', version: '1', licence: 'GPL-2.0-or-later', class_contract: 'wordpress-classic', css: ['style.css'], assets: ['kit/hero.jpg'], kit });
+const kitManifest = (kit) => ({ name: 'K', version: '1', licence: 'GPL-2.0-or-later', class_contract: 'wordpress-classic', css: ['style.css'], assets: ['kit/hero.jpg'], asset_licences: { 'kit/hero.jpg': 'LicenseRef-Unsplash' }, kit });
 
 test('kit: the manifest accepts a kit of settings, a home page and a credited picture, and refuses anything else', () => {
   assert.doesNotThrow(() => validateThemeManifest(kitManifest(KIT)));

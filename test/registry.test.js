@@ -97,7 +97,7 @@ test('R6: the bundled snapshot is valid, and every entry in it is data the app a
   for (const kind of ['themes', 'extensions']) {
     const { entries, rejected } = parseRegistry(kind, { version: snapshot.version, [kind]: snapshot[kind] });
     assert.deepEqual(rejected, [], kind);
-    assert.ok(entries.length >= 5, kind);
+    assert.ok(entries.length >= (kind === 'themes' ? 4 : 5), kind); // four starters are listed; the fifth, the default, is built in
     assert.deepEqual(entries, snapshot[kind], `${kind}: the snapshot is already in validated form`);
   }
 });
