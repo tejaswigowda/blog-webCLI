@@ -1,6 +1,6 @@
 import { createNet, fmtBytes } from './net.js';
 import { BULK_AT, GitHub, assertToken } from './github.js';
-import { NotFound, describePlan, detectAddress, executeMedia, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planLook, planMedia, planTheme } from './site.js';
+import { NotFound, describePlan, detectAddress, executeMedia, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planLook, planThemeFile, planMedia, planTheme } from './site.js';
 import { createSandbox } from './sandbox.js';
 import { describeRelease, executeRelease, listReleaseFolders, planTagRelease, videoRepositories } from './release.js';
 import { insertionPoint } from '../lib/selection.js';
@@ -27,6 +27,7 @@ import { FONTS, hasLook, resolveLogo, themeCss } from '../lib/customize.js';
 import { THEMES } from '../lib/theme.js';
 import { EXAMPLE_BLOG, EXAMPLE_ENTRIES, EXAMPLE_MENU } from '../lib/sample.js';
 import { lookFromText } from '../lib/measure.js';
+import { exportTheme } from '../lib/theme-export.js';
 import { blogToForm, formToBlog } from '../lib/settings.js';
 import { DATE_FORMAT_EXAMPLES, DEFAULT_DATE_FORMAT } from '../lib/datefmt.js';
 import { validateBlog } from '../lib/blog.js';
@@ -795,9 +796,41 @@ async function settingsView(repo, r) {
     }
   });
 
+  // the saved theme and customization as one JSON file, and back in (a pinned theme re-verified, the look judged by the same grammar)
+  const exportBtn = h('button', { type: 'button', icon: 'download' }, 'Export theme (JSON)');
+  exportBtn.addEventListener('click', () => {
+    const data = exportTheme(current, { from: plain + (folder ? `/${folder}` : '') });
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2) + '\n'], { type: 'application/json' }));
+    const a = h('a', { href: url, download: `${(folder || plain.split('/')[1] || 'blog').replace(/[^a-z0-9-]+/gi, '-')}-theme.json` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  const importBtn = h('button', { type: 'button', icon: 'upload' }, 'Import theme from JSON…');
+  importBtn.disabled = !canPush;
+  importBtn.addEventListener('click', () => {
+    const input = h('input', { type: 'file', accept: 'application/json,.json' });
+    input.addEventListener('change', async () => {
+      const file = input.files[0];
+      if (!file) return;
+      importBtn.disabled = true;
+      try {
+        const text = await file.text();
+        const plan = await heavy('Preparing the theme…', () => planThemeFile(gh, { repo, branch, text, runner }), { button: importBtn });
+        await commitPlan(plan, repo, r, importBtn);
+        route();
+      } catch (e) {
+        fail(e);
+      } finally {
+        importBtn.disabled = !canPush;
+      }
+    });
+    input.click();
+  });
   const themeBox = section('Theme, extensions and licences',
       h('p', {}, `Theme: ${current.theme && typeof current.theme === 'object' ? `${current.theme.name} ${current.theme.version} (${current.theme.licence})` : 'default'} · Extensions: ${(current.extensions || []).length ? current.extensions.map((e) => `${e.name} ${e.version}`).join(', ') : 'none'}`),
-      h('div', { class: 'actions' }, nav('Choose a theme', link(repo, '&themes'), { icon: 'droplet' }), nav('Extensions', link(repo, '&extensions'), { icon: 'box' }), nav('Licences', link(repo, '&licences'), { icon: 'shield' })));
+      h('div', { class: 'actions' }, nav('Choose a theme', link(repo, '&themes'), { icon: 'droplet' }), nav('Extensions', link(repo, '&extensions'), { icon: 'box' }), nav('Licences', link(repo, '&licences'), { icon: 'shield' })), h('div', { class: 'actions' }, exportBtn, importBtn), h('div', { class: 'hint' }, 'The theme file is the saved theme and customization (colours, fonts, width, custom CSS, list layout, header, footer, top bar). The logo and link icons are pictures in this blog\'s images repository and are not included; the blog you import into keeps its own.'));
 
   const node = h(
     'div',

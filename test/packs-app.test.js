@@ -5,10 +5,11 @@ import path from 'node:path';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
 import { clearPackCache, loadPacks } from '../app/packs.js';
-import { describePlan, executePlan, planChange, planExtension, planLook, planSettings, planTheme } from '../app/site.js';
+import { describePlan, executePlan, planChange, planExtension, planLook, planSettings, planTheme, planThemeFile } from '../app/site.js';
 import { loadBlog } from '../app/read.js';
 import { blogToForm } from '../lib/settings.js';
 import { buildSite } from '../lib/blog.js';
+import { exportTheme } from '../lib/theme-export.js';
 import { parseOutputsFile } from '../lib/extensions.js';
 import { sha256 } from '../lib/sha256.js';
 import { EX, readDirFiles } from './helpers.js';
@@ -283,4 +284,35 @@ test('a measured look replaces the blog\'s own look, keeps its header and footer
   assert.deepEqual(after.customize.header, blog.customize.header, 'the header is kept');
   assert.deepEqual(after.customize.footer, blog.customize.footer, 'the footer is kept');
   assert.equal(after.theme, blog.theme, 'the theme is untouched');
+});
+
+// ---------- the theme as a JSON file ----------
+test('export a blog\'s theme as JSON, and import it into another blog: the pin is verified, the look applied, the logo kept', async () => {
+  const { server, gh } = await world();
+  // blog A: a theme and a look
+  await executePlan(gh, await planTheme(gh, { repo: 'example/blog', branch: 'main', use: { where: 'me/theme', ref: 'v1.0.0' } }));
+  const a = JSON.parse(server.files('example/blog')['blog.json']);
+  const file = exportTheme({ ...a, customize: { ...a.customize, css: '.x{color:red}', header: { ...(a.customize.header || {}), logo: 'asset:images/logo.png' } } }, { from: 'example/blog' });
+  assert.equal(file.format, 'blog-webcli-theme');
+  assert.equal(file.theme.sha256, a.theme.sha256);
+  assert.equal(file.customize.header.logo, undefined, 'the logo is a picture of that blog');
+  assert.equal(file.customize.css, '.x{color:red}');
+  // blog B: another blog with its own logo and no theme
+  const { server: s2, gh: g2 } = await world();
+  const b = JSON.parse(s2.files('example/blog')['blog.json']);
+  assert.equal(b.theme, 'default');
+  const plan = await planThemeFile(g2, { repo: 'example/blog', branch: 'main', text: JSON.stringify(file) });
+  await executePlan(g2, plan);
+  const after = JSON.parse(s2.files('example/blog')['blog.json']);
+  assert.equal(after.theme.sha256, a.theme.sha256);
+  assert.equal(after.customize.css, '.x{color:red}');
+  assert.deepEqual(after.customize.colors, file.customize.colors);
+  assert.equal(after.title, b.title, 'nothing but the look changes');
+  assert.match(s2.files('example/blog')['index.html'], /color:red/);
+  // a pin that does not hash to what the file says is refused
+  const lied = { ...file, theme: { ...file.theme, sha256: '0'.repeat(64) } };
+  await assert.rejects(planThemeFile(g2, { repo: 'example/blog', branch: 'main', text: JSON.stringify(lied) }), code('registry-mismatch'));
+  // a file with css the grammar refuses, or that is not a theme file, is refused before anything is read
+  await assert.rejects(planThemeFile(g2, { repo: 'example/blog', branch: 'main', text: JSON.stringify({ ...file, customize: { css: '@import url(x.css);' } }) }), /css/i);
+  await assert.rejects(planThemeFile(g2, { repo: 'example/blog', branch: 'main', text: '{"format":"other"}' }), /not a blog-webcli-theme file/);
 });

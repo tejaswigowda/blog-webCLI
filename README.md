@@ -1015,6 +1015,10 @@ both identically. Post ids (`post-N`) derive from the slug, so adding a post ren
 Not emitted (there is nothing behind them): comments, search, sidebars/widgets, pagination, category
 and author archives, the mobile menu button.
 
+### Export and import a blog's theme
+
+**Settings → Export theme (JSON)** downloads the saved theme and customization as one file (`blog-webcli-theme`, version 1): the pinned theme (repository, tag, sha256), the whole `customize` block (colours, fonts, width, size, custom CSS, list layout, header, footer, top bar) and the stylesheet mode. The logo and link icons are pictures in the source blog's images repository, so they are not included. **Import theme from JSON…** (same place) applies a file to another blog: the pinned theme is read from its repository and must hash to what the file says, the customize block is judged by the same closed grammar as a blog's own (a file cannot carry anything `customize` cannot), and the blog keeps its logo, its content and every other setting. The usual pre-flight shows what will be sent; on a linked-stylesheet blog a change that is only CSS is sent as just the stylesheet. (`lib/theme-export.js`, `test/theme-export.test.js`)
+
 ### The Media tab
 
 **Media** lists the images in the blog's images repositories as lazy tiles, with *unused* judged from `assets.lock.json` and the index. Opening it uploads nothing. With a token that can write:

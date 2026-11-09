@@ -15,6 +15,7 @@ import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs, hasLook, themeCss, withoutLook } from '../lib/customize.js';
 import { assertMeasured } from '../lib/measure.js';
+import { applyThemeFile, parseThemeFile } from '../lib/theme-export.js';
 import { resolveOrder } from '../lib/order.js';
 import { IMAGE_FILE, imagePaths, mediaItems, tileUrl } from '../lib/media.js';
 import { daysUntil } from '../lib/schedule.js';
@@ -634,6 +635,28 @@ export async function planLook(gh, { repo: where, branch, look, runner }) {
   const message = `Match an existing site: its measured colours, ${measured.font ? measured.font + ' type, ' : ''}width and list layout`;
   const blogText = blogJsonText(blog);
   const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText, message, title: blog.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message, title: blog.title, existed: true, runner }));
+  plan.unchanged = plan.changes.length === 0;
+  return plan;
+}
+
+// Import a theme file (lib/theme-export.js): the file's pinned theme is read from its repository and must hash to what the file says, its
+// customize block is judged by the same grammar as the blog's own, and the blog keeps its logo and everything else. A change of CSS alone
+// on a linked-stylesheet blog is written as just the stylesheet (styleOnlyPlan).
+export async function planThemeFile(gh, { repo: where, branch, text, runner }) {
+  const file = parseThemeFile(text);
+  const { head, whole, blog } = await currentBlogJson(gh, where, branch);
+  const oldBlog = structuredClone(blog);
+  let pin = file.theme;
+  let message = 'Import theme from a file';
+  if (pin && typeof pin === 'object') {
+    const got = await readThemeToPin(gh, pin.repo, pin.ref, { base: pin.base, expect: { sha256: pin.sha256, licence: pin.licence } });
+    pin = got.pin;
+    message = `Import theme from a file: ${got.manifest.name} ${got.manifest.version} (${got.manifest.licence})`;
+  }
+  const next = applyThemeFile(blog, file, pin);
+  const blogText = blogJsonText(next);
+  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText, message, title: next.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message, title: next.title, existed: true, runner }));
+  plan.licences = licenceRecords(validateBlog(next));
   plan.unchanged = plan.changes.length === 0;
   return plan;
 }
