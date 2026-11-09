@@ -14,6 +14,7 @@ import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
 import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs, hasLook, withoutLook } from '../lib/customize.js';
+import { assertMeasured } from '../lib/measure.js';
 import { resolveOrder } from '../lib/order.js';
 import { imagePaths, mediaItems, tileUrl } from '../lib/media.js';
 import { daysUntil } from '../lib/schedule.js';
@@ -467,6 +468,19 @@ export async function planTheme(gh, { repo: where, branch, use, fresh = false, r
   }
   const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message, title: blog.title, existed: true, runner, extraPosts });
   plan.licences = licenceRecords(validateBlog(blog));
+  plan.unchanged = plan.changes.length === 0;
+  return plan;
+}
+
+// Make the blog look like a site that was measured (node cli/measure.mjs): the colours, fonts, width, size and list layout it measured
+// replace the blog's own look; its header and footer links, logo and top bar are content and stay. `look` is judged here, not trusted:
+// only the enumerable fields, never css (lib/measure.js).
+export async function planLook(gh, { repo: where, branch, look, runner }) {
+  const { head, whole, blog } = await currentBlogJson(gh, where, branch);
+  const measured = assertMeasured(look);
+  const bare = withoutLook(blog);
+  blog.customize = { ...(bare.customize || {}), ...structuredClone(measured) };
+  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message: `Match an existing site: its measured colours, ${measured.font ? measured.font + ' type, ' : ''}width and list layout`, title: blog.title, existed: true, runner });
   plan.unchanged = plan.changes.length === 0;
   return plan;
 }

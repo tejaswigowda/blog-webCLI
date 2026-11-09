@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
 import { clearPackCache, loadPacks } from '../app/packs.js';
-import { describePlan, executePlan, planChange, planExtension, planSettings, planTheme } from '../app/site.js';
+import { describePlan, executePlan, planChange, planExtension, planLook, planSettings, planTheme } from '../app/site.js';
 import { loadBlog } from '../app/read.js';
 import { blogToForm } from '../lib/settings.js';
 import { buildSite } from '../lib/blog.js';
@@ -263,4 +263,24 @@ test('starting fresh: choosing a theme can set aside the blog\'s own colours, fo
   assert.deepEqual(after.customize.footer, blog.customize.footer, 'the footer is kept');
   assert.equal(after.title, blog.title);
   assert.ok(!s2.files('example/blog')['index.html'].includes('#0b7a5f'), "the blog's accent colour is no longer on the pages");
+});
+
+// ---------- matching an existing site (a measured look) ----------
+test('a measured look replaces the blog\'s own look, keeps its header and footer, and is refused if it carries css or anything else', async () => {
+  const { server, gh } = await world();
+  const blog = JSON.parse(server.files('example/blog')['blog.json']);
+  const look = { colors: { accent: '#1450c8', text: '#1e1e1e', background: '#faf8f0', muted: '#6e6e6e' }, font: 'serif', width: '640px', fontSize: '18px', list: { layout: 'list' } };
+  await assert.rejects(planLook(gh, { repo: 'example/blog', branch: 'main', look: { ...look, css: 'a{background:url(https://e.com/x)}' } }), /never carries css/);
+  await assert.rejects(planLook(gh, { repo: 'example/blog', branch: 'main', look: { ...look, header: { links: [] } } }), /not one/);
+  assert.equal(JSON.parse(server.files('example/blog')['blog.json']).customize.colors.accent, blog.customize.colors.accent, 'a refused look changes nothing');
+  const plan = await planLook(gh, { repo: 'example/blog', branch: 'main', look });
+  assert.match(plan.message || plan.title || JSON.stringify(plan), /Match an existing site/);
+  await executePlan(gh, plan);
+  const after = JSON.parse(server.files('example/blog')['blog.json']);
+  assert.deepEqual(after.customize.colors, look.colors);
+  assert.equal(after.customize.font, 'serif');
+  assert.equal(after.customize.css, undefined, 'no css came with it');
+  assert.deepEqual(after.customize.header, blog.customize.header, 'the header is kept');
+  assert.deepEqual(after.customize.footer, blog.customize.footer, 'the footer is kept');
+  assert.equal(after.theme, blog.theme, 'the theme is untouched');
 });
