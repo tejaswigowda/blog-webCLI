@@ -69,8 +69,10 @@ import { executeMedia, planMedia, mediaName } from '../app/site.js';
 import { readDirFiles } from './helpers.js';
 
 const EXROOT = path.join(root, 'examples');
-async function uploadWorld() {
-  const server = fakeGitHub({ 'example/blog': await readDirFiles(path.join(EXROOT, 'blog')), 'example/images': { 'diagram.png': 'old diagram', 'spare.png': 'spare' } });
+async function uploadWorld(mutate = () => {}) {
+  const blogFiles = await readDirFiles(path.join(EXROOT, 'blog'));
+  mutate(blogFiles);
+  const server = fakeGitHub({ 'example/blog': blogFiles, 'example/images': { 'diagram.png': 'old diagram', 'spare.png': 'spare', 'hls-cover.png': 'cover', 'default-cover.png': 'dc' }, 'example/renders': { 'README.md': 'r' } }, { tags: { 'example/renders': ['hls-demo/v1'] } });
   await server.ready;
   const net = createNet(server.fetch);
   return { server, net, gh: new GitHub(net, { token: 'github_pat_test' }) };
@@ -96,14 +98,14 @@ test('media: replace keeps the filename, moves the pin to the upload and regener
   const { server, gh } = await uploadWorld();
   const before = JSON.parse(server.files('example/blog')['assets.lock.json']);
   assert.ok(before['images/diagram.png'], 'a published post embeds diagram.png');
+  const other0 = server.files('example/blog')['markdown-is-the-format/index.html'];
   const html0 = server.files('example/blog')['static-hls-in-git/index.html'];
   assert.ok(html0.includes(before['images/diagram.png']));
   const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'diagram.png', replace: true, bytes: bytes('new diagram') }] });
   assert.equal(plan.assetGroups[0].files[0].action, 'update');
   assert.deepEqual(plan.media.refreshed, [{ key: 'images', path: 'diagram.png', pinned: true }]);
-  assert.match(plan.headline[0], /regenerated/);
   const receipt = await executeMedia(gh, plan);
-  assert.equal(receipt.commits.length, 2, 'the upload, then the pages');
+  assert.equal(receipt.commits.length, 2, 'the upload, then the one page that embeds it');
   assert.equal(server.files('example/images')['diagram.png'], 'new diagram');
   assert.ok(!server.files('example/images')['new-name.png'], 'no other file appeared');
   const after = JSON.parse(server.files('example/blog')['assets.lock.json']);
@@ -111,6 +113,22 @@ test('media: replace keeps the filename, moves the pin to the upload and regener
   assert.equal(after['images/hls-cover.png'], before['images/hls-cover.png'], 'other pins are untouched');
   const html1 = server.files('example/blog')['static-hls-in-git/index.html'];
   assert.ok(html1.includes(receipt.commits[0].sha) && !html1.includes(before['images/diagram.png']), 'the page now loads the new file');
+  assert.equal(server.files('example/blog')['markdown-is-the-format/index.html'], other0, 'a page that does not embed it is not rewritten');
+  assert.match(plan.headline[0], /Embedded in 1 page: only that page is regenerated/);
+  assert.equal(plan.media.full, false);
+});
+
+test('media: replacing an image no page embeds writes only the pin', async () => {
+  // pinned once, embedded nowhere now
+  const { server, gh } = await uploadWorld((files) => { const lock = JSON.parse(new TextDecoder().decode(files['assets.lock.json'])); lock['images/spare.png'] = 'e'.repeat(40); files['assets.lock.json'] = new TextEncoder().encode(JSON.stringify(lock)); });
+  const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'spare.png', replace: true, bytes: bytes('spare v2') }] });
+  assert.deepEqual(plan.media.affected, []);
+  assert.match(plan.headline[0], /only the pin in assets\.lock\.json moves/);
+  const pagesBefore = server.files('example/blog')['index.html'];
+  const receipt = await executeMedia(gh, plan);
+  assert.deepEqual(receipt.commits.map((c) => c.files), [1, 1], 'the image, and the lock file');
+  assert.equal(JSON.parse(server.files('example/blog')['assets.lock.json'])['images/spare.png'], receipt.commits[0].sha);
+  assert.equal(server.files('example/blog')['index.html'], pagesBefore);
 });
 
 test('media: a replaced image nothing embeds is just uploaded', async () => {
@@ -141,4 +159,14 @@ test('media: the buttons are in the view, and a write goes through the pre-fligh
   assert.match(view, /onReplace/);
   assert.match(view, /commitPlan\(plan, repo, r, btn\)/);
   assert.match(app, /async function commitPlan[\s\S]*confirmPlan\(plan\)[\s\S]*executeMedia/);
+});
+
+test('media: an image a blog.json setting uses is on every page, so that one case regenerates the blog', async () => {
+  const { server, gh } = await uploadWorld();
+  const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'default-cover.png', replace: true, bytes: bytes('new default cover') }] });
+  assert.equal(plan.media.full, true);
+  assert.match(plan.headline[0], /blog setting.*every page/);
+  const receipt = await executeMedia(gh, plan);
+  assert.equal(receipt.commits.length, 2);
+  assert.equal(JSON.parse(server.files('example/blog')['assets.lock.json'])['images/default-cover.png'], receipt.commits[0].sha);
 });

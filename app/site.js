@@ -199,7 +199,7 @@ async function computeChanges(gh, ctx) {
 // kind: 'post' (posts/<slug>.md) or 'page' (pages/<slug>.md, a standalone page).
 // remove: delete posts/<slug>.md (or pages/<slug>.md). It is planned as the post going back to a draft, which already takes a post out of the
 // index, the listings, the feed, the sitemap and search, and removes its generated page and redirects; then the source file goes too.
-export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, runner }) {
+export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, runner, lockPatch = {} }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -239,6 +239,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const pending = [];
   let lockChanged = false;
   const lockPlan = { ...lock };
+  for (const [k, sha] of Object.entries(lockPatch)) if (lockPlan[k] !== sha) { lockPlan[k] = sha; lockChanged = true; } // images replaced since: their pins move
   // Pin every reference the site needs. Staged images are pinned after upload; a draft
   // may still carry references that do not resolve yet, a published post may not.
   const refs = new Set(collectAssetRefs(newPost.delta, newPost.meta));
@@ -476,6 +477,7 @@ export async function planTheme(gh, { repo: where, branch, use, fresh = false, r
 // ---------- media: add images, or replace one with the same filename ----------
 
 export const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+export const MEDIA_PAGES_MAX = 20; // more pages than this embed one image: regenerate in a single commit instead of one per page
 // the name an uploaded file is kept under: lower case, only letters, digits, dot, dash; never a path
 export const mediaName = (name) => String(name).split(/[\\/]/).pop().toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/-+(?=\.)/g, '').replace(/^[-.]+|-+$/g, '');
 
@@ -525,10 +527,22 @@ export async function planMedia(gh, { repo: where, branch, uploads, runner }) {
     if (u.replace) replaced.push({ key: u.key, path, pinned: !!lock[`${u.key}/${path}`] });
   }
   const refreshed = replaced.filter((x) => x.pinned);
+  // Which sources embed a replaced image: only those pages are regenerated, not the blog. (A blog.json setting that uses one, a logo,
+  // is on every page, so that is the one case that regenerates all of them.)
+  const ref = (x) => `asset:${x.key}/${x.path}`;
+  const inBlogJson = refreshed.some((x) => blogAssetRefs(blog).includes(ref(x)));
+  let affected = [];
+  if (refreshed.length && !inBlogJson) {
+    const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
+    const paths = [...tree.keys()].filter(isContent);
+    const mentions = refreshed.map((x) => new RegExp(`${ref(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w/-]|\\.\\w)`));
+    for (const f of await readPosts(gh, { repo, prefix, head, tree, paths })) if (mentions.some((m) => m.test(f.text))) affected.push({ kind: POST_PATH.test(f.path) ? 'post' : 'page', slug: (POST_PATH.exec(f.path) || PAGE_PATH.exec(f.path))[1], text: f.text });
+  }
+  const full = inBlogJson || affected.length > MEDIA_PAGES_MAX;
   const summary = groups.map((g) => ({ repo: g.repo, branch: g.branch, files: g.files.length, bytes: g.files.reduce((n, f) => n + f.size, 0) }));
   const names = groups.flatMap((g) => g.files.map((f) => f.logical));
   const message = replaced.length && replaced.length === uploads.length ? `Replace image${replaced.length === 1 ? '' : 's'}: ${names.join(', ')}` : `Add ${uploads.length - replaced.length} image${uploads.length - replaced.length === 1 ? '' : 's'}${replaced.length ? `, replace ${replaced.length}` : ''}`;
-  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title: blog.title, message, existed: true, head, changes: [], assetGroups: groups, summary, ctx: null, lockPlan: {}, pending: [], unlisted: [], media: { replaced, refreshed }, headline: refreshed.length ? [`${refreshed.length} replaced image${refreshed.length === 1 ? ' is' : 's are'} embedded in published pages: they are regenerated with the new file.`] : null, where, runner, unchanged: false };
+  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title: blog.title, message, existed: true, head, changes: [], assetGroups: groups, summary, ctx: null, lockPlan: {}, pending: [], unlisted: [], media: { replaced, refreshed, affected, full }, headline: refreshed.length ? [full ? `${refreshed.length === 1 ? 'This image is' : 'These images are'} used by ${inBlogJson ? 'a blog setting (the logo or a header image), so every page' : `${affected.length} pages, so the whole blog`} is regenerated with the new file.` : affected.length ? `Embedded in ${affected.length} ${affected.length === 1 ? 'page' : 'pages'}: only ${affected.length === 1 ? 'that page is' : 'those pages are'} regenerated, with the new file.` : 'No page embeds it: only the pin in assets.lock.json moves.'] : null, where, runner, unchanged: false };
 }
 
 // Upload the images (one commit per images repository; the commit is the pin), then, if a replaced image is embedded anywhere,
@@ -546,12 +560,27 @@ export async function executeMedia(gh, plan) {
     if (shared) parent = { sha: c.sha, treeSha: c.treeSha };
   }
   if (!Object.keys(patch).length) return receipt;
-  const whole = await gh.tree(plan.repo, parent.treeSha);
   const prefix = plan.folder ? `${plan.folder}/` : '';
-  const blogText = await gh.readText(plan.repo, prefix + 'blog.json', parent.sha);
-  const p2 = await planBlogJson(gh, { where: plan.where, branch: plan.branch, head: parent, whole, blogText, message: `Use the replaced image${Object.keys(patch).length === 1 ? '' : 's'}: ${Object.keys(patch).map((k) => k.slice(k.indexOf('/') + 1)).join(', ')}`, title: plan.title, existed: true, runner: plan.runner, lockPatch: patch });
-  const r2 = await executePlan(gh, p2);
-  receipt.commits.push(...r2.commits);
+  const names = Object.keys(patch).map((k) => k.slice(k.indexOf('/') + 1)).join(', ');
+  const { affected, full } = plan.media;
+  if (full) {
+    const whole = await gh.tree(plan.repo, parent.treeSha);
+    const blogText = await gh.readText(plan.repo, prefix + 'blog.json', parent.sha);
+    const p2 = await planBlogJson(gh, { where: plan.where, branch: plan.branch, head: parent, whole, blogText, message: `Use the replaced image${Object.keys(patch).length === 1 ? '' : 's'}: ${names}`, title: plan.title, existed: true, runner: plan.runner, lockPatch: patch });
+    receipt.commits.push(...(await executePlan(gh, p2)).commits);
+  } else if (!affected.length) {
+    // nothing embeds it: the pin moves so that a later use shows the new file, and that is all that is written
+    const lock = JSON.parse((await gh.readText(plan.repo, prefix + 'assets.lock.json', parent.sha)) || '{}');
+    const c = await gh.commit(plan.repo, { branch: plan.branch, parent: parent.sha, baseTree: parent.treeSha, files: [{ path: prefix + 'assets.lock.json', content: json(sortLock({ ...lock, ...patch })) }], message: `Pin the replaced image${Object.keys(patch).length === 1 ? '' : 's'}: ${names}` });
+    receipt.commits.push({ repo: plan.repo, branch: plan.branch, ...c, files: 1 });
+  } else {
+    // each page that embeds one is saved as it is, with the pin moved: what saving the post would write, and nothing else
+    for (const a of affected) {
+      const p2 = await planChange(gh, { repo: plan.where, branch: plan.branch, slug: a.slug, text: a.text, kind: a.kind, runner: plan.runner, lockPatch: patch });
+      p2.message = `Use the replaced image${Object.keys(patch).length === 1 ? '' : 's'} (${names}) in ${p2.title}`;
+      receipt.commits.push(...(await executePlan(gh, p2)).commits);
+    }
+  }
   return receipt;
 }
 
