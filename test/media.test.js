@@ -59,5 +59,86 @@ test('N12: every tile is lazy with explicit dimensions, and the view has no writ
   const app = await fs.readFile(path.join(root, 'app/app.js'), 'utf8');
   assert.match(app, /h\('img', \{ src: it\.url \|\| '', alt: '', loading: 'lazy', width: 160, height: 120 \}\)/);
   const view = app.slice(app.indexOf('// ---------- media ----------'), app.indexOf('// ---------- reading ----------'));
-  assert.ok(!/commit|planChange|executePlan|\.api\('(POST|PUT|PATCH|DELETE)/.test(view), 'opening the view writes nothing');
+  // opening the view reads; the only write is a button's planMedia -> commitPlan, which shows the pre-flight first (see below)
+  assert.ok(!/executePlan|executeMedia|planChange|\.api\('(POST|PUT|PATCH|DELETE)/.test(view), 'opening the view writes nothing');
+});
+
+// ---------- add images, replace one under the same filename ----------
+
+import { executeMedia, planMedia, mediaName } from '../app/site.js';
+import { readDirFiles } from './helpers.js';
+
+const EXROOT = path.join(root, 'examples');
+async function uploadWorld() {
+  const server = fakeGitHub({ 'example/blog': await readDirFiles(path.join(EXROOT, 'blog')), 'example/images': { 'diagram.png': 'old diagram', 'spare.png': 'spare' } });
+  await server.ready;
+  const net = createNet(server.fetch);
+  return { server, net, gh: new GitHub(net, { token: 'github_pat_test' }) };
+}
+const bytes = (s) => (typeof s === 'string' ? new TextEncoder().encode(s) : new Uint8Array([s]));
+
+test('media: a new image is kept under its own cleaned name, in one commit, and nothing else changes', async () => {
+  const { server, gh } = await uploadWorld();
+  assert.equal(mediaName('My Photo (1).PNG'), 'my-photo-1.png');
+  assert.equal(mediaName('../../etc/Pass wd.jpg'), 'pass-wd.jpg');
+  const lockBefore = server.files('example/blog')['assets.lock.json'];
+  const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', name: 'Fresh Photo.PNG', bytes: bytes('three bytes') }] });
+  assert.equal(plan.assetGroups[0].files[0].path, 'fresh-photo.png');
+  assert.equal(plan.assetGroups[0].files[0].action, 'add');
+  assert.deepEqual(plan.media.refreshed, []);
+  const receipt = await executeMedia(gh, plan);
+  assert.equal(receipt.commits.length, 1, 'only the upload is committed: no page embeds a new image');
+  assert.equal(server.files('example/images')['fresh-photo.png'], 'three bytes');
+  assert.equal(server.files('example/blog')['assets.lock.json'], lockBefore);
+});
+
+test('media: replace keeps the filename, moves the pin to the upload and regenerates the pages that embed it', async () => {
+  const { server, gh } = await uploadWorld();
+  const before = JSON.parse(server.files('example/blog')['assets.lock.json']);
+  assert.ok(before['images/diagram.png'], 'a published post embeds diagram.png');
+  const html0 = server.files('example/blog')['static-hls-in-git/index.html'];
+  assert.ok(html0.includes(before['images/diagram.png']));
+  const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'diagram.png', replace: true, bytes: bytes('new diagram') }] });
+  assert.equal(plan.assetGroups[0].files[0].action, 'update');
+  assert.deepEqual(plan.media.refreshed, [{ key: 'images', path: 'diagram.png', pinned: true }]);
+  assert.match(plan.headline[0], /regenerated/);
+  const receipt = await executeMedia(gh, plan);
+  assert.equal(receipt.commits.length, 2, 'the upload, then the pages');
+  assert.equal(server.files('example/images')['diagram.png'], 'new diagram');
+  assert.ok(!server.files('example/images')['new-name.png'], 'no other file appeared');
+  const after = JSON.parse(server.files('example/blog')['assets.lock.json']);
+  assert.equal(after['images/diagram.png'], receipt.commits[0].sha, 'the pin is the upload commit');
+  assert.equal(after['images/hls-cover.png'], before['images/hls-cover.png'], 'other pins are untouched');
+  const html1 = server.files('example/blog')['static-hls-in-git/index.html'];
+  assert.ok(html1.includes(receipt.commits[0].sha) && !html1.includes(before['images/diagram.png']), 'the page now loads the new file');
+});
+
+test('media: a replaced image nothing embeds is just uploaded', async () => {
+  const { server, gh } = await uploadWorld();
+  const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'spare.png', replace: true, bytes: bytes('replaced spare') }] });
+  assert.deepEqual(plan.media.refreshed, []);
+  assert.equal((await executeMedia(gh, plan)).commits.length, 1);
+  assert.equal(server.files('example/images')['spare.png'], 'replaced spare');
+});
+
+test('media: refusals say what to do (a name already there, nothing to replace, the same file, not an image, twice, too big, no repository)', async () => {
+  const { gh } = await uploadWorld();
+  const plan = (uploads) => planMedia(gh, { repo: 'example/blog', branch: 'main', uploads });
+  await assert.rejects(plan([{ key: 'images', name: 'Diagram.png', bytes: bytes(1) }]), /already exists.*Replace/);
+  await assert.rejects(plan([{ key: 'images', path: 'ghost.png', replace: true, bytes: bytes(1) }]), /nothing to replace/);
+  await assert.rejects(plan([{ key: 'images', path: 'spare.png', replace: true, bytes: new TextEncoder().encode('spare') }]), /already there/);
+  await assert.rejects(plan([{ key: 'images', name: 'notes.txt', bytes: bytes(1) }]), /only png, jpg, gif and webp/);
+  await assert.rejects(plan([{ key: 'images', name: 'a.png', bytes: bytes(1) }, { key: 'images', name: 'A.png', bytes: bytes(2) }]), /twice/);
+  await assert.rejects(plan([{ key: 'images', name: 'big.png', bytes: new Uint8Array(20 * 1024 * 1024 + 1) }]), /20 MB/);
+  await assert.rejects(plan([{ key: 'nope', name: 'a.png', bytes: bytes(1) }]), /no images repository "nope"/);
+  await assert.rejects(plan([]), /at least one/);
+});
+
+test('media: the buttons are in the view, and a write goes through the pre-flight', async () => {
+  const app = await fs.readFile(path.join(root, 'app/app.js'), 'utf8');
+  const view = app.slice(app.indexOf('async function mediaView'), app.indexOf('// ---------- reading ----------'));
+  assert.match(view, /Add images…/);
+  assert.match(view, /onReplace/);
+  assert.match(view, /commitPlan\(plan, repo, r, btn\)/);
+  assert.match(app, /async function commitPlan[\s\S]*confirmPlan\(plan\)[\s\S]*executeMedia/);
 });

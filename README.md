@@ -1015,6 +1015,15 @@ both identically. Post ids (`post-N`) derive from the slug, so adding a post ren
 Not emitted (there is nothing behind them): comments, search, sidebars/widgets, pagination, category
 and author archives, the mobile menu button.
 
+### The Media tab
+
+**Media** lists the images in the blog's images repositories as lazy tiles, with *unused* judged from `assets.lock.json` and the index. Opening it uploads nothing. With a token that can write:
+
+- **Add images…** uploads one or more files, each kept under its own cleaned name (lower case, letters, digits, dot and dash). A name that is taken is refused, with what to do. One commit per images repository; nothing embeds a new image, so no page changes.
+- **Replace…** on a tile uploads a new file under **exactly that filename**, so every post that embeds `asset:images/x.png` keeps working. A pinned address never changes under a page, so the pin in `assets.lock.json` moves to the upload commit and every page that embeds the image is regenerated with it (a second commit, in the blog's repository). An image nothing embeds is just uploaded.
+
+Both go through the usual pre-flight (what will be sent, to which repository) before anything is written. Only png, jpg, gif and webp, up to 20 MB each; `blog.json` must name an images repository.
+
 ### Make a blog look like an existing site: measure it
 
 There is no theme catalogue. Five starters ship (`default`, built in, and [`essay`, `terminal`, `cards`, `wide`](https://github.com/tejaswigowda/blog-webCLI-themes), all MIT, on this app's own markup), spanning face, width, colour and list layout. To make a blog look like a site you already have, **measure it**:

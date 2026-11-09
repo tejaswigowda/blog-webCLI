@@ -16,7 +16,7 @@ import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs, hasLook, withoutLook } from '../lib/customize.js';
 import { assertMeasured } from '../lib/measure.js';
 import { resolveOrder } from '../lib/order.js';
-import { imagePaths, mediaItems, tileUrl } from '../lib/media.js';
+import { IMAGE_FILE, imagePaths, mediaItems, tileUrl } from '../lib/media.js';
 import { daysUntil } from '../lib/schedule.js';
 import { affectedBy, relatedCount } from '../lib/related.js';
 import { blogJsonText, makeBlogJson } from '../lib/init.js';
@@ -314,7 +314,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
 // Commit a (new or changed) blog.json together with the site regenerated from it: every page
 // embeds the blog's styles, header and footer, so a settings change touches them all. Blog-level
 // assets (the header logo) are pinned here; a post that cannot be published as it is refuses the change.
-async function planBlogJson(gh, { where, branch, head, whole, blogText, message, title, existed, runner, extraPosts = [] }) {
+async function planBlogJson(gh, { where, branch, head, whole, blogText, message, title, existed, runner, extraPosts = [], lockPatch = {} }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
@@ -324,6 +324,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
   const posts = [...(await readPosts(gh, { repo, prefix, head, tree, paths: postPaths })), ...extraPosts.filter((x) => !tree.has(x.path))]; // a page the kit adds, never over one that is there
   const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
   let lockChanged = false;
+  for (const [k, sha] of Object.entries(lockPatch)) if (lock[k] !== sha) { lock[k] = sha; lockChanged = true; } // images replaced since: their pins move to the upload
   for (const ref of blogAssetRefs(blog)) {
     const { key, path } = parseAssetRef(ref);
     if (lock[`${key}/${path}`]) continue;
@@ -470,6 +471,88 @@ export async function planTheme(gh, { repo: where, branch, use, fresh = false, r
   plan.licences = licenceRecords(validateBlog(blog));
   plan.unchanged = plan.changes.length === 0;
   return plan;
+}
+
+// ---------- media: add images, or replace one with the same filename ----------
+
+export const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+// the name an uploaded file is kept under: lower case, only letters, digits, dot, dash; never a path
+export const mediaName = (name) => String(name).split(/[\\/]/).pop().toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/-+(?=\.)/g, '').replace(/^[-.]+|-+$/g, '');
+
+// uploads: [{ key, bytes, name }] new images (kept under their own name, which must be free) and
+//          [{ key, bytes, path, replace: true }] a new file for an existing image, under exactly its path.
+// A replaced image keeps its filename, so every post that embeds it keeps working; its pin in assets.lock.json moves to the upload
+// commit, and every page that embeds it is regenerated with the new address (a pinned address never changes under a page: the pin is the point).
+export async function planMedia(gh, { repo: where, branch, uploads, runner }) {
+  if (!uploads || !uploads.length) throw new Error('Choose at least one image.');
+  const { repo, folder } = parseRepoRef(where);
+  const prefix = folder ? `${folder}/` : '';
+  const head = await gh.headCommit(repo, branch);
+  const whole = await gh.tree(repo, head.treeSha);
+  const blogText = await gh.readText(repo, prefix + 'blog.json', head.sha);
+  if (blogText === null) throw new Refusal('no-blog-json', `${repo} has no ${prefix}blog.json`);
+  const blog = validateBlog(blogText);
+  const lock = whole.has(prefix + 'assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
+  const groups = [];
+  const trees = new Map();
+  const seen = new Set();
+  const replaced = [];
+  for (const u of uploads) {
+    const where2 = blog.assets && blog.assets.repos && blog.assets.repos[u.key];
+    if (!where2) throw new Refusal('unresolved-asset', `blog.json has no images repository "${u.key}"`);
+    const a = parseRepoRef(where2);
+    const path = u.replace ? u.path : mediaName(u.name);
+    if (!path || !IMAGE_FILE.test(path)) throw new Error(`${u.name || u.path}: only png, jpg, gif and webp images are kept here.`);
+    if (!u.replace && path.includes('/')) throw new Error(`${u.name}: a name, not a path.`);
+    if (u.bytes.length > MEDIA_MAX_BYTES) throw new Error(`${path} is over 20 MB; binaries should be reasonable.`);
+    if (!u.bytes.length) throw new Error(`${path} is empty.`);
+    if (seen.has(`${u.key}/${path}`)) throw new Error(`${path} was chosen twice.`);
+    seen.add(`${u.key}/${path}`);
+    let g = groups.find((x) => x.repo === a.repo);
+    if (!g) {
+      const info = await gh.repoInfo(a.repo);
+      g = { repo: a.repo, branch: a.repo === repo ? branch : info.default_branch, files: [] };
+      groups.push(g);
+    }
+    if (!trees.has(a.repo)) trees.set(a.repo, a.repo === repo ? whole : await gh.tree(a.repo, (await gh.headCommit(a.repo, g.branch)).treeSha));
+    const full = at(a.folder, path);
+    const existing = trees.get(a.repo).get(full);
+    if (u.replace) {
+      if (!existing) throw new Error(`${path} is not in the images repository, so there is nothing to replace.`);
+      if (existing === (await gitBlobSha(u.bytes))) throw new Error(`${path}: that is the file already there.`);
+    } else if (existing) throw new Error(`${path} already exists. To change it, use Replace on that image; to keep both, rename the new file.`);
+    g.files.push({ path: full, key: u.key, logical: path, content: u.bytes, size: u.bytes.length, action: u.replace ? 'update' : 'add' });
+    if (u.replace) replaced.push({ key: u.key, path, pinned: !!lock[`${u.key}/${path}`] });
+  }
+  const refreshed = replaced.filter((x) => x.pinned);
+  const summary = groups.map((g) => ({ repo: g.repo, branch: g.branch, files: g.files.length, bytes: g.files.reduce((n, f) => n + f.size, 0) }));
+  const names = groups.flatMap((g) => g.files.map((f) => f.logical));
+  const message = replaced.length && replaced.length === uploads.length ? `Replace image${replaced.length === 1 ? '' : 's'}: ${names.join(', ')}` : `Add ${uploads.length - replaced.length} image${uploads.length - replaced.length === 1 ? '' : 's'}${replaced.length ? `, replace ${replaced.length}` : ''}`;
+  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title: blog.title, message, existed: true, head, changes: [], assetGroups: groups, summary, ctx: null, lockPlan: {}, pending: [], unlisted: [], media: { replaced, refreshed }, headline: refreshed.length ? [`${refreshed.length} replaced image${refreshed.length === 1 ? ' is' : 's are'} embedded in published pages: they are regenerated with the new file.`] : null, where, runner, unchanged: false };
+}
+
+// Upload the images (one commit per images repository; the commit is the pin), then, if a replaced image is embedded anywhere,
+// regenerate the pages with its pin moved to that commit. Returns a receipt like executePlan's.
+export async function executeMedia(gh, plan) {
+  const receipt = { commits: [], pull: null };
+  const patch = {};
+  let parent = plan.head;
+  for (const g of plan.assetGroups) {
+    const shared = g.repo === plan.repo && g.branch === plan.branch;
+    const h = shared ? plan.head : await gh.headCommit(g.repo, g.branch);
+    const c = await gh.commit(g.repo, { branch: g.branch, parent: h.sha, baseTree: h.treeSha, files: g.files.map((f) => ({ path: f.path, content: f.content })), message: plan.message });
+    receipt.commits.push({ repo: g.repo, branch: g.branch, ...c, files: g.files.length });
+    for (const f of g.files) if (plan.media.refreshed.some((x) => x.key === f.key && x.path === f.logical)) patch[`${f.key}/${f.logical}`] = c.sha;
+    if (shared) parent = { sha: c.sha, treeSha: c.treeSha };
+  }
+  if (!Object.keys(patch).length) return receipt;
+  const whole = await gh.tree(plan.repo, parent.treeSha);
+  const prefix = plan.folder ? `${plan.folder}/` : '';
+  const blogText = await gh.readText(plan.repo, prefix + 'blog.json', parent.sha);
+  const p2 = await planBlogJson(gh, { where: plan.where, branch: plan.branch, head: parent, whole, blogText, message: `Use the replaced image${Object.keys(patch).length === 1 ? '' : 's'}: ${Object.keys(patch).map((k) => k.slice(k.indexOf('/') + 1)).join(', ')}`, title: plan.title, existed: true, runner: plan.runner, lockPatch: patch });
+  const r2 = await executePlan(gh, p2);
+  receipt.commits.push(...r2.commits);
+  return receipt;
 }
 
 // Make the blog look like a site that was measured (node cli/measure.mjs): the colours, fonts, width, size and list layout it measured

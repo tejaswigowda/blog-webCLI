@@ -1,6 +1,6 @@
 import { createNet, fmtBytes } from './net.js';
 import { BULK_AT, GitHub, assertToken } from './github.js';
-import { NotFound, describePlan, detectAddress, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planLook, planTheme } from './site.js';
+import { NotFound, describePlan, detectAddress, executeMedia, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planLook, planMedia, planTheme } from './site.js';
 import { createSandbox } from './sandbox.js';
 import { describeRelease, executeRelease, listReleaseFolders, planTagRelease, videoRepositories } from './release.js';
 import { insertionPoint } from '../lib/selection.js';
@@ -937,12 +937,14 @@ async function commitPlan(plan, repo, r, button) {
   }
   if (!(await confirmPlan(plan))) return;
   const receipt = await heavy('Committing…', async () => {
-    const rc = await executePlan(gh, plan);
+    const rc = await (plan.media ? executeMedia : executePlan)(gh, plan);
+    if (plan.media && blogMemo) blogMemo.media = null; // the images repository may not be this one: its listing is read again
     cache = null;
     cache = { repo, ref: r.ref, ...(await loadBlog(gh, repo, r.ref)) };
     return rc;
   }, { button });
-  sent(receipt, { title: 'Saved', message: 'blog.json and every generated page were updated together.' });
+  sent(receipt, plan.media ? { title: plan.media.replaced.length ? 'Image replaced' : 'Images added', message: plan.media.refreshed.length ? 'Every page that embeds a replaced image was regenerated with the new one.' : 'Nothing embeds these images yet; add them to a post to use them.' } : { title: 'Saved', message: 'blog.json and every generated page were updated together.' });
+  if (plan.media) route();
 }
 
 async function packContext(repo, r) {
@@ -1092,7 +1094,7 @@ async function loadMedia(repo, ref) {
 
 // A searchable grid of tiles. Lazy images with explicit dimensions, so a repository of thousands of pictures is not fetched at full
 // size; the grid is drawn a page at a time. `onPick` makes a tile choosable (the editor's picker); without it a tile copies its reference.
-function mediaGrid(items, { onPick = null } = {}) {
+function mediaGrid(items, { onPick = null, onReplace = null } = {}) {
   const PAGE = 120;
   let shown = PAGE;
   const search = h('input', { type: 'search', placeholder: 'Search images…', 'aria-label': 'Search images', autocomplete: 'off' });
@@ -1104,7 +1106,7 @@ function mediaGrid(items, { onPick = null } = {}) {
     const img = h('img', { src: it.url || '', alt: '', loading: 'lazy', width: 160, height: 120 });
     img.addEventListener('error', () => img.classList.add('broken'));
     const copy = h('button', { type: 'button', class: 'link', onclick: async (e) => { e.stopPropagation(); try { await navigator.clipboard.writeText(it.ref); toast({ kind: 'success', title: 'Copied', message: it.ref }); } catch { toast({ kind: 'error', title: 'Could not copy', message: it.ref }); } } }, 'Copy reference');
-    const box = h('figure', { class: 'media-tile', title: it.ref }, img, h('figcaption', {}, h('span', { class: 'name' }, it.path), it.unused ? h('span', { class: 'badge' }, 'unused') : null, onPick ? null : copy));
+    const box = h('figure', { class: 'media-tile', title: it.ref }, img, h('figcaption', {}, h('span', { class: 'name' }, it.path), it.unused ? h('span', { class: 'badge' }, 'unused') : null, onPick ? null : copy, onReplace && !onPick ? h('button', { type: 'button', class: 'link', title: `Upload a new file that takes the place of ${it.path}; the filename stays`, onclick: (e) => { e.stopPropagation(); onReplace(it); } }, 'Replace…') : null));
     if (onPick) {
       box.tabIndex = 0;
       box.addEventListener('click', () => onPick(it));
@@ -1130,10 +1132,41 @@ async function mediaView(repo, r) {
   const { blog } = cache;
   document.title = `Media · ${blog.title}`;
   const { items, problems } = await loadMedia(repo, r.ref);
-  const grid = mediaGrid(items);
+  const { branch, canPush } = gh.token ? await packContext(repo, r) : { branch: null, canPush: false };
+  const keys = Object.keys((blog.assets && blog.assets.repos) || {});
+  // choose files, plan the upload (said in full before anything is sent), commit it
+  const upload = (uploads, btn) => async () => {
+    btn.disabled = true;
+    try {
+      const plan = await heavy('Preparing…', () => planMedia(gh, { repo, branch, uploads, runner }), { button: btn });
+      await commitPlan(plan, repo, r, btn);
+    } catch (e) {
+      fail(e);
+    } finally {
+      btn.disabled = !canPush;
+    }
+  };
+  const choose = (multiple, accept, then) => {
+    const input = h('input', { type: 'file', accept, ...(multiple ? { multiple: '' } : {}) });
+    input.addEventListener('change', () => { if (input.files.length) then([...input.files]); });
+    input.click();
+  };
+  const read = async (file) => new Uint8Array(await file.arrayBuffer());
+  const addBtn = h('button', { type: 'button', class: 'primary', icon: 'upload' }, 'Add images…');
+  addBtn.disabled = !canPush || !keys.length;
+  addBtn.addEventListener('click', () => choose(true, 'image/png,image/jpeg,image/gif,image/webp', async (files) => {
+    const key = keys.includes('images') ? 'images' : keys[0];
+    try { await upload(await Promise.all(files.map(async (f) => ({ key, name: f.name, bytes: await read(f) }))), addBtn)(); } catch (e) { fail(e); }
+  }));
+  const onReplace = canPush ? (it) => choose(false, 'image/png,image/jpeg,image/gif,image/webp', async ([file]) => {
+    try { await upload([{ key: it.key, path: it.path, replace: true, bytes: await read(file) }], addBtn)(); } catch (e) { fail(e); }
+  }) : null;
+  const grid = mediaGrid(items, { onReplace });
   return h('div', {},
     h('p', {}, nav(blog.title, link(repo), { icon: 'arrow-left' })),
     h('h1', {}, 'Media'),
+    h('div', { class: 'actions' }, addBtn),
+    h('p', { class: 'hint' }, canPush ? 'Add images by upload, or use Replace on an image to put a new file under the same filename: every post that uses it keeps working and its pages are regenerated. You see exactly what will be sent first.' : 'Sign in with a token that can write to the blog to add or replace images.'),
     h('p', { class: 'muted' }, 'The images in this blog\'s images repositories. Unused means no published or scheduled post and no blog.json setting references the image (a draft may still plan to). Opening this view uploads nothing.'),
     problems.map((p) => h('div', { class: 'err' }, p)),
     !Object.keys((blog.assets && blog.assets.repos) || {}).length ? h('p', { class: 'muted' }, 'This blog has no images repository yet. Name one in Settings.') : grid.root,
