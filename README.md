@@ -995,6 +995,7 @@ owner/theme-name[/folder]
 |---|---|
 | `blog-webcli-v1` | this app's own markup (`.wrap`, `header.site`, `ul.posts`, …) |
 | `wordpress-classic` | the de facto classic-theme contract: `#page.site`, `#masthead.site-header`, `.site-title`, `.site-description`, `#site-navigation.primary-navigation` > `ul.menu-wrapper`, `#content.site-content` > `main#main.site-main`, `article.post.hentry.tag-…` with `.entry-header.alignwide`, `.entry-title`, `.entry-meta`, `.entry-content`, `.entry-summary`, `.entry-footer`, `.post-thumbnail`, `#colophon.site-footer`; `body` classes `home blog` / `single single-post postid-N`; content blocks `wp-block-heading`, `wp-block-quote`, `wp-block-code`, `wp-block-list`, `wp-block-image`, `wp-block-embed` |
+| `wordpress-classic-2` | `wordpress-classic` plus classes a blog can truthfully carry: `page-numbers` / `current` / `prev` / `next` / `posts-navigation` on the pager, `post-date`, `page-content` on a standalone page, `taxonomy-description`, `nav-menu`, `site-logo`, and body class `archive` on listings. `wordpress-classic` itself never changes (pinned themes depend on it); the two are tested to differ only by those classes. Nothing is added that would be empty or false: no sidebar, comments, categories or submenus. See [docs/contract-v2.md](docs/contract-v2.md). |
 
 **A page skeleton** (`"skeleton": "skeleton.html"`, with an optional `"body_class"`, on a `wordpress-classic` theme) gives a theme
 its own page structure. Many themes target their own class names (`.ast-container`, `.main-header-bar`, `.site-branding`, …), not the
@@ -1042,6 +1043,21 @@ A theme may carry a `kit` in `theme.json`: what a blog becomes when it starts fr
   header picture and a hero heading. A picture is taken from `<themes-repo>/kit-images/` (with `credits.json`), the same one for a given theme.
   A theme whose demo is a designed front page (a hero with the menu over it, a magazine grid) gets its colours, type and picture but not
   that layout. (`test/skeleton.test.js`)
+
+### Measuring themes
+
+Two maintainer tools judge a theme without a pixel comparison. Both read `<themes-repo>/wp/*`.
+
+* `node cli/wp-gap.mjs` computes the **contract gap** statically: every class and id a theme's CSS targets, minus what the generator
+  emits over a corpus of pages. It sorts what is left into markup that can be emitted, regions a blog does not have (sidebar, comments,
+  widgets: never faked) and noise (plugins, blocks, framework utilities), and writes [docs/contract-gap.md](docs/contract-gap.md).
+* `node cli/wp-sweep.mjs` builds each theme over the **layout corpus** (`test/layout/` plus the golden and example posts: a wide table,
+  long code lines, an HTML block, a three-line title, forty tags, RTL, CJK, a wide image; the index in list and cards layouts, a second
+  page, tags, archive, a standalone page) and opens it in headless Chrome at 1280 and 390 px. It records failure signatures (overflow, a
+  hidden or below-the-fold title, something painted over the text, a too-narrow or off-centre column, low contrast), gives each theme a
+  verdict (usable, degraded, unportable?) and a contact sheet, and writes [docs/layout-sweep.md](docs/layout-sweep.md).
+  `VERDICTS_ONLY=1` redoes the verdicts from the last run; `CONTRACT=wordpress-classic-2` renders the themes under another contract
+  (the same variable works for `wp-gap`).
 
 ### Ingesting a WordPress theme
 
@@ -1844,10 +1860,10 @@ fast and the send is patient. A repository over what a browser can hold in memor
   legal judgement; it refuses on a match and cannot see licence terms written elsewhere.
 * An embed's pinned assets can be verified by the editor only on jsDelivr or GitHub raw (the hosts
   its CSP lets it read); the CLI can fetch any https host.
-* Only `style.css` of a WordPress theme is taken, not other stylesheets it loads from PHP, and only a
-  block theme's design tokens, not its `theme.json` styles or templates.
-* The `wordpress-classic` contract covers what a blog has (no comments, widgets, pagination or
-  archives); a theme's CSS for those simply matches nothing.
+* A WordPress theme's stylesheets are taken (`style.css`, the extra ones it names, and the CSS its demo page enqueues or generates), not
+  its PHP or scripts, and for a block theme only its design tokens, not its `theme.json` styles or templates.
+* The `wordpress-classic` contract covers what a blog has (no comments, widgets or sidebar); a theme's CSS for those simply matches
+  nothing, and a theme whose layout depends on a sidebar may leave a hole (see the layout sweep). `wordpress-classic-2` adds the pager classes.
 * Two adjacent lists of the *same* type separated by a blank line merge on round trip, so
   such files are refused as non-canonical.
 * Read counts bytes fetched by this app; images the browser loads from the asset CDN are
