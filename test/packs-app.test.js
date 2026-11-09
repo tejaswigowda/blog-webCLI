@@ -243,3 +243,24 @@ test('R7: a registry sha256 or licence that disagrees with the repository pins n
   assert.deepEqual(JSON.parse(agreed.changes.find((c) => c.path === 'blog.json').content).theme, real);
   await assert.rejects(planExtension(gh, { ...base, add: { where: 'me/ext', ref: 'v1.0.0', expect: { sha256: 'b'.repeat(64) } }, runner: runner() }), code('registry-mismatch'));
 });
+
+// ---------- starting fresh with a theme ----------
+test('starting fresh: choosing a theme can set aside the blog\'s own colours, fonts, width, list layout and CSS, and keeps what it says', async () => {
+  const { server, gh } = await world();
+  const blog = JSON.parse(server.files('example/blog')['blog.json']);
+  assert.ok(blog.customize.colors && blog.customize.list && blog.customize.header && blog.customize.footer, 'the example blog has a look and content');
+  const keep = await planTheme(gh, { repo: 'example/blog', branch: 'main', use: { where: 'me/theme', ref: 'v1.0.0' } });
+  await executePlan(gh, keep);
+  assert.deepEqual(JSON.parse(server.files('example/blog')['blog.json']).customize, blog.customize, 'without the option, nothing else changes');
+
+  const { server: s2, gh: g2 } = await world();
+  const plan = await planTheme(g2, { repo: 'example/blog', branch: 'main', use: { where: 'me/theme', ref: 'v1.0.0' }, fresh: true });
+  assert.match(plan.changes.find((c) => c.path === 'blog.json').content, /"theme"/);
+  await executePlan(g2, plan);
+  const after = JSON.parse(s2.files('example/blog')['blog.json']);
+  for (const k of ['colors', 'font', 'headingFont', 'width', 'fontSize', 'css', 'list']) assert.equal(after.customize?.[k], undefined, `${k} is cleared`);
+  assert.deepEqual(after.customize.header, blog.customize.header, 'the header is kept');
+  assert.deepEqual(after.customize.footer, blog.customize.footer, 'the footer is kept');
+  assert.equal(after.title, blog.title);
+  assert.ok(!s2.files('example/blog')['index.html'].includes('#0b7a5f'), "the blog's accent colour is no longer on the pages");
+});

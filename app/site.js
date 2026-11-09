@@ -13,7 +13,7 @@ import { licenceRecords } from '../lib/licences.js';
 import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
 import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
-import { blogAssetRefs } from '../lib/customize.js';
+import { blogAssetRefs, hasLook, withoutLook } from '../lib/customize.js';
 import { resolveOrder } from '../lib/order.js';
 import { imagePaths, mediaItems, tileUrl } from '../lib/media.js';
 import { daysUntil } from '../lib/schedule.js';
@@ -313,14 +313,14 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
 // Commit a (new or changed) blog.json together with the site regenerated from it: every page
 // embeds the blog's styles, header and footer, so a settings change touches them all. Blog-level
 // assets (the header logo) are pinned here; a post that cannot be published as it is refuses the change.
-async function planBlogJson(gh, { where, branch, head, whole, blogText, message, title, existed, runner }) {
+async function planBlogJson(gh, { where, branch, head, whole, blogText, message, title, existed, runner, extraPosts = [] }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
   const blog = validateBlog(blogText);
 
   const postPaths = [...tree.keys()].filter(isContent);
-  const posts = await readPosts(gh, { repo, prefix, head, tree, paths: postPaths });
+  const posts = [...(await readPosts(gh, { repo, prefix, head, tree, paths: postPaths })), ...extraPosts.filter((x) => !tree.has(x.path))]; // a page the kit adds, never over one that is there
   const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
   let lockChanged = false;
   for (const ref of blogAssetRefs(blog)) {
@@ -337,6 +337,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
 
   const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner });
   const out = { 'blog.json': blogText, ...site.files };
+  for (const x of extraPosts) if (!tree.has(x.path)) out[x.path] = x.text;
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
   const changes = [];
   for (const [path, content] of Object.entries(out)) {
@@ -437,18 +438,34 @@ const assetFetcher = (gh) => async (url) => {
 
 // Use (or stop using) a theme. `use` is { where: owner/repo[/folder], ref, base? }: found by address, so
 // a theme that is in no list works. Every page is regenerated; the plan lists the licences involved.
-export async function planTheme(gh, { repo: where, branch, use, runner }) {
+export async function planTheme(gh, { repo: where, branch, use, fresh = false, runner }) {
   const { head, whole, blog } = await currentBlogJson(gh, where, branch);
   let message;
+  let kit = null;
   if (use) {
     const { pin, manifest } = await readThemeToPin(gh, use.where, use.ref, { base: use.base, expect: use.expect });
     blog.theme = pin;
+    kit = manifest.kit || null;
     message = `Use theme: ${manifest.name} ${manifest.version} (${manifest.licence})`;
   } else {
     delete blog.theme;
     message = 'Use the default theme';
   }
-  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message, title: blog.title, existed: true, runner });
+  const extraPosts = [];
+  if (fresh && kit) {
+    // the theme's bootstrap kit replaces the blog's whole customize block; its home page is added only where the blog has none
+    if (kit.customize) blog.customize = structuredClone(kit.customize);
+    else delete blog.customize;
+    const prefix = parseRepoRef(where).folder ? `${parseRepoRef(where).folder}/` : '';
+    if (kit.home && !whole.has(`${prefix}pages/home.md`)) extraPosts.push({ path: 'pages/home.md', text: `---\nslug: home\ntitle: Home\nstatus: published\n---\n\n${kit.home.trim()}\n` });
+    message += `, starting fresh with its kit (settings replaced${extraPosts.length ? ', a home page added' : ''}${kit.hero ? ', header picture by ' + kit.hero.credit.name : ''})`;
+  } else if (fresh && hasLook(blog)) {
+    const bare = withoutLook(blog);
+    if (bare.customize) blog.customize = bare.customize;
+    else delete blog.customize;
+    message += ', starting fresh (colours, fonts, width, list layout and custom CSS cleared)';
+  }
+  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message, title: blog.title, existed: true, runner, extraPosts });
   plan.licences = licenceRecords(validateBlog(blog));
   plan.unchanged = plan.changes.length === 0;
   return plan;

@@ -23,13 +23,16 @@ import { resolveAsset } from '../lib/assets.js';
 import { videoBase, videoEmbedUrl } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { DEFAULT_CONTENT_BASE, defaultDomain, defaultTitle } from '../lib/init.js';
-import { FONTS, resolveLogo, themeCss } from '../lib/customize.js';
+import { FONTS, hasLook, resolveLogo, themeCss } from '../lib/customize.js';
 import { THEMES } from '../lib/theme.js';
+import { EXAMPLE_BLOG, EXAMPLE_ENTRIES, EXAMPLE_MENU } from '../lib/sample.js';
 import { blogToForm, formToBlog } from '../lib/settings.js';
 import { DATE_FORMAT_EXAMPLES, DEFAULT_DATE_FORMAT } from '../lib/datefmt.js';
 import { validateBlog } from '../lib/blog.js';
 import { indexBody, postBody } from '../lib/contracts.js';
 import { loadPinnedTheme, readThemeToPin } from './packs.js';
+import { heroHtml } from '../lib/theme-pack.js';
+import { deltaToHtml } from '../lib/html.js';
 import { loadRegistry } from './registry-client.js';
 import { highlightedTextarea } from './highlight.js';
 import { config } from './config.js';
@@ -858,7 +861,7 @@ function pickScheme(css, mode) {
 }
 const SCHEME_BASE = { light: 'background:#fff;color:#1a1a1a', dark: 'background:#14161a;color:#e8eaed' }; // what a theme that sets neither still reads on
 
-async function previewTheme(repo, spec, label) {
+async function previewTheme(repo, spec, label, startFresh = false) {
   const dlg = h('dialog', { class: 'theme-preview' });
   dlg.addEventListener('close', () => dlg.remove());
   const head = (title) => h('div', { class: 'tp-head' }, h('h2', {}, title), h('button', { type: 'button', class: 'icon-btn', icon: 'x', title: 'Close', 'aria-label': 'Close', onclick: () => dlg.close() }));
@@ -869,42 +872,52 @@ async function previewTheme(repo, spec, label) {
     const { blog, lock } = cache;
     const memo = blogMemo;
     const all = memo && memo.entries ? memo.entries : await loadIndex(gh, repo, undefined, { blog });
-    const entries = all.slice(0, 8);
+    const mineEntries = all.slice(0, 8);
     const { pin, theme } = await readThemeToPin(gh, spec.where, spec.ref, { expect: spec.expect });
-    const shown = { ...blog, theme: pin };
+    // "Start fresh" shows the example blog (what a new blog is, with nothing of the author's on it: the thumbnails are the same blog); "My blog" shows this one
+    const mineBlog = { ...blog, theme: pin };
+    let fresh = startFresh;
     let logoUrl = null;
     try {
-      logoUrl = resolveLogo(shown, lock);
+      logoUrl = resolveLogo(mineBlog, lock);
     } catch {
       /* an unpinned logo is simply not drawn */
     }
     const frame = h('div', { class: 'tp-frame' });
     const shadow = frame.attachShadow({ mode: 'open' });
     // the standard stylesheet every theme sits on (the default theme's), then the theme's own
-    const raw = `${THEMES.default}\n${themeCss(shown, theme)}`;
     let mode = 'light';
     let kind0 = 'index';
     const draw = (kind) => {
       kind0 = kind;
-      const css = forShadow(pickScheme(raw, mode));
+      // start fresh = the example blog with the theme's kit: its settings, its header picture and its home page
+      const kit = theme.manifest && theme.manifest.kit;
+      const shown = fresh ? { ...EXAMPLE_BLOG, theme: pin, ...(kit && kit.customize ? { customize: kit.customize } : {}) } : mineBlog;
+      const homeHtml = fresh && kit ? heroHtml(pin, theme.manifest) + (kit.home ? deltaToHtml(mdToDelta(kit.home), { resolve: (r) => r, strict: false, contract: theme.contract }) : '') : '';
+      const entries = fresh ? EXAMPLE_ENTRIES : mineEntries;
+      const logo = fresh ? null : logoUrl;
+      const menu = fresh ? EXAMPLE_MENU : undefined;
+      const css = forShadow(pickScheme(`${THEMES.default}\n${themeCss(shown, theme)}`, mode));
       frame.style.background = mode === 'dark' ? '#14161a' : '#fff';
       const first = entries[0] || { slug: 'sample', title: 'A sample post', date: today(), tags: ['sample'] };
       const body = kind === 'index'
-        ? indexBody(theme.contractSpec, { blog: shown, entries: entries.length ? entries : [first], hrefFor: () => '#', home: '#', feed: '#', logoUrl })
-        : postBody(theme.contractSpec, { blog: shown, meta: { slug: first.slug, title: first.title, date: first.date, tags: first.tags || [], author: shown.author }, bodyHtml: SAMPLE_POST, coverUrl: null, home: '#', feed: '#', logoUrl, footerExtra: '', nav: null, page: false, after: '' });
+        ? indexBody(theme.contractSpec, { blog: shown, entries: entries.length ? entries : [first], hrefFor: () => '#', home: '#', feed: '#', logoUrl: logo, menu, homeHtml })
+        : postBody(theme.contractSpec, { blog: shown, meta: { slug: first.slug, title: first.title, date: first.date, tags: first.tags || [], author: shown.author }, bodyHtml: SAMPLE_POST, coverUrl: null, home: '#', feed: '#', logoUrl: logo, menu, footerExtra: '', nav: null, page: false, after: '' });
       shadow.innerHTML = `<style>.pv{${SCHEME_BASE[mode]}}</style><style>${css}</style><style>.pv{padding:0 1.25rem 1rem;overflow-x:hidden;word-wrap:break-word}</style><div class="pv ${esc(body.bodyClass)}" style="pointer-events:none">${body.html}</div>`;
     };
-    const tabs = [['index', 'Your posts'], ['post', 'A post']].map(([k, t]) => h('button', { type: 'button', role: 'tab', onclick: () => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.k === k))); draw(k); } }, t));
+    const tabs = [['index', 'Posts'], ['post', 'A post']].map(([k, t]) => h('button', { type: 'button', role: 'tab', onclick: () => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.k === k))); draw(k); } }, t));
     tabs.forEach((b, i) => { b.dataset.k = ['index', 'post'][i]; b.setAttribute('aria-selected', String(i === 0)); });
     draw('index');
     // a dark view only where the theme itself has one: a light theme's dark text would sit on the dark page
     const hasDark = /prefers-color-scheme\s*:\s*dark/i.test(theme.css);
     const modeBtns = (hasDark ? ['light', 'dark'] : []).map((m) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(m === mode), onclick: () => { mode = m; modeBtns.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.m === m))); draw(kind0); } }, m === 'light' ? 'Light' : 'Dark'));
     modeBtns.forEach((b, i) => { b.dataset.m = ['light', 'dark'][i]; });
+    const lookBtns = [[true, 'Start fresh'], [false, 'My blog']].map(([f, t]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(f === fresh), onclick: () => { fresh = f; lookBtns.forEach((b) => b.setAttribute('aria-selected', String((b.dataset.f === 'yes') === fresh))); draw(kind0); } }, t));
+    lookBtns.forEach((b, i) => { b.dataset.f = i === 0 ? 'yes' : 'no'; });
     dlg.replaceChildren(
       head(`Preview: ${theme.manifest ? theme.manifest.name : label}`),
-      h('div', { class: 'tp-bar' }, h('div', { class: 'tabs', role: 'tablist' }, ...tabs), modeBtns.length ? h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Colour scheme' }, ...modeBtns) : null),
-      h('p', { class: 'hint' }, `${pin.licence} · ${pin.repo}@${pin.ref}. ${hasDark ? 'Shown light or dark as you choose.' : 'This theme has no dark version.'} Nothing is saved.`),
+      h('div', { class: 'tp-bar' }, h('div', { class: 'tabs', role: 'tablist' }, ...tabs), lookBtns.length ? h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Which settings' }, ...lookBtns) : null, modeBtns.length ? h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Colour scheme' }, ...modeBtns) : null),
+      h('p', { class: 'hint' }, `${pin.licence} · ${pin.repo}@${pin.ref}. ${hasDark ? 'Shown light or dark as you choose.' : 'This theme has no dark version.'} Start fresh shows the example blog with nothing of yours on it; My blog shows yours. Nothing is saved.`),
       frame,
     );
   } catch (e) {
@@ -943,10 +956,14 @@ async function themesView(repo, r) {
   const { branch, canPush } = await packContext(repo, r);
   const registry = await readList('themes');
   const listed = registry.entries;
+  const looks = hasLook(blog);
+  const freshBox = h('input', { type: 'checkbox', checked: true });
+  freshBox.disabled = !looks;
+  const freshRow = h('label', { class: 'check fresh' }, freshBox, looks ? ' Start fresh with the theme\'s kit: its colours, fonts, width and list layout replace all of my settings (colours, fonts, width, list layout, custom CSS, logo, header and footer links, top bar), a home page and a credited header picture are added where the theme has them, and my posts and pages are kept. The old settings stay in the repository\'s history.' : ' Start fresh: this blog has no colours, fonts, width, list layout or custom CSS of its own, so the theme will look as it was designed.');
   const use = async (spec, btn) => {
     btn.disabled = true;
     try {
-      const plan = await heavy('Preparing the theme…', () => planTheme(gh, { repo, branch, use: spec, runner }), { button: btn });
+      const plan = await heavy('Preparing the theme…', () => planTheme(gh, { repo, branch, use: spec, fresh: looks && freshBox.checked, runner }), { button: btn });
       await commitPlan(plan, repo, r, btn);
     } catch (e) {
       fail(e);
@@ -969,14 +986,15 @@ async function themesView(repo, r) {
     h('h1', {}, 'Theme'),
     h('p', {}, t ? h('span', {}, 'Current: ', h('b', {}, `${t.name} ${t.version}`), ` — ${t.licence} — ${t.repo}@${t.ref}`) : 'Current: the default theme.'),
     h('p', { class: 'hint' }, 'A theme is a repository (theme.json + CSS). It is pinned to a tag or commit and a sha256, so it cannot change under your published pages. Its CSS is baked into the generated pages; readers load nothing from the theme repository.'),
+    freshRow,
     h('h3', {}, 'By address'),
     h('p', { class: 'hint' }, 'Any repository works, listed or not.'),
     input,
-    h('div', { class: 'actions' }, go, h('button', { icon: 'eye', onclick: () => { try { const a = parseAddress(input.value); previewTheme(repo, a, input.value.trim()); } catch (e) { fail(e); } } }, 'Preview'), builtin),
+    h('div', { class: 'actions' }, go, h('button', { icon: 'eye', onclick: () => { try { const a = parseAddress(input.value); previewTheme(repo, a, input.value.trim(), freshBox.checked); } catch (e) { fail(e); } } }, 'Preview'), builtin),
     h('h3', {}, 'Listed'),
     listNote(registry),
     listed.length
-      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', { icon: 'check' }, 'Use…'); b.disabled = !canPush; b.addEventListener('click', () => { try { use({ ...parseAddress(`${e.repo}@${e.ref}`), expect: { sha256: e.sha256, licence: e.licence } }, b); } catch (err) { fail(err); } }); const pv = h('button', { icon: 'eye', onclick: () => { try { previewTheme(repo, { ...parseAddress(`${e.repo}@${e.ref}`), expect: { sha256: e.sha256, licence: e.licence } }, e.name); } catch (err) { fail(err); } } }, 'Preview'); return h('li', {}, e.screenshot && /^https:\/\//.test(e.screenshot) ? h('img', { src: e.screenshot, alt: '', style: 'max-width:12rem;float:right;margin-left:1rem' }) : null, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.blurb ? h('p', {}, e.blurb) : null, h('div', { class: 'actions' }, pv, b)); }))
+      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', { icon: 'check' }, 'Use…'); b.disabled = !canPush; b.addEventListener('click', () => { try { use({ ...parseAddress(`${e.repo}@${e.ref}`), expect: { sha256: e.sha256, licence: e.licence } }, b); } catch (err) { fail(err); } }); const pv = h('button', { icon: 'eye', onclick: () => { try { previewTheme(repo, { ...parseAddress(`${e.repo}@${e.ref}`), expect: { sha256: e.sha256, licence: e.licence } }, e.name, freshBox.checked); } catch (err) { fail(err); } } }, 'Preview'); return h('li', {}, e.screenshot && /^https:\/\//.test(e.screenshot) ? h('img', { src: e.screenshot, alt: '', style: 'max-width:12rem;float:right;margin-left:1rem' }) : null, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.blurb ? h('p', {}, e.blurb) : null, h('div', { class: 'actions' }, pv, b)); }))
       :       h('p', { class: 'muted' }, 'The list could not be read. Any theme repository still works by its address.'),
   );
 }

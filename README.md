@@ -1014,6 +1014,35 @@ both identically. Post ids (`post-N`) derive from the slug, so adding a post ren
 Not emitted (there is nothing behind them): comments, search, sidebars/widgets, pagination, category
 and author archives, the mobile menu button.
 
+### Theme bootstrap kits
+
+A theme may carry a `kit` in `theme.json`: what a blog becomes when it starts fresh with the theme, so it looks as the theme was designed.
+
+```json
+"kit": {
+  "customize": { "colors": { "accent": "#89229b", "text": "#1a1a1a", "background": "#fff", "muted": "#666" }, "font": "sans", "headingFont": "slab", "width": "720px", "list": { "layout": "cards" } },
+  "home": "## Welcome to Hestia!\n\nA short introduction.",
+  "hero": { "image": "kit/hero.jpg", "alt": "…", "credit": { "name": "…", "profile": "https://unsplash.com/@…", "source": "https://unsplash.com/photos/…" } }
+}
+```
+
+* **customize** is a [`customize`](#customization) block, judged by the same rules as a blog's own. With **Start fresh** ticked, choosing the
+  theme **replaces the blog's whole `customize`** with it (colours, fonts, width, list layout, custom CSS, logo, header and footer links, the
+  top bar); git history keeps the old one. A theme without a kit clears only the look (colours, fonts, width, list layout, CSS).
+* **home** is added as `pages/home.md` when the blog has none (never over one that is there). Posts and pages are never touched.
+* **hero** is a header picture, a file of the theme (listed under `assets`, so it is part of the pinned digest), drawn at the top of the home
+  page with its credit: *Photo by NAME on Unsplash*, linked to the photographer and the photo, which must be on unsplash.com. Only free
+  Unsplash photos are used (not Unsplash+); see [`kit-images`](https://github.com/tejaswigowda/blog-webCLI-themes/tree/main/kit-images)
+  in the themes repository for each photo's photographer. The picture is in the index's recorded home page, so the live renderer and the
+  `/blog/` reader show it too.
+* The **Theme screen's preview** shows the kit: *Start fresh* is the example blog with the theme's settings, picture and home page, and
+  *My blog* is yours.
+* **Making kits**: `node cli/wp-kit.mjs <themes-repo>` opens each imported theme's demo page (`wp-themes.com/<slug>/`) in headless Chrome and
+  measures it: the page and text colours, the link and muted colours, fonts, width, whether the posts are cards, and whether there is a
+  header picture and a hero heading. A picture is taken from `<themes-repo>/kit-images/` (with `credits.json`), the same one for a given theme.
+  A theme whose demo is a designed front page (a hero with the menu over it, a magazine grid) gets its colours, type and picture but not
+  that layout. (`test/skeleton.test.js`)
+
 ### Ingesting a WordPress theme
 
 ```
@@ -1045,7 +1074,7 @@ the manifest lists them under `dropped`, so the conversion is honest about being
 * Tokens are lifted from a block theme's `theme.json` palette, font families, font sizes and spacing.
 
 Commit the folder to a repository, tag a release, then `node cli/blog.js theme pin owner/repo@v2.9.0`
-(or use the **Theme** screen, where every listed theme, and any address you type, has a **Preview**: the theme is fetched and checked exactly as choosing it would be, then your own posts and a sample post are drawn with it, following your light/dark setting; nothing is saved or sent). A GPL theme repository beside this MIT tool is coherent: the licences
+(or use the **Theme** screen, where **Start fresh** applies the theme's **bootstrap kit** as it is chosen ([below](#theme-bootstrap-kits)), and every listed theme, and any address you type, has a **Preview**: the theme is fetched and checked exactly as choosing it would be, then your own posts and a sample post are drawn with it, following your light/dark setting; nothing is saved or sent). A GPL theme repository beside this MIT tool is coherent: the licences
 stay in their own repositories and neither infects the other. *Tried for real* on
 `twentytwentyone` 2.9: GPL-2.0-or-later detected, 48 PHP files, 12 scripts and 9 other CSS files
 recorded as dropped, and all 25 core classes its CSS styles are emitted by the generator, so the

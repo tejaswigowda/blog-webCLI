@@ -130,3 +130,45 @@ test('applySkeleton leaves a page alone when it is not in the classic structure'
   const built = { bodyClass: 'x', html: '<div>other</div>' };
   assert.equal(applySkeleton({ html: GOOD, bodyClass: 'y' }, built, { blog: BLOG, home: './' }), built);
 });
+
+// ---------- the bootstrap kit ----------
+import { heroHtml } from '../lib/theme-pack.js';
+
+const KIT = { customize: { colors: { accent: '#89229b', text: '#1a1a1a', background: '#ffffff', muted: '#666666' }, font: 'sans', headingFont: 'slab', width: '720px', list: { layout: 'cards' } }, home: '## Welcome\n\nA short introduction.', hero: { image: 'kit/hero.jpg', alt: 'A mountain lake', credit: { name: 'Ada Photographer', profile: 'https://unsplash.com/@ada', source: 'https://unsplash.com/photos/lake-abc123' } } };
+const kitManifest = (kit) => ({ name: 'K', version: '1', licence: 'GPL-2.0-or-later', class_contract: 'wordpress-classic', css: ['style.css'], assets: ['kit/hero.jpg'], kit });
+
+test('kit: the manifest accepts a kit of settings, a home page and a credited picture, and refuses anything else', () => {
+  assert.doesNotThrow(() => validateThemeManifest(kitManifest(KIT)));
+  const refused = {
+    'an unknown field': { ...KIT, extra: 1 },
+    'settings outside the customize grammar': { ...KIT, customize: { ...KIT.customize, css: 'a{background:url(http://x/y)}' } },
+    'a bad colour': { ...KIT, customize: { colors: { accent: 'red' } } },
+    'a picture that is not a theme asset': { ...KIT, hero: { ...KIT.hero, image: 'other.jpg' } },
+    'a picture with no credit': { ...KIT, hero: { ...KIT.hero, credit: undefined } },
+    'a credit that is not on unsplash.com': { ...KIT, hero: { ...KIT.hero, credit: { ...KIT.hero.credit, profile: 'https://evil.test/@ada' } } },
+    'markup in the credit': { ...KIT, hero: { ...KIT.hero, credit: { ...KIT.hero.credit, name: '<b>x</b>' } } },
+    'a home page that is too long': { ...KIT, home: 'x'.repeat(4001) },
+  };
+  for (const [what, kit] of Object.entries(refused)) assert.throws(() => validateThemeManifest(kitManifest(kit)), code('bad-theme'), what);
+});
+
+test('kit: the header picture is a theme file at the pinned address, with its photographer and the photo credited, escaped', () => {
+  const pin = { repo: 'me/themes/k', ref: 'v1.0.0' };
+  const html = heroHtml(pin, kitManifest({ ...KIT, hero: { ...KIT.hero, alt: 'A "lake" & hills' } }));
+  assert.match(html, /<figure class="theme-hero"><img src="https:\/\/cdn\.jsdelivr\.net\/gh\/me\/themes@v1\.0\.0\/k\/kit\/hero\.jpg" alt="A &quot;lake&quot; &amp; hills">/);
+  assert.match(html, /Photo by <a href="https:\/\/unsplash\.com\/@ada" rel="noopener">Ada Photographer<\/a> on <a href="https:\/\/unsplash\.com\/photos\/lake-abc123" rel="noopener">Unsplash<\/a>/);
+  assert.equal(heroHtml(pin, kitManifest({ customize: KIT.customize })), '');
+  assert.equal(heroHtml(pin, { name: 'x' }), '');
+});
+
+test('kit: a blog on a theme with a kit shows the credited picture at the top of its home page, on every build', () => {
+  const m = kitManifest(KIT);
+  const files = { 'theme.json': enc.encode(JSON.stringify(m)), 'style.css': enc.encode('a{}'), 'kit/hero.jpg': enc.encode('jpg') };
+  const pin = pinFor('me/themes/k', 'v1.0.0', m, themeDigest(files, themeFilePaths(m)));
+  const theme = loadTheme(pin, files);
+  const r = buildSite({ blog: JSON.stringify({ title: 'T', description: 'D', author: 'A', domain: 'https://x.test/b', repo: 'me/b', theme: pin, customize: KIT.customize }), posts: [post('one', 'x'), { path: 'pages/home.md', text: '---\nslug: home\ntitle: Home\nstatus: published\n---\n\nWelcome home.\n' }], lock: {}, theme });
+  assert.deepEqual(r.errors, []);
+  assert.match(r.files['index.html'], /<figure class="theme-hero">[\s\S]*Photo by <a href="https:\/\/unsplash\.com\/@ada"[\s\S]*Welcome home\./, 'the picture, its credit, then the home page');
+  assert.match(JSON.parse(r.files['index/posts.json']).home, /theme-hero/, 'recorded in the index, so the live renderer and the reader show the same page');
+  assert.ok(!r.files['one/index.html'].includes('<figure class="theme-hero">'), 'only the home page');
+});

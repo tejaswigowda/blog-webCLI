@@ -179,3 +179,17 @@ test('blog.json: customize is validated with the rest of the file', async () => 
   blog.customize = { colors: { accent: 'blue' } };
   assert.throws(() => validateBlog(blog), (e) => e.code === 'bad-blog-json' && /customize: colors\.accent/.test(e.detail));
 });
+
+test('withoutLook: only what changes how a blog looks is set aside; a blog with no look is untouched', async () => {
+  const { hasLook, withoutLook, LOOK_KEYS } = await import('../lib/customize.js');
+  const blog = { title: 'T', customize: { colors: { accent: '#fff' }, font: 'serif', css: 'a{}', list: { layout: 'cards' }, header: { links: [{ label: 'A', url: 'https://a.test' }] }, footer: { text: 'x' } } };
+  assert.equal(hasLook(blog), true);
+  const bare = withoutLook(blog);
+  assert.deepEqual(Object.keys(bare.customize).sort(), ['footer', 'header']);
+  assert.ok(blog.customize.colors, 'the original is not modified');
+  assert.deepEqual(withoutLook({ title: 'T', customize: { colors: {} } }), { title: 'T' }, 'an empty customize goes');
+  const none = { title: 'T', customize: { footer: { text: 'x' } } };
+  assert.equal(hasLook(none), false);
+  assert.deepEqual(withoutLook(none), none);
+  assert.deepEqual([...LOOK_KEYS].sort(), ['colors', 'css', 'font', 'fontSize', 'headingFont', 'list', 'width']);
+});
