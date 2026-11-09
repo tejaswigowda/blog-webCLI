@@ -628,10 +628,12 @@ export async function executeMedia(gh, plan) {
 export async function planLook(gh, { repo: where, branch, look, runner }) {
   const { head, whole, blog } = await currentBlogJson(gh, where, branch);
   const measured = assertMeasured(look);
+  const oldBlog = structuredClone(blog);
   const bare = withoutLook(blog);
   blog.customize = { ...(bare.customize || {}), ...structuredClone(measured) };
-  const oldBlog = JSON.parse(await gh.readText(parseRepoRef(where).repo, at(parseRepoRef(where).folder, 'blog.json'), head.sha));
-  const lookMessage = `Match an existing site: its measured colours, ${measured.font ? measured.font + ' type, ' : ''}width and list layout`, title: blog.title, existed: true, runner });
+  const message = `Match an existing site: its measured colours, ${measured.font ? measured.font + ' type, ' : ''}width and list layout`;
+  const blogText = blogJsonText(blog);
+  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText, message, title: blog.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message, title: blog.title, existed: true, runner }));
   plan.unchanged = plan.changes.length === 0;
   return plan;
 }

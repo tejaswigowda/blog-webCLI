@@ -106,3 +106,29 @@ test('linked stylesheet: in the editor, turning it on rewrites the pages once; a
   assert.ok(off.changes.some((c) => c.path === 'style.css' && c.action === 'delete'), 'turned off, the file goes and the pages carry the CSS again');
   assert.ok(!('style.css' in server.files('me/blog')));
 });
+
+test('linked stylesheet: a CSS-only change is made without reading a post, writes only blog.json, style.css and theme.css, and equals a full rebuild', async () => {
+  const blog = { ...withCss('.x{color:red}'), stylesheet: 'linked' };
+  const files = { 'blog.json': JSON.stringify(blog), 'assets.lock.json': '{}', ...Object.fromEntries(posts.map((p) => [p.path, p.text])), ...build(blog) };
+  const server = fakeGitHub({ 'me/blog': files });
+  await server.ready;
+  const net = createNet(server.fetch);
+  const gh = new GitHub(net, { token: 'github_pat_test' });
+  const form = (f) => ({ ...f, color_accent: '#112233', css: '.x{color:blue}' });
+  const text = await gh.readText('me/blog', 'blog.json', 'main');
+  const before = net.ledger.read.requests;
+  const plan = await planSettings(gh, { repo: 'me/blog', branch: 'main', form: form(blogToForm(validateBlog(text))) });
+  assert.equal(plan.styleOnly, true);
+  assert.deepEqual(plan.changes.map((c) => c.path).sort(), ['blog.json', 'style.css']);
+  assert.match(plan.headline[0], /no page is rewritten/);
+  assert.ok(net.ledger.read.requests - before < 12, `${net.ledger.read.requests - before} requests: no post was read`);
+  await executePlan(gh, plan);
+  // what was committed is what a full regeneration of that blog.json would produce
+  const next = JSON.parse(await gh.readText('me/blog', 'blog.json', 'main'));
+  const rebuilt = build(next);
+  assert.equal(server.files('me/blog')['style.css'], rebuilt['style.css']);
+  assert.equal(server.files('me/blog')['index.html'], rebuilt['index.html']);
+  // anything but CSS (a title, the footer, the list layout) is not a style-only change
+  const other = await planSettings(gh, { repo: 'me/blog', branch: 'main', form: { ...blogToForm(validateBlog(await gh.readText('me/blog', 'blog.json', 'main'))), title: 'A new title' } });
+  assert.ok(!other.styleOnly && other.changes.length > 3, 'a title is on every page');
+});
