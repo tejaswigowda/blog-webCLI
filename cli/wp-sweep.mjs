@@ -100,7 +100,9 @@ async function sweepTheme(page, slug) {
   const files = await readDir(path.join(WP, slug));
   const manifest = JSON.parse(new TextDecoder().decode(files['theme.json']));
   const pin = pinFor(`tejaswigowda/blog-webCLI-themes/wp/${slug}`, 'v1.5.0', manifest, themeDigest(files, themeFilePaths(manifest)));
-  const theme = loadTheme(pin, files);
+  let theme = loadTheme(pin, files);
+  // CONTRACT=wordpress-classic-2 renders the same theme under another contract of the family, to see what it changes
+  if (process.env.CONTRACT) theme = { ...theme, contract: process.env.CONTRACT, contractSpec: theme.skeleton ? { name: process.env.CONTRACT, skeleton: theme.skeleton } : process.env.CONTRACT };
   const built = {};
   for (const layout of ['list', 'cards']) {
     const out = buildSite({ blog: JSON.stringify({ ...blog0, theme: pin, customize: { list: { layout } } }), posts: inputs, lock, theme });
