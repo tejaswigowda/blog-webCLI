@@ -13,7 +13,7 @@ import { licenceRecords } from '../lib/licences.js';
 import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
 import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
-import { blogAssetRefs, hasLook, withoutLook } from '../lib/customize.js';
+import { blogAssetRefs, hasLook, themeCss, withoutLook } from '../lib/customize.js';
 import { assertMeasured } from '../lib/measure.js';
 import { resolveOrder } from '../lib/order.js';
 import { IMAGE_FILE, imagePaths, mediaItems, tileUrl } from '../lib/media.js';
@@ -352,6 +352,44 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
   return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title, message, existed, head, changes, assetGroups: [], summary, ctx: null, lockPlan: {}, pending: [], unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
 }
 
+// A change that only touches the blog's CSS (colours, fonts, width, size, custom CSS) on a blog whose stylesheet is one shared file: the
+// pages do not carry the CSS, so none of them changes. Only blog.json, style.css and, with a theme, theme.css (what the /blog/ reader
+// applies) are written, and no post is read. Returns null when it is not that kind of change (inline CSS, an extension, a different theme,
+// any other setting), and the caller regenerates the blog as it always did.
+const CSS_KEYS = ['colors', 'font', 'headingFont', 'width', 'fontSize', 'css'];
+const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v);
+const withoutCss = (blog) => {
+  const b = structuredClone(blog);
+  if (b.customize) {
+    for (const k of CSS_KEYS) delete b.customize[k];
+    if (!Object.keys(b.customize).length) delete b.customize;
+  }
+  return JSON.stringify(canon(b));
+};
+async function styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText, message, title }) {
+  const { repo, folder } = parseRepoRef(where);
+  const prefix = folder ? `${folder}/` : '';
+  let next;
+  try { next = JSON.parse(blogText); } catch { return null; }
+  if (oldBlog.stylesheet !== 'linked' || next.stylesheet !== 'linked') return null;
+  if ((oldBlog.extensions && oldBlog.extensions.length) || (next.extensions && next.extensions.length)) return null;
+  if (withoutCss(oldBlog) !== withoutCss(next)) return null;
+  const blog = validateBlog(blogText);
+  const packs = await loadPacks(gh, blog);
+  const css = themeCss(blog, packs.theme || null) + '\n';
+  const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
+  if (!tree.has('style.css')) return null; // never written as a linked blog: build it all once
+  const out = { 'blog.json': blogText, 'style.css': css };
+  if (packs.theme) out['theme.css'] = css;
+  const changes = [];
+  for (const [path, content] of Object.entries(out)) {
+    const bytes = enc.encode(content);
+    if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
+  }
+  const summary = [{ repo, folder, branch, files: changes.length, bytes: changes.reduce((n, f) => n + f.size, 0) }];
+  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title, message, existed: true, head, changes, assetGroups: [], summary, ctx: null, lockPlan: {}, pending: [], unlisted: [], orderFile: null, styleOnly: true, headline: ['Only the stylesheet changes: every page links the one shared style.css, so no page is rewritten and no post is read.'] };
+}
+
 // Create a blog where there is none: blog.json, and the generated site for whatever posts
 // are already there (none is fine), in one commit. Refuses to touch an existing blog.json.
 // Where this blog is served, as GitHub says: never typed in. With Pages on and readable, its own
@@ -414,7 +452,7 @@ export async function planSettings(gh, { repo: where, branch, form, runner }) {
   } catch (e) {
     throw e instanceof Refusal || e.code ? e : new Refusal('bad-blog-json', e.message);
   }
-  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText, message: 'Update blog settings', title: form.title, existed: true, runner });
+  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog: JSON.parse(current), blogText, message: 'Update blog settings', title: form.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message: 'Update blog settings', title: form.title, existed: true, runner }));
   plan.unchanged = plan.changes.length === 0;
   return plan;
 }
@@ -592,7 +630,8 @@ export async function planLook(gh, { repo: where, branch, look, runner }) {
   const measured = assertMeasured(look);
   const bare = withoutLook(blog);
   blog.customize = { ...(bare.customize || {}), ...structuredClone(measured) };
-  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message: `Match an existing site: its measured colours, ${measured.font ? measured.font + ' type, ' : ''}width and list layout`, title: blog.title, existed: true, runner });
+  const oldBlog = JSON.parse(await gh.readText(parseRepoRef(where).repo, at(parseRepoRef(where).folder, 'blog.json'), head.sha));
+  const lookMessage = `Match an existing site: its measured colours, ${measured.font ? measured.font + ' type, ' : ''}width and list layout`, title: blog.title, existed: true, runner });
   plan.unchanged = plan.changes.length === 0;
   return plan;
 }

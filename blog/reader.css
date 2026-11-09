@@ -4,7 +4,7 @@
 .notice.warn{border-color:#b42318;color:#b42318}
 .notice p{margin:.4rem 0}
 .notice b{display:block}
-#ledger{padding-top:0;padding-bottom:2rem;font:.8rem/1.5 system-ui,sans-serif;color:var(--muted,#666)}
+#ledger{padding-top:0;padding-bottom:2rem;font:.8rem/1.5 system-ui,sans-serif;text-align:center;color:var(--muted,#666)}
 #ledger .zero{color:#067647}
 .readerform{display:flex;gap:.4rem;margin:1rem 0}
 .readerform input{flex:1;font:inherit;padding:.4rem .6rem}
