@@ -128,3 +128,16 @@ test('R8: the registry is not consulted by the pin: a theme in no list resolves 
   const src = await fs.readFile(path.join(root, 'app', 'site.js'), 'utf8');
   assert.doesNotMatch(src, /registry/i, 'planTheme and planExtension never read the registry');
 });
+
+test('F: an entry records its origin; a generated one also records what it looked at, how it relates, who wrote it and when', () => {
+  const base = { name: 'T', repo: 'o/r', ref: 'v1.0.0', licence: 'MIT' };
+  const gen = { ...base, origin: 'generated', relation: 'inspired-by', reference: 'https://example.com/', agent: 'model 1', generated: '2026-11-08' };
+  assert.equal(validateEntry('themes', { ...base, origin: 'authored' }).entry.origin, 'authored');
+  assert.deepEqual(validateEntry('themes', gen).entry, gen);
+  for (const k of ['relation', 'reference', 'agent', 'generated']) { const m = { ...gen }; delete m[k]; assert.equal(validateEntry('themes', m).ok, false, k); }
+  assert.equal(validateEntry('themes', { ...gen, reference: 'http://example.com/' }).ok, false);
+  assert.equal(validateEntry('themes', { ...base, origin: 'invented' }).ok, false);
+  assert.equal(validateEntry('themes', { ...base, origin: 'imported', agent: 'x' }).ok, false);
+  assert.equal(validateEntry('themes', base).ok, true); // an entry from before the field still reads
+  assert.equal(validateEntry('extensions', { ...base, origin: 'generated' }).entry.origin, undefined); // themes only
+});

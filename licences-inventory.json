@@ -61,6 +61,7 @@
     "lib/order.js",
     "lib/page.js",
     "lib/pin.js",
+    "lib/provenance.js",
     "lib/rawhtml.js",
     "lib/related.js",
     "lib/reporef.js",

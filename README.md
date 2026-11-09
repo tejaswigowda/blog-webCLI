@@ -1059,6 +1059,12 @@ Two maintainer tools judge a theme without a pixel comparison. Both read `<theme
   `VERDICTS_ONLY=1` redoes the verdicts from the last run; `CONTRACT=wordpress-classic-2` renders the themes under another contract
   (the same variable works for `wp-gap`).
 
+### Writing themes outside the editor
+
+`node cli/theme-check.mjs <theme-dir>` is the acceptance check for a theme written by a person or an agent. It lists **every** rule the theme would be refused on (each with its rule, reason and fix), then renders it over the whole layout corpus at a desktop and a phone width and measures the failure signatures. It has no token and no way to publish. `--classes` prints the vocabulary the contract emits; `--new` scaffolds a theme.
+
+`theme.json` records `origin` (`authored`, `imported`, `generated`) and, for a generated theme, its `reference`, `relation` (`inspired-by` or `derived-from`), `agent` and date. A `derived-from` theme needs a source licence that permits reuse, and every file of an authored or generated theme declares a licence that permits redistribution. These are declarations, not detections; `lib/overlap.js` warns when a theme shares many whole declaration blocks with its reference, as a signal and never as proof. Registry entries carry `origin`. See [docs/theme-generation.md](docs/theme-generation.md).
+
 ### Ingesting a WordPress theme
 
 ```
