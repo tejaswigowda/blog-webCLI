@@ -25,6 +25,14 @@ test('M5: a measurement writes only the enumerable customize fields, never css',
   }
 });
 
+test('a measured brand colour beats the first link, and is darkened (hue kept) until it reads on the background; muted is never just the text colour', () => {
+  const c = customizeFromMeasure({ bg: { r: 250, g: 250, b: 249 }, text: { r: 33, g: 37, b: 41 }, link: { r: 33, g: 37, b: 41 }, muted: { r: 33, g: 37, b: 41 }, accent: { r: 10, g: 176, b: 94 }, width: 600 });
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.colors.accent.slice(i, i + 2), 16));
+  assert.ok(g > r && g > b, `still green: ${c.colors.accent}`);
+  assert.notEqual(c.colors.muted, c.colors.text);
+  assert.equal(customizeFromMeasure({ bg: { r: 255, g: 255, b: 255 }, text: { r: 0, g: 0, b: 0 }, accent: { r: 0, g: 0, b: 200 } }).colors.accent, '#0000c8');
+});
+
 test('M5: assertMeasured and lookFromText refuse css and every field a measurement cannot write', () => {
   assert.throws(() => assertMeasured({ font: 'sans', css: 'a{b:c}' }), /never carries css/);
   assert.throws(() => assertMeasured({ topbar: { text: 'x' } }), /not one/);

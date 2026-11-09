@@ -31,10 +31,24 @@ const MEASURE_LOOK = `(async () => {
   const arts = q('main article, article, .post').slice(0, 6);
   const tops = arts.map((a) => Math.round(a.getBoundingClientRect().top));
   const cards = arts.length >= 2 && tops.filter((t) => t === tops[0]).length >= 2;
+  // the brand colour: what the biggest visible buttons and links are filled with, if it is a colour and not a grey
+  const sat = (c) => { const mx = Math.max(c.r, c.g, c.b), mn = Math.min(c.r, c.g, c.b); return mx ? (mx - mn) / mx : 0; };
+  const weight = new Map();
+  for (const e of q('a, button, [role=button], input[type=submit]')) {
+    const r = e.getBoundingClientRect();
+    if (r.top > 1000 || r.width < 40 || r.height < 20) continue;
+    const cs = getComputedStyle(e);
+    const fill = solid(cs.backgroundColor);
+    if (!fill || sat(fill) < 0.35) continue;
+    const key = [fill.r, fill.g, fill.b].map(Math.round).join(',');
+    weight.set(key, (weight.get(key) || 0) + r.width * r.height);
+  }
+  const top = [...weight].sort((a, b) => b[1] - a[1])[0];
+  const accent = top ? (([r, g, b]) => ({ r, g, b }))(top[0].split(',').map(Number)) : null;
   const mw = main.getBoundingClientRect();
   const aw = (arts[0] || para).getBoundingClientRect();
   return JSON.stringify({
-    bg: effectiveBg(main), text: toRgb(getComputedStyle(para).color), link: toRgb(getComputedStyle(link).color), muted: toRgb(getComputedStyle(meta).color),
+    accent, bg: effectiveBg(main), text: toRgb(getComputedStyle(para).color), link: toRgb(getComputedStyle(link).color), muted: toRgb(getComputedStyle(meta).color),
     font: getComputedStyle(para).fontFamily, headingFont: getComputedStyle(heading).fontFamily, size: parseFloat(getComputedStyle(para).fontSize),
     width: Math.round(cards ? mw.width : Math.min(mw.width, aw.width > 300 ? aw.width : mw.width)), cards,
   });
