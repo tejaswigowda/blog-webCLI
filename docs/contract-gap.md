@@ -1,6 +1,6 @@
 # Contract gap of the imported themes
 
-Computed statically by `node cli/wp-gap.mjs` from the CSS of the 77 themes in `blog-webCLI-themes/wp` and the markup `wordpress-classic` emits over a corpus of 15 posts and pages (list and cards layouts, paginated, with tag, author, archive and search listings). No browser is involved.
+Computed statically by `node cli/wp-gap.mjs` from the CSS of the 77 themes in `blog-webCLI-themes/wp` and the markup `wordpress-classic` emits over a corpus of 24 posts and pages (list and cards layouts, paginated, with tag, author, archive and search listings). No browser is involved.
 
 A *gap* is a class or id a theme's stylesheet targets that no page of the corpus carries. Names wanted by fewer than 5 themes are a theme's own vocabulary, not a contract question, and are left out of the tables below (they are in the JSON).
 
@@ -11,7 +11,7 @@ A *gap* is a class or id a theme's stylesheet targets that no page of the corpus
 | container | 10534 | 1407 |
 | region | 1114 | 181 |
 | plugin | 3349 | 2798 |
-| block | 1660 | 474 |
+| block | 1659 | 473 |
 | state | 188 | 47 |
 | body | 88 | 12 |
 

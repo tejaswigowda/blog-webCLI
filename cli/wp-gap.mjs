@@ -88,6 +88,7 @@ async function corpus() {
   await add(path.join(REPO, 'examples/blog/posts'), 'posts');
   await add(path.join(REPO, 'test/golden'), 'posts');
   await add(path.join(REPO, 'test/corpus'), 'posts');
+  await add(path.join(REPO, 'test/layout'), 'posts');
   posts.push({ path: 'pages/about.md', text: '---\nslug: about\ntitle: About\nstatus: published\n---\n\nA standalone page.\n' });
   return posts;
 }
