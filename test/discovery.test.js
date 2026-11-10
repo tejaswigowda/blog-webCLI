@@ -46,3 +46,13 @@ test('E10: every page has feed autodiscovery; /feed/ is a page that points at th
   assert.match(f, /now at/);
   assert.ok(r.files['feed.xml'].includes('<feed'));
 });
+
+test('E12: seo.noindex puts noindex on every page and writes no sitemap; off by default', () => {
+  const on = buildSite({ blog: { ...BLOG, seo: { noindex: true } }, posts: [post('hi')], lock: {} });
+  assert.deepEqual(on.errors, []);
+  for (const f of ['index.html', 'a/index.html', 'archive/index.html']) assert.match(on.files[f], /<meta name="robots" content="noindex">/, f);
+  assert.ok(!on.files['sitemap.xml'] && !on.files['robots.txt']);
+  const off = buildSite({ blog: BLOG, posts: [post('hi')], lock: {} });
+  assert.ok(!/name="robots"/.test(off.files['a/index.html']) && off.files['sitemap.xml']);
+  assert.throws(() => buildSite({ blog: { ...BLOG, seo: { noindex: 'yes' } }, posts: [post('hi')], lock: {} }));
+});

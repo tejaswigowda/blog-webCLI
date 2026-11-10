@@ -742,7 +742,7 @@ async function settingsView(repo, r) {
     section(
       'Search engines',
       h('div', { class: 'row' }, field('Twitter / X handle', input('seoTwitter', { placeholder: '@name' }), 'Added to link previews as twitter:site.')),
-      h('div', {}, check('seoSitemap', 'Write sitemap.xml'), check('seoRobots', 'Write robots.txt (only where the blog is at the root of its address)')),
+      h('div', {}, check('seoSitemap', 'Write sitemap.xml'), check('seoRobots', 'Write robots.txt (only where the blog is at the root of its address)'), check('seoNoindex', 'Ask search engines not to index this blog (a demo or a copy; also turns the sitemap off)')),
       h('div', { class: 'hint' }, 'Switching one off stops it being updated; delete a file you no longer want. A robots.txt you wrote yourself is replaced while this is on.'),
     ),
     section(

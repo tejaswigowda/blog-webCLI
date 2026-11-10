@@ -616,11 +616,16 @@ the default.
 | `pagination.stable` | `true`: pages are counted from the oldest post, so a new post changes the front page and no other ([Pagination](#search-pagination-seo)) | `false`: page 1 is the newest `size` posts |
 | `seo.twitter` | a handle like `@ada`, written as `twitter:site` in link previews | none |
 | `seo.sitemap` | `false` stops writing `sitemap.xml` | written |
+| `seo.noindex` | `true`: every page says `noindex` and no sitemap is written. For a demo or a copy of a site that should stay the one search engines show | pages are indexable |
 | `seo.robots` | `false` stops writing `robots.txt` | written, but only when `domain` has no path: a robots file is read only at the root of a host |
 
 Switching `sitemap` or `robots` off stops them being updated; the generator never deletes a `sitemap.xml` or
 `robots.txt`, because a blog that turns them off may have written one by hand. A `robots.txt` you wrote yourself
 is replaced while `robots` is on: set it to `false` to keep yours.
+
+**Image size.** An image uploaded or imported through the editor has its pixel size recorded in `assets.lock.json` (as `images/x.png#size`: `"640x480"`), and every `<img>` that embeds it carries `width` and `height`, so the browser reserves the box before the file loads and the page does not shift (the layout-shift part of the page-speed claim). An image pinned before this has no size and is drawn as before; replacing it records one.
+
+**Feed address.** `/feed.xml` is the feed, and every page links it (`<link rel="alternate" type="application/atom+xml">`). `/feed/`, where WordPress served its feed, is a small page that links the feed, says where it moved and refreshes to it.
 
 #### Linked stylesheet
 
@@ -1883,6 +1888,8 @@ rewrites every page (they all carry them), and so does a change of CSS unless th
 fast and the send is patient. A repository over what a browser can hold in memory (tens of thousands of long posts) is a job for the CLI.
 
 ## Known limits
+
+* **The feed address cannot be kept on GitHub Pages.** WordPress serves `/feed/`; this generator writes `/feed.xml`, and Pages answers a directory request with `<dir>/index.html` as `text/html`, so no Atom document can be returned at `/feed/`. Readers that rediscover a feed from the site address find `/feed.xml` through the autodiscovery link; a subscriber whose reader has `/feed/` saved gets the notice page, not entries, and must resubscribe. This is a property of the host, not a bug awaiting a fix.
 
 * **Comments are as of the last build**, like search, tags and the archive: a comment you publish appears when the site is regenerated (one comment is
   an exact incremental publish), and the live renderer does not refresh them. The `form` mode has no live thread and no notification.
