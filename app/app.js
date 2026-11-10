@@ -748,6 +748,7 @@ async function settingsView(repo, r) {
     section(
       'Comments and analytics',
       h('div', { class: 'hint' }, 'Both load a script from the address you name, on your readers\' pages, with that page\'s full powers: only name a service you trust, and prefer one that gives an integrity value to pin (put it in the attributes). Off unless you fill them in.'),
+      h('div', { class: 'row' }, field('Comments by email', input('commentsMail', { placeholder: 'you@example.com', type: 'email' }), 'A link on every post that opens the reader\'s mail. No third party.'), field('Comments form relay', input('commentsAction', { placeholder: 'https://… (a form relay that emails you)' }), 'A plain form, no script. You publish a comment by adding it to comments/<slug>.json.')),
       h('div', { class: 'row' }, field('Comments script', input('commentsSrc', { placeholder: 'https://… (e.g. a GitHub-Discussions comments widget)' })), field('Attributes', area('commentsAttrs', 3, { placeholder: 'data-repo=owner/blog', class: 'mono', spellcheck: 'false' }), 'name=value per line: data-…, crossorigin, integrity.')),
       h('div', { class: 'row' }, field('Analytics script', input('analyticsSrc', { placeholder: 'https://… (a privacy-friendly counter)' })), field('Attributes', area('analyticsAttrs', 3, { placeholder: 'data-domain=example.com', class: 'mono', spellcheck: 'false' }), 'name=value per line.')),
     ),

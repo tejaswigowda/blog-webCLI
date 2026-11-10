@@ -176,8 +176,13 @@ test('C10: a migration lifts the old "## Comments" section into a sidecar and le
   assert.match(built.files['abc/index.html'], /Comments \(3\)/);
 });
 
-test('settings: saving the form does not delete a mailto or form configuration', async () => {
-  const { formToBlog } = await import('../lib/settings.js');
-  const blog = formToBlog({ ...BASE, comments: FORM }, { title: 'T', description: 'D', author: 'Ann', domain: 'https://x.test/b', commentsSrc: '' });
-  assert.equal(blog.comments?.mode, 'form');
+test('settings: comments by mail or relay round-trip through the form; one mode at a time', async () => {
+  const { formToBlog, blogToForm } = await import('../lib/settings.js');
+  const base = { ...BASE, comments: FORM };
+  const same = formToBlog(base, blogToForm(base));
+  assert.deepEqual(same.comments, FORM);
+  const mail = formToBlog({ ...BASE }, { ...blogToForm(BASE), commentsMail: 'me@example.com' });
+  assert.deepEqual(mail.comments, { mode: 'mailto', to: 'me@example.com' });
+  assert.equal(formToBlog(base, { ...blogToForm(base), commentsAction: '' }).comments, undefined);
+  assert.equal(formToBlog(base, { ...blogToForm(base), commentsAction: '', commentsSrc: 'https://c.test/s.js' }).comments.src, 'https://c.test/s.js');
 });
