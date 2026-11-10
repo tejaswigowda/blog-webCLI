@@ -109,6 +109,17 @@ function retarget(doc, { parsed, blog, file }) {
     const href = !isPage ? `${home.origin}${root}${p}${u.search}${u.hash}` : segs.length === 1 && !LISTING_ROOTS.has(segs[0]) ? hashFor(parsed, { post: segs[0] }) : hashFor(parsed, { path: segs.join('/') + (segs.length ? '/' : '') });
     a.setAttribute('href', href);
   }
+  // the reader may post nowhere (its policy says form-action 'none'): a comment or subscribe form is a pointer to the published page, which can
+  for (const f of doc.body.querySelectorAll('form')) {
+    const note = doc.createElement('p');
+    note.className = 'meta';
+    const link = doc.createElement('a');
+    link.setAttribute('href', here.href);
+    link.setAttribute('rel', 'noopener noreferrer');
+    link.textContent = 'published page';
+    note.append(`${f.classList.contains('comment-form') ? 'To leave a comment' : 'To use this form'}, go to the `, link, '.');
+    f.replaceWith(note);
+  }
 }
 
 function showPreview(html, ctx, css = '') {
