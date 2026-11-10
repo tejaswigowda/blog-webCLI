@@ -41,9 +41,9 @@ test('create: blog.json and the generated empty site in one commit; the app then
   const { server, net, authed, anon } = await world();
   const plan = await planInit(authed, { repo: 'me/notes', branch: 'main', fields: FIELDS });
   assert.equal(net.ledger.uploaded.bytes, 0, 'planning uploads nothing');
-  assert.deepEqual(plan.changes.map((c) => c.path).sort(), ['.nojekyll', '404.html', 'blog.json', 'feed.xml', 'index.html', 'index/posts.json', 'licences.json', 'search.json', 'search/index.html', 'sitemap.xml', 'webcli-live.js', 'webcli-search.js']);
+  assert.deepEqual(plan.changes.map((c) => c.path).sort(), ['.nojekyll', '404.html', 'blog.json', 'feed.xml', 'feed/index.html', 'index.html', 'index/posts.json', 'licences.json', 'search.json', 'search/index.html', 'sitemap.xml', 'webcli-live.js', 'webcli-search.js']);
   assert.ok(plan.changes.every((c) => c.action === 'add'));
-  assert.match(describePlan(plan)[0], /^12 files, [\d.]+ (B|KB), to github\.com\/me\/notes \(main\)$/);
+  assert.match(describePlan(plan)[0], /^13 files, [\d.]+ (B|KB), to github\.com\/me\/notes \(main\)$/);
 
   const receipt = await executePlan(authed, plan);
   assert.equal(receipt.commits.length, 1);

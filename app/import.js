@@ -12,6 +12,7 @@ import { parseWxr } from '../lib/wxr.js';
 import { fmtBytes } from './net.js';
 import { PLACEHOLDER_SHA, detectAddress, generateSite } from './site.js';
 import { gitBlobSha } from './github.js';
+import { sizeEntry } from '../lib/image-size.js';
 
 const enc = new TextEncoder();
 // one commit of pictures holds at most this many files, or about this many bytes (a single larger file is a commit of its own)
@@ -366,12 +367,15 @@ async function runImport(gh, plan, onProgress) {
       parent = c.sha;
       baseTree = c.treeSha;
     }
-    for (const f of g.files) lock[`${f.key}/${f.logical}`] = c.sha;
+    for (const f of g.files) {
+      lock[`${f.key}/${f.logical}`] = c.sha;
+      Object.assign(lock, sizeEntry(f.key, f.logical, f.content));
+    }
   }
 
   const files = [];
   for (const b of plan.blogs) {
-    const mine = Object.fromEntries(b.lockKeys.map((k) => [k, lock[k]]));
+    const mine = Object.fromEntries(b.lockKeys.flatMap((k) => [[k, lock[k]], ...(lock[`${k}#size`] ? [[`${k}#size`, lock[`${k}#size`]]] : [])]));
     if (b.addition) {
       // an existing blog: regenerate it with the new posts and the real pins, and send only what differs from what it has
       const pins = { ...b.addition.lock, ...mine };

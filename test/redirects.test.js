@@ -52,7 +52,7 @@ test('aliases: a post, a page and a draft: redirects only for what is published'
     post('later', { status: 'draft', aliases: '[2020/06/later]' }),
   ]);
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(Object.keys(r.files).filter((f) => f.endsWith('/index.html') && !/^(one|about|tags|archive)\//.test(f)).sort(), ['2020/05/one/index.html', 'about-us.html/index.html', 'old/one/index.html']);
+  assert.deepEqual(Object.keys(r.files).filter((f) => f.endsWith('/index.html') && !/^(one|about|tags|archive|feed)\//.test(f)).sort(), ['2020/05/one/index.html', 'about-us.html/index.html', 'old/one/index.html']);
   assert.deepEqual(JSON.parse(r.files['index/posts.json']).redirects, [{ from: '2020/05/one', slug: 'one' }, { from: 'about-us.html', slug: 'about' }, { from: 'old/one', slug: 'one' }]);
   assert.ok(!r.files['2020/06/later/index.html'], 'a draft is invisible, its old address too');
 });

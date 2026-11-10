@@ -378,7 +378,7 @@ test('X1 for a live blog: the only script on any page is the one same-origin mod
   const htmls = Object.entries(r.files).filter(([f]) => f.endsWith('.html'));
   assert.ok(htmls.length >= 3);
   // the home page, the posts and 404.html carry the script; the generated listings (tags, archive) carry none
-  const carrying = (f) => f === 'index.html' || f === '404.html' || /^[a-z0-9-]+\/index\.html$/.test(f) && !/^(tags|archive|authors|search|page)\//.test(f);
+  const carrying = (f) => f === 'index.html' || f === '404.html' || /^[a-z0-9-]+\/index\.html$/.test(f) && !/^(tags|archive|authors|search|page|feed)\//.test(f);
   for (const [f, page] of htmls) {
     const html = stripData(page);
     const scripts = [...html.matchAll(/<script\b[^>]*>/gi)].map((m) => m[0]);

@@ -59,7 +59,9 @@ test('X1: a generated page has no script, no event handler, no foreign styleshee
       assert.ok(!/\son[a-z]+\s*=/i.test(markup), `${where}: an event handler attribute`);
       assert.ok(!/javascript:|vbscript:/i.test(markup), `${where}: a script URL`);
       assert.ok(!/<link\b[^>]*rel=["']?(?:stylesheet|preload|modulepreload|prefetch|import)/i.test(html), `${where}: a linked resource`);
-      assert.ok(!/<(?:object|embed|applet|base|meta[^>]*http-equiv)/i.test(markup), `${where}: an embedding or redirecting element`);
+      // the one page that refreshes is /feed/, which says the feed moved; a page that points a person at the feed cannot be an Atom document
+      const redirects = file === 'feed/index.html' ? markup.replace(/<meta[^>]*http-equiv="refresh"[^>]*>/i, '') : markup;
+      assert.ok(!/<(?:object|embed|applet|base|meta[^>]*http-equiv)/i.test(redirects), `${where}: an embedding or redirecting element`);
       assert.ok(!/@import/i.test(html), `${where}: @import`);
       assert.ok(!/<form\b/i.test(markup), `${where}: a form`);
       // every frame is isolated: sandbox="allow-scripts" exactly, no allow-same-origin, no srcdoc

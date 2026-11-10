@@ -18,6 +18,7 @@ import { blogAssetRefs, hasLook, themeCss, withoutLook } from '../lib/customize.
 import { assertMeasured } from '../lib/measure.js';
 import { applyThemeFile, parseThemeFile } from '../lib/theme-export.js';
 import { resolveOrder } from '../lib/order.js';
+import { sizeEntry } from '../lib/image-size.js';
 import { IMAGE_FILE, imagePaths, mediaItems, tileUrl } from '../lib/media.js';
 import { daysUntil } from '../lib/schedule.js';
 import { affectedBy, relatedCount } from '../lib/related.js';
@@ -605,7 +606,10 @@ export async function executeMedia(gh, plan) {
     const h = shared ? plan.head : await gh.headCommit(g.repo, g.branch);
     const c = await gh.commit(g.repo, { branch: g.branch, parent: h.sha, baseTree: h.treeSha, files: g.files.map((f) => ({ path: f.path, content: f.content })), message: plan.message });
     receipt.commits.push({ repo: g.repo, branch: g.branch, ...c, files: g.files.length });
-    for (const f of g.files) if (plan.media.refreshed.some((x) => x.key === f.key && x.path === f.logical)) patch[`${f.key}/${f.logical}`] = c.sha;
+    for (const f of g.files) if (plan.media.refreshed.some((x) => x.key === f.key && x.path === f.logical)) {
+      patch[`${f.key}/${f.logical}`] = c.sha;
+      Object.assign(patch, sizeEntry(f.key, f.logical, f.content));
+    }
     if (shared) parent = { sha: c.sha, treeSha: c.treeSha };
   }
   if (!Object.keys(patch).length) return receipt;
@@ -721,7 +725,10 @@ export async function executePlan(gh, plan, { pullBody = '' } = {}) {
       parent = c.sha;
       baseTree = c.treeSha;
     }
-    for (const f of g.files) finalLock[`${f.key}/${f.logical}`] = c.sha; // the upload commit is the pin
+    for (const f of g.files) {
+      finalLock[`${f.key}/${f.logical}`] = c.sha; // the upload commit is the pin
+      Object.assign(finalLock, sizeEntry(f.key, f.logical, f.content)); // and its pixel size, so the page can reserve the box
+    }
   }
 
   // Page content embeds the pin, so regenerate now that real shas exist.
