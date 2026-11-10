@@ -19,6 +19,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Refusal } from '../lib/errors.js';
+import { liftComments } from '../lib/comments-lift.js';
 import { buildSite, GENERATED_MARK, GENERATED_TREES, OPTIONAL_GENERATED, validateBlog, parsePost } from '../lib/blog.js';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
@@ -333,6 +334,30 @@ async function ext(args) {
   return 2;
 }
 
+async function commentsCmd(args) {
+  const [sub, dir = '.'] = args;
+  if (sub !== 'lift') {
+    console.error('usage: blog-webcli comments lift [dir]   (moves "## Comments (N)" sections an old import left in posts into comments/<slug>.json)');
+    return 2;
+  }
+  let moved = 0;
+  for (const f of (await fs.readdir(path.join(dir, 'posts'))).filter((n) => n.endsWith('.md')).sort()) {
+    const slug = f.slice(0, -3);
+    const side = path.join(dir, 'comments', `${slug}.json`);
+    if (await exists(side)) continue;
+    const text = await fs.readFile(path.join(dir, 'posts', f), 'utf8');
+    const r = liftComments(text);
+    if (!r) continue;
+    await fs.mkdir(path.join(dir, 'comments'), { recursive: true });
+    await fs.writeFile(side, r.sidecar);
+    await fs.writeFile(path.join(dir, 'posts', f), r.post);
+    moved += r.count;
+    console.log(`${slug}: ${r.count} comment${r.count === 1 ? '' : 's'} lifted${r.notes.length ? ` (${r.notes.join('; ')})` : ''}`);
+  }
+  console.log(`${moved} comments lifted; run: blog-webcli build`);
+  return 0;
+}
+
 async function licences(dir) {
   const { blog } = await load(dir);
   for (const r of licenceRecords(validateBlog(blog))) console.log(`${r.kind.padEnd(10)} ${String(r.name).padEnd(28)} ${String(r.version || '').padEnd(10)} ${r.licence}${r.repo ? `   ${r.repo}@${r.ref}` : '   (built in)'}`);
@@ -340,7 +365,7 @@ async function licences(dir) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const commands = { build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
+const commands = { comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
 if (!commands[cmd]) {
   console.error('usage: blog-webcli <build|check|fmt|publish-due|pin|theme|ext|licences|import> …');
   process.exit(2);

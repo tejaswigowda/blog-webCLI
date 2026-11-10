@@ -216,7 +216,7 @@ draft as markdown, every picture in an `images` folder, and a blog.webcli.app bl
 | a picture on the blog's own site, in a post, a cover or the media library | `images/wp/<its path under wp-content/uploads>`, named in posts as `asset:images/wp/…` and pinned |
 | a PDF, document, archive, audio or video file on the blog's own site (in the library, or linked from a post) | the same folder, up to 90 MB each; a link to it becomes `asset:images/wp/…` |
 | a link from one imported post to another | rewritten to the new page (`../<slug>/`) |
-| approved comments | a "Comments (N)" section at the end of the post: name, date, the words as a quotation, replies naming who they answer; no email or IP |
+| approved comments | `comments/<slug>.json` ([below](#anonymous-comments-no-server)): name, date, the words as plain text, replies naming who they answer; no email or IP, and an address in a name or body is replaced with "[email removed]" |
 | plugins' content types (products, forms…), widgets, themes | not imported; the types are counted and named in the review |
 
 **Only the blog's own site is copied.** A picture or file is imported only if it is on the blog's own host (with or without `www`), a
@@ -636,6 +636,41 @@ colours is then `blog.json` and `style.css`, and no page. Turning it on or off r
 for a few minutes, so a change reaches a reader who has the old file in a few minutes, not at once. What stays in every page, and still
 rewrites every page when it changes: the title, the menu, the header and footer, the date format. The `/blog/` reader applies the same CSS;
 a page it shows is the page the build writes. (`test/linked-style.test.js`)
+
+#### Anonymous comments, no server
+
+`comments` has three modes, mutually exclusive and all off unless set (`"mode"` omitted with a `src` is `script`, the old behaviour):
+
+```json
+"comments": { "mode": "mailto", "to": "me@example.com" }
+"comments": { "mode": "form", "action": "https://relay.example/f/abc", "field": "comment", "nameField": "name",
+              "hidden": { "form": "x" }, "return": "_next", "title": "Leave a comment" }
+"comments": { "mode": "script", "src": "https://comments.example/client.js", "attrs": {} }
+```
+
+* **`mailto`**: a link whose subject names the post. No third party.
+* **`form`**: a plain `method="post"` HTML form to a relay you name (`https`, up to eight hidden fields, no script, works with scripting off).
+  `hidden.slug` is always the post's slug; `return` names the relay's redirect-back parameter and gets the post's own address. The page says
+  where the comment goes, that no email address is collected or stored, that the author publishes it by hand, and that there is no live thread.
+* **`script`**: [below](#comments-analytics), unchanged.
+
+**Publishing a comment is a commit.** When the relay sends you a submission, add it to `comments/<slug>.json`:
+
+```json
+{ "comments": [
+  { "id": "c1", "name": "Ada", "date": "2026-11-09", "body": "Two paragraphs.\n\nLike this." },
+  { "id": "c2", "date": "2026-11-10", "body": "…", "reply_to": "c1" } ] }
+```
+
+* Only `id`, `name`, `date`, `body`, `reply_to` are allowed; any other key, and any text that looks like an email address anywhere in the
+  file, is refused (`bad-comments`) so personal data cannot be pasted in. No `name` renders as *Anonymous*. `date` is the day submitted.
+* `id` is yours and stable: never reuse or renumber one. A deleted comment's replies must be edited first (`reply_to` must name an earlier comment).
+* The body is **plain text**: no markdown, no HTML, no links. A web address shows as text; link it in your own words if it deserves it.
+  Paragraphs break on a blank line.
+* Order is oldest `date` first, ties by `id`; replies are flat and name who they answer. The count is in `index/posts.json`.
+* Moderation is the git history: every comment is a reviewable diff, removal is a revert, and nothing appears without a commit.
+  A spam-triage agent can open a pull request against the file. Drafts and scheduled posts have no page, so no form and no comments.
+* Posts imported before sidecars existed: `node cli/blog.js comments lift [dir]` moves their "## Comments (N)" section into sidecars.
 
 #### `comments`, `analytics`
 
@@ -1547,6 +1582,7 @@ so the commit that holds it cannot be named inside it.
 ```
 node cli/blog.js build [dir]   regenerate index, pages, tags, archive, search, sitemap, feed (writes nothing if anything is refused)
 node cli/blog.js check [dir]   regenerate in memory; non-zero on any difference — for CI
+node cli/blog.js comments lift [dir]   move old "## Comments" sections out of posts into comments/<slug>.json
 node cli/blog.js fmt   [dir]   rewrite posts into canonical markdown
 node cli/blog.js publish-due [dir] [--now T]   publish the scheduled posts whose time has come, then build once (a refusal leaves them scheduled and exits non-zero)
 node cli/blog.js pin   [dir]   pin unpinned asset: references, verify video: release tags (GitHub API, $GITHUB_TOKEN optional)
@@ -1848,6 +1884,8 @@ fast and the send is patient. A repository over what a browser can hold in memor
 
 ## Known limits
 
+* **Comments are as of the last build**, like search, tags and the archive: a comment you publish appears when the site is regenerated (one comment is
+  an exact incremental publish), and the live renderer does not refresh them. The `form` mode has no live thread and no notification.
 * **WordPress import:** pictures on a site that does not allow cross-origin reads cannot be fetched by the browser (use the CLI); the REST
   fallback sees only published posts and pages; a line break inside a paragraph becomes a new paragraph; footnotes, columns, galleries
   other than `[gallery]`, forms, products and other plugins' content are not imported (a table is kept, as a markdown table or an HTML
