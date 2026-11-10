@@ -7,6 +7,7 @@ import { readIndex } from '../lib/index-data.js';
 import { joinFile, setMeta, splitFile } from '../lib/frontmatter.js';
 import { PAGE_PATH, POST_PATH, GENERATED_TREES, OPTIONAL_GENERATED, parsePost, validateBlog } from '../lib/blog.js';
 import { buildSiteWith } from '../lib/build-async.js';
+import { COMMENT_PATH, parseComments } from '../lib/comments.js';
 import { parseOutputsFile } from '../lib/extensions.js';
 import { loadPacks, readExtensionToPin, readThemeToPin } from './packs.js';
 import { licenceRecords } from '../lib/licences.js';
@@ -90,7 +91,7 @@ export { generate as generateSite };
 
 // Generated files that disappear when the feature that made them is switched off, and anything left in a folder the
 // generator owns (tags/, archive/, page/, …) that the build no longer writes.
-const isContent = (p) => POST_PATH.test(p) || PAGE_PATH.test(p);
+const isContent = (p) => POST_PATH.test(p) || PAGE_PATH.test(p) || COMMENT_PATH.test(p); // a comments/<slug>.json travels with the posts
 const staleOptional = (site, tree, prefix) =>
   [...tree.keys()]
     .filter((f) => !(f in site.files) && (OPTIONAL_GENERATED.includes(f) || GENERATED_TREES.some((t) => f.startsWith(`${t}/`))))
@@ -127,7 +128,7 @@ async function incrementalChanges(gh, ctx) {
   const slugs = new Set([...tree.keys()].map((p) => (POST_PATH.exec(p) || PAGE_PATH.exec(p) || [])[1]).filter(Boolean));
   const slug = POST_PATH.exec(newPost.path)[1];
   slugs.add(slug);
-  const prep = prepareIncremental({ site: ctx.site, change: { path: newPost.path, text: newPost.text }, lock, slugs, existing: new Set(tree.keys()) });
+  const prep = prepareIncremental({ site: ctx.site, change: { path: newPost.path, text: newPost.text, ...(ctx.newComments !== undefined ? { comments: ctx.newComments } : {}) }, lock, slugs, existing: new Set(tree.keys()) });
   if (prep.reason) {
     ctx.noIncremental = true;
     return null;
@@ -170,7 +171,8 @@ async function computeChanges(gh, ctx) {
   const { blogText, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head, runner } = ctx;
   ctx.others ||= await readPosts(gh, { repo, prefix, head, tree, paths: ctx.otherPaths });
   const others = ctx.others;
-  const posts = [...others, { path: newPost.path, text: newPost.text }];
+  const sidecarPath = `comments/${POST_PATH.exec(newPost.path)?.[1]}.json`;
+  const posts = [...(ctx.newComments !== undefined ? others.filter((o) => o.path !== sidecarPath) : others), { path: newPost.path, text: newPost.text }, ...(ctx.newComments ? [{ path: sidecarPath, text: ctx.newComments }] : [])];
   const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner, orderText: ctx.orderText });
   const out = { ...site.files, [newPost.path]: newPost.text };
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
@@ -200,7 +202,8 @@ async function computeChanges(gh, ctx) {
 // kind: 'post' (posts/<slug>.md) or 'page' (pages/<slug>.md, a standalone page).
 // remove: delete posts/<slug>.md (or pages/<slug>.md). It is planned as the post going back to a draft, which already takes a post out of the
 // index, the listings, the feed, the sitemap and search, and removes its generated page and redirects; then the source file goes too.
-export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, runner, lockPatch = {} }) {
+// comments: the post's comments/<slug>.json as it will be (text), or null to remove it; undefined leaves them as committed.
+export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, runner, lockPatch = {}, comments }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -274,8 +277,15 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   }
 
   const prevIndex = tree.has('index/posts.json') ? await readIndex((p) => gh.readText(repo, prefix + p, head.sha)) : null;
-  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, runner, orderText };
+  if (comments !== undefined && comments !== null) parseComments(comments, `comments/${slug}.json`); // judged before anything is built
+  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, runner, orderText, newComments: comments };
   const { site, changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
+  if (comments !== undefined) {
+    const cp = `comments/${slug}.json`;
+    if (comments === null) {
+      if (tree.has(cp)) changes.push({ path: prefix + cp, delete: true, size: 0, action: 'delete' });
+    } else if (tree.get(cp) !== (await gitBlobSha(enc.encode(comments)))) changes.push({ path: prefix + cp, content: comments, size: enc.encode(comments).length, action: tree.has(cp) ? 'update' : 'add' });
+  }
   if (remove) {
     const gone = changes.findIndex((c) => c.path === prefix + target);
     if (gone >= 0) changes.splice(gone, 1);
@@ -573,7 +583,7 @@ export async function planMedia(gh, { repo: where, branch, uploads, runner }) {
   let affected = [];
   if (refreshed.length && !inBlogJson) {
     const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
-    const paths = [...tree.keys()].filter(isContent);
+    const paths = [...tree.keys()].filter((p) => POST_PATH.test(p) || PAGE_PATH.test(p));
     const mentions = refreshed.map((x) => new RegExp(`${ref(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w/-]|\\.\\w)`));
     for (const f of await readPosts(gh, { repo, prefix, head, tree, paths })) if (mentions.some((m) => m.test(f.text))) affected.push({ kind: POST_PATH.test(f.path) ? 'post' : 'page', slug: (POST_PATH.exec(f.path) || PAGE_PATH.exec(f.path))[1], text: f.text });
   }

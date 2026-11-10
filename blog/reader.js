@@ -137,7 +137,8 @@ async function preview(parsed, mine) {
   const source = sourceOf(site, file);
   const text = source ? await gh.readText(plain, at(folder, source), parsed.ref) : null;
   if (mine !== seq) return true;
-  const out = previewHtml(site, file, { text });
+  const commentsFile = source && /^posts\//.test(source) ? await gh.readText(plain, at(folder, `comments/${parsed.post || (/^([^/]+)\//.exec(file) || [])[1]}.json`), parsed.ref) : null;
+  const out = previewHtml(site, file, { text, comments: commentsFile });
   if (mine !== seq) return true;
   const ctx = { parsed, blog, file };
   showPreview(out.html, ctx, out.css);

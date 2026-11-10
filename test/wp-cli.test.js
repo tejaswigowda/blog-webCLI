@@ -52,7 +52,7 @@ test('cli import wp: an export file becomes a blog directory and an images direc
     assert.match(r.stdout, /not imported: 1 product/);
     assert.match(r.stdout, /next: commit and push the pictures/);
 
-    assert.deepEqual(await walk(blog), ['blog.json', 'pages/about-us.md', 'pages/tags-wp.md', 'posts/hello-welcome.md', 'posts/not-ready.md', 'posts/second-post.md', 'posts/secret.md']);
+    assert.deepEqual(await walk(blog), ['blog.json', 'comments/hello-welcome.json', 'pages/about-us.md', 'pages/tags-wp.md', 'posts/hello-welcome.md', 'posts/not-ready.md', 'posts/second-post.md', 'posts/secret.md']);
     assert.deepEqual(await walk(path.join(tmp, 'images')), ['wp/2022/01/My-Unused-Photo.JPG', 'wp/2022/01/paper.pdf', 'wp/2024/05/cat.jpg', 'wp/2024/06/dog.jpg'], 'the pictures sit beside a blog that has a folder of its own');
     const bj = JSON.parse(await fs.readFile(path.join(blog, 'blog.json'), 'utf8'));
     assert.equal(bj.repo, 'me/site/blog');

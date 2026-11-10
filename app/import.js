@@ -2,6 +2,7 @@
 // lib/wp-content.js produced into the pre-flight and the commits. No DOM here, so the tests drive it with a fake GitHub.
 import { Refusal } from '../lib/errors.js';
 import { POST_PATH, PAGE_PATH, buildSite, validateBlog } from '../lib/blog.js';
+import { COMMENT_PATH } from '../lib/comments.js';
 import { mergeImported } from '../lib/wp-merge.js';
 import { blogJsonText, makeBlogJson } from '../lib/init.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
@@ -277,7 +278,8 @@ export async function planImport(gh, { where, branch, blogs, limits = {}, addToE
   const added = planned.filter((b) => b.addition);
   if (added.length) {
     plan.headline.push(`Added to ${added.length === 1 ? 'the existing blog' : 'existing blogs'}: its settings, theme and customisation are not touched, and nothing it already has is replaced.`);
-    if (skippedAll.length) plan.headline.push(`${skippedAll.length} imported ${skippedAll.length === 1 ? 'post or page was' : 'posts and pages were'} left out because the blog already has one at that address.`);
+    const skippedPosts = skippedAll.filter((x) => !COMMENT_PATH.test(x.path)); // a post's comments go with it and are not counted twice
+    if (skippedPosts.length) plan.headline.push(`${skippedPosts.length} imported ${skippedPosts.length === 1 ? 'post or page was' : 'posts and pages were'} left out because the blog already has one at that address.`);
     const reused = added.reduce((n, b) => n + b.addition.reusedAssets, 0);
     if (reused) plan.headline.push(`${reused} ${reused === 1 ? 'picture is' : 'pictures are'} already in the blog and will not be sent again.`);
   }
@@ -293,7 +295,7 @@ async function planAddition(gh, { place, prefix, head, whole, b, assetMap, chang
   const blog = validateBlog(blogText);
   if (blog.extensions && blog.extensions.length) throw new Refusal('import-refused', `${place} uses extensions, which run only in the editor's sandbox when a post is published. Add the posts to a blog without extensions, or import into another folder`);
   const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
-  const paths = [...tree.keys()].filter((p) => POST_PATH.test(p) || PAGE_PATH.test(p));
+  const paths = [...tree.keys()].filter((p) => POST_PATH.test(p) || PAGE_PATH.test(p) || COMMENT_PATH.test(p));
   const texts = await gh.readMany(repo, paths.map((p) => ({ path: prefix + p, sha: tree.get(p) })), { ref: head.sha });
   const existing = paths.map((path) => {
     const text = texts.get(prefix + path);

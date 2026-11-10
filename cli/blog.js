@@ -44,11 +44,11 @@ async function load(dir) {
   if (!(await exists(bj))) throw new Refusal('no-blog-json', `no blog.json in ${path.resolve(dir)}`);
   const blog = await fs.readFile(bj, 'utf8');
   const posts = [];
-  for (const folder of ['posts', 'pages']) {
+  for (const folder of ['posts', 'pages', 'comments']) {
     const pdir = path.join(dir, folder);
     if (!(await exists(pdir))) continue;
     for (const f of (await fs.readdir(pdir)).sort()) {
-      if (f.endsWith('.md')) posts.push({ path: `${folder}/${f}`, text: await fs.readFile(path.join(pdir, f), 'utf8') });
+      if (f.endsWith(folder === 'comments' ? '.json' : '.md')) posts.push({ path: `${folder}/${f}`, text: await fs.readFile(path.join(pdir, f), 'utf8') });
     }
   }
   const lp = path.join(dir, 'assets.lock.json');

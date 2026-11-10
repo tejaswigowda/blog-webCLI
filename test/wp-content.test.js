@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { parseComments } from '../lib/comments.js';
 import assert from 'node:assert/strict';
 import { parseXml, decodeEntities, textOf, child } from '../lib/xml.js';
 import { parseWxr, dateOf } from '../lib/wxr.js';
@@ -115,7 +116,7 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   assert.deepEqual(job.blog, { title: 'Ada & Friends', description: 'Notes &xxe; from the old blog', author: 'Ada Example' });
 
   const out = job.finish(fetchedAll(job));
-  assert.deepEqual(out.files.map((f) => f.path).sort(), ['pages/about-us.md', 'pages/tags-wp.md', 'posts/hello-welcome.md', 'posts/not-ready.md', 'posts/second-post.md', 'posts/secret.md'].sort());
+  assert.deepEqual(out.files.map((f) => f.path).sort(), ['comments/hello-welcome.json', 'pages/about-us.md', 'pages/tags-wp.md', 'posts/hello-welcome.md', 'posts/not-ready.md', 'posts/second-post.md', 'posts/secret.md'].sort());
   const file = (p) => out.files.find((f) => f.path === p).text;
 
   const hello = file('posts/hello-welcome.md');
@@ -128,8 +129,15 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   assert.ok(!/author:/.test(hello), 'the blog\'s own author is not repeated');
   assert.match(hello, /Read \[the paper\]\(asset:images\/wp\/2022\/01\/paper\.pdf\)\./, 'a link to a file of the old site is a link to the copy');
   // approved comments only, oldest first, a reply naming who it answers; never an email, an address, spam or a pingback
-  assert.match(hello, /\n## Comments \(2\)\n\n\*\*Zed\*\* · 2024-05-03\n\n> Nice \*\*post\*\*!\n>\n> Second paragraph\.\n\n\*\*Ada Example\*\* · 2024-05-04 — replying to Zed\n\n> Thanks, Zed\.\n$/);
-  for (const never of ['private.example', '203.0.113.9', 'Spammer', 'Buy things', 'Pingback', 'Some blog']) assert.ok(!hello.includes(never), never);
+  // approved comments only, in a sidecar and not in the post: oldest first, a reply naming the comment it answers by id; never an email, an address, spam or a pingback
+  assert.ok(!/Comments \(/.test(hello), 'the post is the post: its comments are data beside it');
+  const sidecar = file('comments/hello-welcome.json');
+  const list = parseComments(sidecar, 'comments/hello-welcome.json');
+  assert.deepEqual(list.map((c) => [c.name, c.date, c.reply_to ? 'reply' : '']), [['Zed', '2024-05-03', ''], ['Ada Example', '2024-05-04', 'reply']]);
+  assert.equal(list[0].body, 'Nice post!\n\nSecond paragraph.');
+  assert.equal(list[1].reply_to, list[0].id);
+  assert.deepEqual(Object.keys(list[0]).sort(), ['body', 'date', 'id', 'name']);
+  for (const never of ['private.example', '203.0.113.9', 'Spammer', 'Buy things', 'Pingback', 'Some blog']) assert.ok(!hello.includes(never) && !sidecar.includes(never), never);
 
   const second = file('posts/second-post.md');
   assert.match(second, /\nauthor: Bob Guest\n/);
@@ -155,7 +163,7 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   const blog = { title: job.blog.title, description: job.blog.description, author: job.blog.author, domain: 'https://x.github.io/blog', repo: 'x/blog' };
   const built = buildSite({ blog, posts: out.files.map((f) => ({ path: f.path, text: f.text })), lock });
   assert.deepEqual(built.errors.map((e) => e.message), []);
-  for (const f of out.files) assert.equal(parsePost({ path: f.path, text: f.text }).lossy, null, f.path);
+  for (const f of out.files.filter((f) => f.path.endsWith('.md'))) assert.equal(parsePost({ path: f.path, text: f.text }).lossy, null, f.path);
   assert.ok(built.files['hello-welcome/index.html'].includes('wp/2024/05/cat.jpg'));
 });
 

@@ -131,7 +131,7 @@ test('import: two exports become two blogs in one repository, the pictures in on
   // CI would regenerate exactly this, blog by blog
   for (const folder of ['ada', 'second']) {
     const mine = Object.entries(after).filter(([p]) => p.startsWith(`${folder}/`)).map(([p, t]) => [p.slice(folder.length + 1), t]);
-    const posts = mine.filter(([p]) => /^(posts|pages)\//.test(p)).map(([path, text]) => ({ path, text }));
+    const posts = mine.filter(([p]) => /^(posts|pages|comments)\//.test(p)).map(([path, text]) => ({ path, text }));
     const lock = JSON.parse(mine.find(([p]) => p === 'assets.lock.json')?.[1] || '{}');
     const regen = buildSite({ blog: mine.find(([p]) => p === 'blog.json')[1], posts, lock });
     assert.deepEqual(regen.errors, []);
@@ -348,7 +348,7 @@ test('import: into a blog that already exists, posts, pages and pictures are add
   const paths = plan.changes.map((c) => c.path);
   assert.ok(!paths.includes('blog.json') && !paths.includes('posts/hello-welcome.md'), 'neither the settings nor a post it already has');
   for (const p of ['posts/second-post.md', 'pages/about-us.md', 'second-post/index.html', 'index.html', 'feed.xml', 'assets.lock.json', 'index/posts.json']) assert.ok(paths.includes(p), p);
-  assert.deepEqual(plan.skipped.map((s) => s.path), ['posts/hello-welcome.md']);
+  assert.deepEqual(plan.skipped.map((s) => s.path), ['posts/hello-welcome.md', 'comments/hello-welcome.json']);
   assert.ok(plan.headline.some((l) => /settings, theme and customisation are not touched/.test(l)));
   assert.ok(plan.headline.some((l) => /1 imported post or page was left out/.test(l)));
   assert.ok(plan.notes.some((n) => /already in the blog|already has/.test(n.text) || /replaces/.test(n.text)));
@@ -372,7 +372,7 @@ test('import: into a blog that already exists, posts, pages and pictures are add
   assert.equal(lock['images/wp/2024/05/cat.jpg'], receipt.commits[0].sha, 'new pictures are pinned to the commit they are in');
 
   // CI would regenerate exactly this
-  const posts = Object.entries(after).filter(([p]) => /^(posts|pages)\//.test(p)).map(([path, text]) => ({ path, text }));
+  const posts = Object.entries(after).filter(([p]) => /^(posts|pages|comments)\//.test(p)).map(([path, text]) => ({ path, text }));
   const regen = buildSite({ blog: after['blog.json'], posts, lock });
   assert.deepEqual(regen.errors, []);
   for (const [p, c] of Object.entries(regen.files)) assert.equal(after[p], c, p);

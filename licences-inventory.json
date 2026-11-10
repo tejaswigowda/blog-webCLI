@@ -37,6 +37,7 @@
     "lib/assets.js",
     "lib/blockrefs.js",
     "lib/blog.js",
+    "lib/comments.js",
     "lib/content.js",
     "lib/contracts.js",
     "lib/cover.js",

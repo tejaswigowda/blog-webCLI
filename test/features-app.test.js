@@ -124,7 +124,7 @@ test('a page: published to pages/<slug>.md and <slug>/, shares the post address 
   assert.equal(loaded.post.kind, 'page');
   // the CI check would regenerate exactly this
   const files = Object.entries(after);
-  const regen = buildSite({ blog: after['blog.json'], lock: JSON.parse(after['assets.lock.json']), posts: files.filter(([p]) => /^(posts|pages)\//.test(p)).map(([p, text]) => ({ path: p, text })) });
+  const regen = buildSite({ blog: after['blog.json'], lock: JSON.parse(after['assets.lock.json']), posts: files.filter(([p]) => /^(posts|comments|pages)\//.test(p)).map(([p, text]) => ({ path: p, text })) });
   for (const [p, c] of Object.entries(regen.files)) assert.equal(after[p], c, p);
 
   // a post may not take the slug of a page, nor a page that of a post
