@@ -276,6 +276,7 @@ export async function planImport(gh, { where, branch, blogs, limits = {}, addToE
     lockPlan: {},
     headline: [`${blogs.length} blog${blogs.length === 1 ? '' : 's'}: ${posts} post${posts === 1 ? '' : 's'}/drafts, ${pages} page${pages === 1 ? '' : 's'}, ${assetMap.size} image${assetMap.size === 1 ? '' : 's'} and file${assetMap.size === 1 ? '' : 's'} (${fmtBytes([...assetMap.values()].reduce((n, x) => n + x.length, 0))}${assetGroups.length > 1 ? `, in ${assetGroups.length} commits` : ''})`],
   };
+  plan.headline.push('Your feed address changes from /feed/ to /feed.xml. GitHub Pages cannot serve it at the old address, so existing subscribers will need to resubscribe; /feed/ shows a page that points to the new one.');
   const added = planned.filter((b) => b.addition);
   if (added.length) {
     plan.headline.push(`Added to ${added.length === 1 ? 'the existing blog' : 'existing blogs'}: its settings, theme and customisation are not touched, and nothing it already has is replaced.`);
