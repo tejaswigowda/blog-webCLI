@@ -102,8 +102,10 @@ form the converter would write, so `md → Delta → md` is byte-identical:
 | | |
 |---|---|
 | paragraphs | separated by one blank line; a paragraph is one line (no hard wrapping) |
-| headings | `#`, `##`, `###` |
+| headings | `#` to `####` |
+| paragraph styles | `{.lead} words`, `{.small} words`: [below](#headings-and-paragraph-styles) |
 | inline | `**bold**` `_italic_` `~~strike~~` `` `code` `` `[text](url)` `![alt](asset:key/path)` |
+| picture size and position | `![alt](asset:key/path){.medium}`: one of `inline small medium large full left right` ([below](#headings-and-paragraph-styles)) |
 | lists | `-` bullets and `1.` numbers, nested with 4 spaces; a blank line between lists of different type |
 | quotes, code | `> ` quotes (`>` between paragraphs), fenced code with optional language |
 | tables | `\| a \| b \|` rows with a `\| --- \| ---: \|` delimiter row: see [Tables](#tables) |
@@ -215,7 +217,10 @@ draft as markdown, every picture in an `images` folder, and a blog.webcli.app bl
 | the post's slug | the slug; changed (and noted) only if it is empty, already used, or a path this app reserves |
 | a picture on the blog's own site, in a post, a cover or the media library | `images/wp/<its path under wp-content/uploads>`, named in posts as `asset:images/wp/…` and pinned |
 | a PDF, document, archive, audio or video file on the blog's own site (in the library, or linked from a post) | the same folder, up to 90 MB each; a link to it becomes `asset:images/wp/…` |
-| a link from one imported post to another | rewritten to the new page (`../<slug>/`) |
+| a link from one imported post to another | rewritten to `../<slug>/`, which means that post wherever the blog's [permalink](#addresses-permalinks-old-archive-addresses) puts it |
+| the post's old address | kept: the post is written at the same path (`permalink`) when the old site used `/{year}/{month}/{slug}/`, else an [alias](#old-addresses-redirects) stub |
+| `/category/x/`, `/tag/x/`, `/author/x/`, `/2019/03/`, `/2019/` | a redirect stub each (`archiveAliases`), to the tag, author or archive page |
+| the feed at `/feed/` | `/feed.xml`; `/feed/` becomes a page that says so (the review states it before the commit) |
 | approved comments | `comments/<slug>.json` ([below](#anonymous-comments-no-server)): name, date, the words as plain text, replies naming who they answer; no email or IP, and an address in a name or body is replaced with "[email removed]" |
 | plugins' content types (products, forms…), widgets, themes | not imported; the types are counted and named in the review |
 
@@ -225,7 +230,7 @@ picture hosted anywhere else (a stock-photo site, another blog, a hotlinked imag
 entry on another host is skipped, and the review says so. The test is on the host, not on whether the address appears in the export.
 
 The text is converted to what the editor can say, which is what markdown can say: paragraphs, headings (to level 3; deeper ones become level
-3), bold, italic, strike, inline code, links, images, lists, quotes, code blocks, [tables](#tables) and horizontal rules. A line break becomes a new
+3, though the editor itself goes to level 4), bold, italic, strike, inline code, links, images, lists, quotes, code blocks, [tables](#tables) and horizontal rules. A line break becomes a new
 paragraph. A table with a header row and one-line cells becomes a markdown table; any other (merged cells, no header row, a caption, a list in a
 cell) becomes an [HTML block](#html-blocks) holding only the allowed tags, and the review says so. Anything else is reduced to
 its words, and the review names it per file: an embedded video or iframe becomes a link, a
@@ -271,8 +276,18 @@ left out and said, an imported old address the blog already uses is dropped and 
 again. The whole site is regenerated with the new posts (the index, tags, feed and so on change), only the files that differ are sent, and
 the pre-flight says what was left out. A blog that uses extensions is refused (they run only in the editor's sandbox when a post is published).
 
-Each post and page also gets its old permalink as an [alias](#old-addresses-redirects), so the old address redirects to the new page (the wizard's
-checkbox, or `--no-redirects`, leaves them out).
+**Keeping every address.** The importer reads each post's old link. When most published posts sit at `/{year}/{month}/{slug}/` (or with the
+day) it sets `permalink` in `blog.json` and writes each post at its old path, which is better than a redirect: the URLs are byte-identical and no
+stub is written. A site on `/%postname%/` already matches the default, so nothing changes. Posts that do not follow the pattern, pages, and
+sites whose addresses cannot be reproduced (`/%category%/%postname%/`: a post here has tags, not one category) get an
+[alias](#old-addresses-redirects) stub at the old address instead, and the review says which. The old site's archive addresses are written as
+`archiveAliases` stubs, leaving out any name the new blog already uses. Into a blog that already exists, a post whose old address is not
+where that blog would put it gets the old address as an alias. The wizard's checkbox, or `--no-redirects`, leaves the stubs out.
+
+**What cannot be kept, said before the commit.** A static host cannot answer with a 301, so every stub is a page with a canonical link, a
+refresh and `noindex` (search engines follow it, slowly). WordPress serves its feed at `/feed/`; GitHub Pages cannot return an Atom document
+there, so the feed moves to `/feed.xml` and existing subscribers must resubscribe. `/feed/` is a small page that links the new address, and
+every page carries feed autodiscovery. The review lists both under its headline.
 
 The command line takes `--uploads <dir>` for the same copy and `--no-comments`, and `--no-fetch` with `--uploads` to use only the pictures in that copy and leave the rest linked to the old site (the folder may be `uploads`, an earlier import's `images/wp`, or any year). It writes `blog.json`, `posts/`, `pages/` and `images/` and nothing else (options `--domain`, `--no-drafts`, `--no-library`); push the pictures,
 then run `blog-webcli pin` (the pin is the commit the pictures are in) and `build`. The images folder sits beside a blog that has a folder of
@@ -319,7 +334,7 @@ CSP, and the same egress ledger (always 0 B uploaded). It takes the blog from th
   `blog.json`, `assets.lock.json`, `index/posts.json`, `theme.css` and `licences.json`), so the header menu, tag and author links,
   dates, pagination, archive, tag and author pages, standalone pages, the footer and the stylesheet are the published ones, not a
   look-alike. A test (`test/preview.test.js`) holds it: for every HTML file a build writes, the reader's page is byte-identical. The
-  reader only points the page's links at itself (`&post=slug`, `&path=…`) and drops its scripts. An address with no page shows the
+  reader only points the page's links at itself (`&post=slug`, `&path=…`) and drops its scripts. Its policy allows no form posts, so a comment or subscribe form is replaced by a link to the published page. `&post=slug` finds a post by its slug wherever a dated `permalink` puts it. An address with no page shows the
   site's own 404. The search page, which needs its own script, and the feed open on the published site.
 * Below the page, outside it, the reader adds *Published page ↗* and, on the index, a **Sort** control (blog order, newest,
   oldest, title) that lists every post in one list for the reader alone: no address or previous/next changes.
@@ -445,8 +460,11 @@ four keys are required, and the real file is plain JSON (no comments):
 | `pagination` | no | `{ "size": N }`: [pages of the index](#search-pagination-seo) | one list |
 | `stylesheet` | no | `"linked"`: every page links one `style.css` instead of carrying the CSS ([below](#linked-stylesheet)) | `"inline"`: the CSS is in every page |
 | `dateFormat` | no | how a post's date reads: a [moment.js format](#dates) | `MMMM D, YYYY` ("November 5, 2026") |
-| `seo` | no | `twitter`, `sitemap`, `robots`: [below](#search-pagination-seo) | a sitemap, and a robots.txt at the root of a host |
-| `comments`, `analytics` | no | a script from an address you name, [below](#comments-analytics) | none |
+| `seo` | no | `twitter`, `sitemap`, `robots`, `noindex`: [below](#search-pagination-seo) | a sitemap, and a robots.txt at the root of a host |
+| `permalink` | no | where a post lives: `"/{year}/{month}/{slug}/"` and the like ([below](#addresses-permalinks-old-archive-addresses)) | `"/{slug}/"` |
+| `archiveAliases` | no | `{ tags, authors, dates }`: old listing addresses that redirect ([below](#addresses-permalinks-old-archive-addresses)) | none |
+| `comments` | no | `mailto`, a plain `form` to a relay, or a `script`: [below](#anonymous-comments-no-server) | none |
+| `analytics` | no | a script from an address you name, [below](#comments-analytics) | none |
 | `subscribe` | no | an email form that posts to an address you name, [below](#subscribe) | none |
 | `customize` | no | colours, fonts, width, header, footer, list layout, CSS: see [Customization](#customization) | the default look |
 
@@ -796,7 +814,7 @@ so a round trip never rewrites what you wrote.
 `2020/05/old-post/index.html` that sends the reader to the post (`<meta http-equiv="refresh">` and a plain link, relative so it
 works wherever the blog is served), tells a crawler where the page now is (`<link rel="canonical">`, absolute) and says `noindex`.
 A static site cannot answer with a 301; this is what a redirect plugin leaves too. Redirect pages are in no feed, sitemap, search
-or listing; `index/posts.json` records them (`redirects: [{ from, slug }]`), which is how the `/blog/` reader shows the same page
+or listing; `index/posts.json` records them (`redirects: [{ from, slug }]`, or `{ from, to, title }` for an [archive address](#addresses-permalinks-old-archive-addresses)), which is how the `/blog/` reader shows the same page
 and follows it, and how the editor deletes one when its alias is removed.
 
 * An alias is a plain path: letters (any script), digits and `. _ ~ -`, at most 8 segments, no query string, scheme or space.
@@ -804,6 +822,7 @@ and follows it, and how the editor deletes one when its alias is removed.
 * It is **refused** (`alias-collision`, naming the file) when it is the page's own address, is claimed by another page, is below a
   post or page address (a draft's included), or is below something the generator or the repository owns (`tags`, `feed.xml`,
   `images`, …). A draft's aliases are not written, and not checked against other aliases, until it is published.
+* On a blog with a dated `permalink` an alias may not be, or sit below, any post's or page's address; an alias equal to the post's own address is refused too (list only what it used to have).
 * `blog-webcli build` removes the redirect page of an alias that is gone, and the folders it leaves empty; `check` reports it as
   stale. Only a page carrying the generator's mark is ever removed.
 * Redirects work only when the new blog is served where the old site was (the blog at the root of the same domain, or the same
@@ -868,6 +887,28 @@ incremental publish stays exact (the affected set is computed from the index: th
 after, plus any that listed it), and the **pre-flight states the count**: *related posts: 2,840 pages change*. If that is routinely too many,
 turn the feature off, or link the tag page instead of listing posts. `stylesheet: "linked"` does not help: this is content, not CSS.
 (`test/related.test.js`)
+
+## Search engines and migrating a site, at a glance
+
+Most "SEO" is advice. Here it is either a tag on a page the generator writes, or an address that used to resolve and still does. The generator refuses to emit a page missing the first kind rather than advising about it.
+
+| What | Where |
+|---|---|
+| canonical and `og:url`, from `domain` (the address GitHub Pages actually serves), `<meta description>`, Open Graph and Twitter tags with absolute URLs | every page |
+| JSON-LD `BlogPosting` / `WebPage` / `WebSite` (with `SearchAction`); `seo_title`, `image`, `canonical`, `noindex` per post | [Post frontmatter](#post-frontmatter) |
+| `sitemap.xml` (an index per year past 500 posts) and, at a host root, `robots.txt` | `seo.sitemap`, `seo.robots` |
+| feed autodiscovery (`<link rel="alternate" type="application/atom+xml">`) on every page; `/feed/` is a notice page, never an Atom document | [Known limits](#known-limits) |
+| the full text of a post with scripting off | every post page |
+| `width` and `height` on every `<img>` the lock file knows the size of, so the page does not shift as pictures load | [Assets](#assets), `blog-webcli sizes` |
+| old addresses: a stub (canonical, refresh, `noindex`) at each alias | [Old addresses](#old-addresses-redirects) |
+| posts at their old dated paths | `permalink`: [below](#addresses-permalinks-old-archive-addresses) |
+| old tag, category, author and date archives | `archiveAliases`: [below](#addresses-permalinks-old-archive-addresses) |
+| a copy that must not compete with the original (a demo, a staging blog) | `seo.noindex`: every page says `noindex`, no sitemap |
+| comments without a server, moderated as commits | [Anonymous comments](#anonymous-comments-no-server) |
+
+**A migration, in order:** import ([WordPress](#importing-from-wordpress)) → check the review (it states the feed change and what became a stub) → serve the new blog at the old domain, so the old paths are the new paths → keep the old site's `/feed/` subscribers in mind (they must resubscribe) → run `blog-webcli sizes` if pictures were added by other means. **What this cannot do:** real 301s (GitHub Pages cannot; stubs are what a redirect plugin leaves too), and serve an Atom document at `/feed/`.
+
+**Measured, not claimed.** `node cli/speed.mjs <address>` loads a page cold under a throttled connection and reports FCP, LCP, TBT and CLS. A generated page without pictures is about 9 KB, no JavaScript, LCP about 270 ms, TBT 0 ms, CLS 0 ([docs/PAGE-SPEED.md](docs/PAGE-SPEED.md) has the method and the honest counter-example: a blog of unoptimised photographs has an LCP of tens of seconds on slow 4G, which no generator can fix).
 
 ## Addresses: permalinks, old archive addresses
 
@@ -1867,6 +1908,11 @@ upload, and nothing is uploaded until you confirm.
 | N9 related posts are a total order (shared tags, sequence position, slug); regenerating in any input order is byte-identical; drafts and scheduled posts are never candidates | `test/related.test.js` |
 | N10 the generator, the live renderer and the `/blog/` reader produce identical related blocks from the index | `test/related.test.js` |
 | N11 the incremental path rewrites exactly the pages whose related block changes, equals a full build, and the pre-flight states how many | `test/related.test.js` |
+| C1–C14 anonymous comments: three exclusive modes, a form with no script, a closed-key sidecar with no email, plain-text bodies, stable ids, deterministic order, an exact incremental publish, the importer writes sidecars | `test/comments.test.js` |
+| P1 a dated `permalink` puts every reference to a post at its path (canonical, sitemap, feed, neighbours, related, listings, search, alias targets, the 404 soft render), refuses `{category}`, collisions and a date edit that would move a post | `test/permalink.test.js` |
+| P2 archive aliases: one stub per tag, author, year and month; a collision with a post or page is refused, naming both | `test/permalink.test.js` |
+| P3 `/feed/` is a page that points at the feed, never the Atom document; every page has feed autodiscovery; an `<img>` carries `width` and `height` from the lock file; `seo.noindex` | `test/discovery.test.js` |
+| P4 headings to level 4, paragraph styles and picture layouts round-trip through markdown and render as classes | `test/discovery.test.js`, `test/markdown.test.js` |
 | N12 the media grid is lazy with explicit dimensions, opening it uploads nothing, and "unused" is computed from the index and the lock file | `test/media.test.js` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
@@ -1917,6 +1963,11 @@ rewrites every page (they all carry them), and so does a change of CSS unless th
 fast and the send is patient. A repository over what a browser can hold in memory (tens of thousands of long posts) is a job for the CLI.
 
 ## Known limits
+
+* **A dated `permalink` is published with a full build.** The incremental path (one post and its neighbours) declines when posts live at dated addresses or the blog keeps `archiveAliases`, because the pages that change are then not just the post's; it falls back to the full build, which is always exact. A big dated blog therefore sends more per publish.
+* **A date edit is refused on a dated blog** (`permalink-move`) rather than moving a published post's address; add the old address as an alias to make the move.
+* **Pictures uploaded before sizes were recorded have none** in `assets.lock.json`, so their `<img>` has no `width`/`height` until you run `blog-webcli sizes` or replace them. The first picture on a page is still `loading="lazy"`.
+* **The `/blog/` reader cannot post a form**; comment and subscribe forms there are a link to the published page.
 
 * **The feed address cannot be kept on GitHub Pages.** WordPress serves `/feed/`; this generator writes `/feed.xml`, and Pages answers a directory request with `<dir>/index.html` as `text/html`, so no Atom document can be returned at `/feed/`. Readers that rediscover a feed from the site address find `/feed.xml` through the autodiscovery link; a subscriber whose reader has `/feed/` saved gets the notice page, not entries, and must resubscribe. This is a property of the host, not a bug awaiting a fix.
 
