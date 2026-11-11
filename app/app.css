@@ -352,3 +352,14 @@ dialog.theme-preview{max-width:64rem;width:calc(100% - 2rem)}
 .ql-editor .ql-layout-small img{width:25%}.ql-editor .ql-layout-medium img{width:50%}.ql-editor .ql-layout-large img{width:75%}.ql-editor .ql-layout-full img{width:100%}
 .ql-editor .ql-layout-left img{float:left;width:40%;margin:.2em 1em .6em 0}
 .ql-editor .ql-layout-right img{float:right;width:40%;margin:.2em 0 .6em 1em}
+
+.cols .side .stats-card{margin-top:1rem}
+.stats .stat{display:grid;grid-template-columns:7rem 1fr;gap:.5rem;padding:.35rem 0;border-bottom:1px solid var(--rule);font-size:.88rem}
+.stats .stat:last-child{border-bottom:0}
+.stats .stat-label{color:var(--muted)}
+.stats .outline{margin:0;padding:0;list-style:none}
+.stats .caution{color:var(--amber)}
+.stats .err{color:var(--warn)}
+.stats .ok{color:var(--ok)}
+.stats a{word-break:break-all}
+@media (max-width:700px){.stats .stat{grid-template-columns:1fr;gap:0}}

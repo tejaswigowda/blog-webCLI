@@ -351,6 +351,11 @@ export class GitHub {
     return this.api('GET', `/repos/${repo}`);
   }
 
+  // The commits that touched a file, newest first (at most `limit`): how often a post was edited, and by whom.
+  fileHistory(repo, path, branch, limit = 100) {
+    return this.api('GET', `/repos/${repo}/commits?path=${encodeURIComponent(path)}&per_page=${limit}${branch ? `&sha=${encodeURIComponent(branch)}` : ''}`);
+  }
+
   // The latest GitHub Pages build (status queued|building|built|errored, commit, error), for the deployment state.
   pagesBuild(repo) {
     return this.api('GET', `/repos/${repo}/pages/builds/latest`);

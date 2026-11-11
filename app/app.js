@@ -38,6 +38,7 @@ import { deltaToHtml } from '../lib/html.js';
 import { loadRegistry } from './registry-client.js';
 import { highlightedTextarea } from './highlight.js';
 import { config } from './config.js';
+import { createStatsPanel } from './stats-panel.js';
 import { kvClear, kvGet, kvSet } from './idb.js';
 import { authorizeUrl, canRefresh, exchangeCode, installUrl, needsRefresh, newState, oauthConfigured, readCallback, redirectUri, refreshRecord, revokeToken } from './oauth.js';
 import { createImportView } from './import-view.js';
@@ -1553,6 +1554,20 @@ async function editorView(repo, r) {
   view.replaceChildren(node);
   const quill = await createEditor(editorEl, { onImage: () => pickImage(), onVideo: () => pickVideo() });
   quill.setContents(existing ? existing.post.delta.ops : mdToDelta('').ops, 'silent');
+  // beside the Publish card: what can be said about the post (lib/post-stats.js), and its history and whether the live page is this version
+  const readFields = () => ({
+    title: f.title.value, slug: f.slug.value.trim(), date: f.date.value ? (f.time.value ? `${f.date.value}T${f.time.value}` : f.date.value) : '', status: f.status.value,
+    tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), description: f.description.value, seo_title: f.seo_title.value, image: f.image.value,
+    canonical: f.canonical.value, noindex: f.noindex.checked, cover: f.cover.value, aliases: existing ? existing.post.meta.aliases : undefined,
+  });
+  const stats = createStatsPanel({
+    h, gh, where: repo, repo: plainRepo, folder, branch, blog, lock: cache.lock, kind, hasPages: !!info.has_pages, link,
+    saved: existing ? { slug: existing.post.slug, status: existing.post.status, date: existing.post.meta.date, text: existing.text } : null,
+    read: () => ({ fields: readFields(), ops: quill.getContents().ops, staged: new Set(staged.keys()) }),
+  });
+  node.querySelector('.side').append(stats.el);
+  quill.on('text-change', stats.update);
+  for (const control of Object.values(f)) for (const ev of ['input', 'change']) control.addEventListener(ev, stats.update);
   go.disabled = correcting && !canPush;
 
   // Stage an image for upload at publish, in the images repository. Returns its asset reference, or

@@ -41,7 +41,7 @@ export async function loadIndexFull(gh, where, ref, { blog = null } = {}) {
     const byslug = new Map(index.posts.map((e) => [e.slug, e]));
     const named = (index.sequence || []).filter((s) => byslug.has(s));
     const posts = [...named.map((s) => byslug.get(s)), ...index.posts.filter((e) => !named.includes(e.slug))];
-    return { posts, sequence: posts.map((e) => e.slug), order: index.order || { ...DEFAULT_ORDER } };
+    return { posts, pages: index.pages || [], sequence: posts.map((e) => e.slug), order: index.order || { ...DEFAULT_ORDER } };
   }
   const names = await listPostFiles(gh, where, ref);
   const found = [];
