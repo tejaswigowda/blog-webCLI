@@ -39,6 +39,7 @@ import { loadRegistry } from './registry-client.js';
 import { highlightedTextarea } from './highlight.js';
 import { config } from './config.js';
 import { createStatsPanel } from './stats-panel.js';
+import { attachTagSuggest } from './tag-suggest.js';
 import { kvClear, kvGet, kvSet } from './idb.js';
 import { authorizeUrl, canRefresh, exchangeCode, installUrl, needsRefresh, newState, oauthConfigured, readCallback, redirectUri, refreshRecord, revokeToken } from './oauth.js';
 import { createImportView } from './import-view.js';
@@ -1584,6 +1585,10 @@ async function editorView(repo, r) {
     read: () => ({ fields: readFields(), ops: quill.getContents().ops, staged: new Set(staged.keys()) }),
   });
   node.querySelector('.side').append(stats.el);
+  // the tags field offers the blog's existing tags as you type
+  let tagEntries = [];
+  loadIndexFull(gh, repo, branch, { blog }).then((i) => { tagEntries = i.posts; }, () => {});
+  if (!correcting) attachTagSuggest(f.tags, () => tagEntries);
   quill.on('text-change', stats.update);
   for (const control of Object.values(f)) for (const ev of ['input', 'change']) control.addEventListener(ev, stats.update);
   go.disabled = correcting && !canPush;

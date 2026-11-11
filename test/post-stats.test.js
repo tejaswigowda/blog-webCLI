@@ -88,3 +88,20 @@ test('live page against the saved source: live, stale, missing, unknown', () => 
   assert.equal(compareLive({ status: 200, html: '<html></html>' }, post.text).state, 'unknown');
   assert.equal(compareLive({ status: 500, html: '' }, post.text).state, 'unknown');
 });
+
+test('tag suggestions: from the blog\'s tags, the word being typed, no repeats, prefix first', async () => {
+  const { completeTag, suggestTags, tagCounts } = await import('../lib/tag-suggest.js');
+  const entries = [{ tags: ['video', 'git'] }, { tags: ['Video', 'github'] }, { tags: ['video', 'travel'] }, { tags: ['Git'] }, { tags: [] }, {}];
+  assert.deepEqual(tagCounts(entries).map((x) => [x.tag, x.count]), [['video', 3], ['Git', 2], ['github', 1], ['travel', 1]], 'one tag spelled two ways, under the spelling that sorts first when tied');
+  assert.deepEqual(suggestTags(entries, '').map((x) => x.tag), ['video', 'Git', 'github', 'travel']);
+  assert.deepEqual(suggestTags(entries, 'gi').map((x) => x.tag), ['Git', 'github']);
+  assert.deepEqual(suggestTags(entries, 'ave').map((x) => x.tag), ['travel'], 'contains, when nothing starts with it');
+  assert.deepEqual(suggestTags(entries, 'video, gi').map((x) => x.tag), ['Git', 'github'], 'the word after the last comma');
+  assert.deepEqual(suggestTags(entries, 'video, git, ').map((x) => x.tag), ['github', 'travel'], 'tags already listed are not offered again');
+  assert.deepEqual(suggestTags(entries, 'GIT').map((x) => x.tag), ['github'], 'case does not matter, and an exact match has nothing to complete');
+  assert.deepEqual(suggestTags(entries, '', 2).length, 2);
+  assert.deepEqual(suggestTags([], 'x'), []);
+  assert.equal(completeTag('', 'git'), 'git, ');
+  assert.equal(completeTag('video, gi', 'git'), 'video, git, ');
+  assert.equal(completeTag('video,gi', 'git'), 'video, git, ');
+});

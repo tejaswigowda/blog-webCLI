@@ -364,3 +364,7 @@ dialog.theme-preview{max-width:64rem;width:calc(100% - 2rem)}
 .stats .ok{color:var(--ok)}
 .stats a{word-break:break-all}
 @media (max-width:700px){.stats .stat{grid-template-columns:1fr;gap:0}}
+
+.tag-suggest{position:absolute;z-index:30;margin:0;padding:.25rem;list-style:none;background:var(--panel);border:1px solid var(--rule);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.4);max-height:14rem;overflow:auto;font-size:.9rem}
+.tag-suggest li{padding:.3rem .6rem;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:1rem}
+.tag-suggest li[aria-selected="true"],.tag-suggest li:hover{background:var(--surface2)}
