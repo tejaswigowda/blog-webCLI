@@ -92,7 +92,8 @@ export async function importWordPress(args, { fetchImpl = (...a) => globalThis.f
       for (const name of (await fs.readdir(path.join(dir, sub)).catch(() => [])).filter((n) => n.endsWith('.md'))) existing.push({ path: `${sub}/${name}`, text: await fs.readFile(path.join(dir, sub, name), 'utf8') });
     }
     const lock = (await exists(path.join(dir, 'assets.lock.json'))) ? JSON.parse(await fs.readFile(path.join(dir, 'assets.lock.json'), 'utf8')) : {};
-    const merged = mergeImported({ existing, files, assets, lock, imagesKey: IMAGES_KEY });
+    const intoBlog = JSON.parse(await fs.readFile(path.join(dir, 'blog.json'), 'utf8'));
+    const merged = mergeImported({ existing, files, assets, lock, imagesKey: IMAGES_KEY, importedPermalink: out.blog.permalink || null, intoPermalink: intoBlog.permalink || null });
     files = merged.files;
     assets = merged.assets;
     out.notes.push(...merged.notes, ...merged.skipped.map((x) => ({ where: x.path, text: `left out: ${x.why}` })));

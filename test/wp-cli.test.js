@@ -70,7 +70,7 @@ test('cli import wp: an export file becomes a blog directory and an images direc
     const built = await cli('build', blog);
     assert.equal(built.code, 0, built.stderr);
     assert.equal((await cli('check', blog)).code, 0);
-    assert.match(await fs.readFile(path.join(blog, 'hello-welcome', 'index.html'), 'utf8'), /cat\.jpg/);
+    assert.match(await fs.readFile(path.join(blog, '2024', '05', 'hello-welcome', 'index.html'), 'utf8'), /cat\.jpg/);
 
     // an import never replaces a blog
     const again = await cli('import', 'wp', path.join(tmp, 'export.xml'), blog, '--repo', 'me/site/blog');

@@ -34,6 +34,7 @@
   },
   "runtimeBuiltFrom": [
     "lib/aliases.js",
+    "lib/archive-aliases.js",
     "lib/assets.js",
     "lib/blockrefs.js",
     "lib/blog.js",

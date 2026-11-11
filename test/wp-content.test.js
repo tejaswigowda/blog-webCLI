@@ -120,7 +120,7 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   const file = (p) => out.files.find((f) => f.path === p).text;
 
   const hello = file('posts/hello-welcome.md');
-  assert.match(hello, /^---\nslug: hello-welcome\ntitle: "?Hello & welcome"?\ndate: 2024-05-02\ntags: \[News, Video Git\]\naliases: \["2024\/05\/hello-welcome"\]\nstatus: published\ncover: asset:images\/wp\/2024\/05\/cat\.jpg\ndescription: A short excerpt\.\n---\n\n/);
+  assert.match(hello, /^---\nslug: hello-welcome\ntitle: "?Hello & welcome"?\ndate: 2024-05-02\ntags: \[News, Video Git\]\nstatus: published\ncover: asset:images\/wp\/2024\/05\/cat\.jpg\ndescription: A short excerpt\.\n---\n\n/);
   assert.match(hello, /First \*\*bold\*\* and _italic_ and \[a link\]\(https:\/\/example\.com\/x\)\./);
   assert.match(hello, /\n### Small heading\n/);
   assert.match(hello, /!\[A cat\]\(asset:images\/wp\/2024\/05\/cat\.jpg\)/);
@@ -141,7 +141,10 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
 
   const second = file('posts/second-post.md');
   assert.match(second, /\nauthor: Bob Guest\n/);
-  assert.match(second, /\naliases: \["2024\/06\/second-post"\]\n/);
+  assert.ok(!/aliases:/.test(second), 'its old address is where the new blog puts it');
+  assert.equal(out.blog.permalink, '/{year}/{month}/{slug}/', 'the old site used year and month: the posts keep those addresses');
+  assert.ok(out.notes.some((n) => n.where === 'permalinks' && /keep their old addresses/.test(n.text)));
+  assert.deepEqual(out.blog.archiveAliases, { tags: ['tag', 'category'], authors: ['author'], dates: true });
   assert.ok(!/aliases:/.test(file('posts/not-ready.md')) && !/aliases:/.test(file('pages/about-us.md')), 'a plain ?p= address cannot be redirected, and a page already at /about-us/ has nothing to redirect');
   assert.match(second, /!\[\]\(asset:images\/wp\/2024\/06\/dog\.jpg\) A dog/);
   assert.match(second, /!\[A cat\]\(asset:images\/wp\/2024\/05\/cat\.jpg\)/, 'the gallery ids name library pictures');
@@ -153,7 +156,7 @@ test('import: an export becomes markdown posts and pages, pinned to images it na
   assert.match(file('pages/about-us.md'), /^---\nslug: about-us\ntitle: About us\nstatus: published\nmenu: 1\n---\n\nWe write things\.\n$/);
   assert.match(file('pages/tags-wp.md'), /^---\nslug: tags-wp\n/, 'a slug the new blog reserves is changed, and said');
 
-  assert.deepEqual(out.summary, { posts: 2, drafts: 2, pages: 2, images: 3, files: 1, comments: 2, imagesFailed: 0, imageBytes: out.assets.reduce((n, a) => n + a.bytes.length, 0), internalLinks: 2, redirects: 2, skipped: { product: 1 } });
+  assert.deepEqual(out.summary, { posts: 2, drafts: 2, pages: 2, images: 3, files: 1, comments: 2, imagesFailed: 0, imageBytes: out.assets.reduce((n, a) => n + a.bytes.length, 0), internalLinks: 2, redirects: 0, skipped: { product: 1 } });
   const said = (where, re) => out.notes.some((n) => n.where === where && re.test(n.text));
   assert.ok(said('posts/hello-welcome.md', /another site/) && said('posts/second-post.md', /fancy_form/));
   assert.ok(said('posts/secret.md', /private on WordPress/));
@@ -375,7 +378,7 @@ test('redirects: the imported blog builds, with a page at every old address that
   const r = buildSite({ blog: { ...out.blog, domain: 'https://new.example.org', repo: 'me/blog' }, posts, lock: {} });
   assert.deepEqual(r.errors, []);
   assert.match(r.files['2020/05/one/index.html'], /<link rel="canonical" href="https:\/\/new\.example\.org\/one\/">[\s\S]*url=\.\.\/\.\.\/\.\.\/one\//);
-  assert.deepEqual(JSON.parse(r.files['index/posts.json']).redirects, [{ from: '2020/05/one', slug: 'one' }, { from: '2020/06/two', slug: 'two' }]);
+  assert.deepEqual(JSON.parse(r.files['index/posts.json']).redirects.filter((x) => x.slug), [{ from: '2020/05/one', slug: 'one' }, { from: '2020/06/two', slug: 'two' }]);
 });
 
 test('import: a picture that could not be downloaded stays linked to the old site inside a table and an HTML block too', () => {

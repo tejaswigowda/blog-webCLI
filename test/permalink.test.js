@@ -144,3 +144,39 @@ test('E7: a date change that would move a published post is refused, offering th
   assert.equal(stub.length, 1, 'the old address is written once, as the stub');
   assert.ok(!stub[0].delete && stub[0].content.includes('http-equiv="refresh"'));
 });
+
+test('E9: archive aliases: one stub per tag, author, year and month; a collision with a post or page is refused, naming both', () => {
+  const posts = [post('one', '2024-05-17'), post('two', '2024-06-02', 'tags: [b]\n').text ? { path: 'posts/two.md', text: post('two', '2024-06-02').text.replace('tags: [a]', 'tags: [a, b]').replace('author: Ann', 'author: Bob') } : null].filter(Boolean);
+  const cfg = { tags: ['tag', 'category'], authors: ['author'], dates: true };
+  const r = build(null, posts, { archiveAliases: cfg });
+  assert.deepEqual(r.errors, []);
+  const stubs = Object.keys(r.files).filter((f) => /^(tag|category|author)\/|^2024\//.test(f));
+  assert.deepEqual(stubs.sort(), ['2024/05/index.html', '2024/06/index.html', '2024/index.html', 'author/ann/index.html', 'author/bob/index.html', 'category/a/index.html', 'category/b/index.html', 'tag/a/index.html', 'tag/b/index.html']);
+  assert.match(r.files['tag/b/index.html'], /url=\.\.\/\.\.\/tags\/b\//);
+  assert.match(r.files['tag/b/index.html'], /canonical" href="https:\/\/x\.test\/b\/tags\/b\/"/);
+  assert.match(r.files['tag/b/index.html'], /name="robots" content="noindex"/);
+  assert.match(r.files['2024/05/index.html'], /url=\.\.\/\.\.\/archive\//);
+  assert.ok(JSON.parse(r.files['index/posts.json']).redirects.some((x) => x.from === 'tag/b' && x.to === 'tags/b'));
+  // a post or page at an old archive address: refused, with both named
+  const onYear = build(null, [...posts, { path: 'pages/2024.md', text: '---\nslug: 2024\ntitle: "Y"\nstatus: published\n---\n\nx\n' }], { archiveAliases: cfg });
+  assert.ok(onYear.errors.some((e) => e.code === 'alias-collision' && /2024\//.test(e.detail) && /pages\/2024\.md/.test(e.detail)));
+  const onTag = build(null, [...posts, { path: 'posts/tag.md', text: post('tag', '2024-01-01').text }], { archiveAliases: { tags: ['tag'] } });
+  assert.ok(onTag.errors.some((e) => e.code === 'alias-collision' && /below tag\// .test(e.detail) && /posts\/tag\.md/.test(e.detail)), 'below a post, like any alias');
+  // under a dated permalink the month folder is where posts live, and a stub there is allowed
+  const dated = build('/{year}/{month}/{slug}/', posts, { archiveAliases: { dates: true } });
+  assert.deepEqual(dated.errors, []);
+  assert.ok(dated.files['2024/05/index.html'] && dated.files['2024/05/one/index.html']);
+  for (const no of [{ tags: ['feed'] }, { tags: 'tag' }, { dates: 'yes' }, { other: 1 }, { tags: ['A B'] }]) assert.throws(() => validateBlog({ ...BASE, archiveAliases: no }), (e) => e instanceof Refusal && e.code === 'bad-alias', JSON.stringify(no));
+});
+
+test('links between posts: "../<slug>/" means the post or page with that slug, wherever the permalink puts it', () => {
+  const link = (slug, date, to) => ({ path: `posts/${slug}.md`, text: `---\nslug: ${slug}\ntitle: "P ${slug}"\ndate: ${date}\nauthor: Ann\nstatus: published\n---\n\nSee [it](../${to}/#top) and [about](../about/).\n` });
+  const about = { path: 'pages/about.md', text: '---\nslug: about\ntitle: "About"\nstatus: published\n---\n\nAbout [one](../one/).\n' };
+  const r = build('/{year}/{month}/{slug}/', [link('one', '2024-05-17', 'two'), link('two', '2025-02-03', 'one'), about]);
+  assert.deepEqual(r.errors, []);
+  assert.match(r.files['2024/05/one/index.html'], /<a href="\.\.\/\.\.\/\.\.\/2025\/02\/two\/#top">it<\/a>/);
+  assert.match(r.files['2024/05/one/index.html'], /<a href="\.\.\/\.\.\/\.\.\/about\/">about<\/a>/);
+  assert.match(r.files['about/index.html'], /<a href="\.\.\/2024\/05\/one\/">one<\/a>/);
+  // the default blog is untouched
+  assert.match(build(null, [link('one', '2024-05-17', 'two'), link('two', '2025-02-03', 'one')]).files['one/index.html'], /<a href="\.\.\/two\/#top">it<\/a>/);
+});

@@ -109,7 +109,7 @@ test('import: two exports become two blogs in one repository, the pictures in on
   assert.match(lines[1], /^\d+ files, [\d.]+ (B|KB|MB), to github\.com\/me\/site \(main\)$/);
   assert.match(plan.headline[0], /^2 blogs: 5 posts\/drafts, 2 pages, 4 images and files/);
   const paths = plan.changes.map((c) => c.path);
-  for (const f of ['ada/blog.json', 'ada/posts/hello-welcome.md', 'ada/pages/about-us.md', 'ada/hello-welcome/index.html', 'ada/index.html', 'ada/assets.lock.json', 'ada/search/index.html', 'second/blog.json', 'second/index.html']) assert.ok(paths.includes(f), f);
+  for (const f of ['ada/blog.json', 'ada/posts/hello-welcome.md', 'ada/pages/about-us.md', 'ada/2024/05/hello-welcome/index.html', 'ada/index.html', 'ada/assets.lock.json', 'ada/search/index.html', 'second/blog.json', 'second/index.html']) assert.ok(paths.includes(f), f);
   assert.ok(paths.every((p) => p.startsWith('ada/') || p.startsWith('second/')), 'every blog stays inside its folder');
 
   const progress = [];
@@ -123,7 +123,7 @@ test('import: two exports become two blogs in one repository, the pictures in on
   assert.ok(after['images/wp/2024/05/cat.jpg'] && after['images/wp/2024/06/dog.jpg']);
   const pin = JSON.parse(after['ada/assets.lock.json'])['images/wp/2024/05/cat.jpg'];
   assert.equal(pin, receipt.commits[0].sha, 'the commit that holds the pictures is what every picture is pinned to');
-  assert.match(after['ada/hello-welcome/index.html'], new RegExp(`@${pin}/images/wp/2024/05/cat\\.jpg`.replace('/images', '/images')));
+  assert.match(after['ada/2024/05/hello-welcome/index.html'], new RegExp(`@${pin}/images/wp/2024/05/cat\\.jpg`.replace('/images', '/images')));
   assert.equal(JSON.parse(after['ada/blog.json']).repo, 'me/site/ada');
   assert.equal(JSON.parse(after['ada/blog.json']).search, true);
   assert.ok(!('second/assets.lock.json' in after), 'a blog with no pictures has no lock');
@@ -339,7 +339,7 @@ test('import: into a blog that already exists, posts, pages and pictures are add
   const model = await readExport(WXR);
   const job = planWp(model, { today: '2026-11-06' });
   const out = job.finish((await fetchImages(net, job.images)).fetched);
-  const blogs = [{ folder: '', fields: { title: 'Ada & Friends', description: 'x', author: 'Ada' }, files: out.files, assets: out.assets }];
+  const blogs = [{ folder: '', fields: { title: 'Ada & Friends', description: 'x', author: 'Ada', permalink: out.blog.permalink }, files: out.files, assets: out.assets }];
 
   // by default an existing blog is not touched, and the refusal says what to do
   await assert.rejects(planImport(gh, { where: 'me/site', branch: 'main', blogs }), (e) => e.code === 'import-refused' && /add these posts to the blog that is there/.test(e.detail));

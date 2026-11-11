@@ -305,7 +305,7 @@ async function planAddition(gh, { place, prefix, head, whole, b, assetMap, chang
     return { path, text };
   });
   const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, `${prefix}assets.lock.json`, head.sha)) : {};
-  const merged = mergeImported({ existing, files: b.files, assets: b.assets, lock, imagesKey: IMAGES_KEY });
+  const merged = mergeImported({ existing, files: b.files, assets: b.assets, lock, imagesKey: IMAGES_KEY, importedPermalink: b.fields.permalink || null, intoPermalink: blog.permalink || null });
   const imageRef = parseRepoRef(blog.assets.repos[IMAGES_KEY]);
   const pins = { ...lock };
   const newKeys = [];

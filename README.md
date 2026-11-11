@@ -868,6 +868,28 @@ after, plus any that listed it), and the **pre-flight states the count**: *relat
 turn the feature off, or link the tag page instead of listing posts. `stylesheet: "linked"` does not help: this is content, not CSS.
 (`test/related.test.js`)
 
+## Addresses: permalinks, old archive addresses
+
+By default a post is at `/<slug>/`. A blog that came from a WordPress site with dated addresses keeps them by emitting each post at its old path, which beats a redirect:
+
+```json
+"permalink": "/{year}/{month}/{slug}/"
+```
+
+`{slug}`, `{year}`, `{month}` and `{day}` only; the last segment is `{slug}`. `{category}` (and any other field) is refused with `unsupported-permalink`: a post here has tags, not one category, so WordPress's `/%category%/%postname%/` cannot be reproduced and those posts get alias stubs instead. The slug stays the id (`posts/<slug>.md`, its comments file, `slug-collision`); only the path is derived, and every generated reference follows it: canonical, `og:url`, sitemap, feed, previous/next, related posts, index and listing links, alias targets, search, the `/blog/` reader and the 404 page's soft render. In a post, `[text](../other-post/)` means the post or page with that slug wherever the pattern puts it. An address may not be, or sit below, another post's, a page's or a reserved name (`slug-collision`).
+
+**A date that would move a published post is refused** (`permalink-move`) in the editor, because a dated address depends on `date`. If the move is intended, add the old address to the post's `aliases` and publish again; the old address becomes a stub. A dated blog is always published with a full build, not the incremental one.
+
+The WordPress import reads each post's old link: when most published posts sit at `/{year}/{month}/{slug}/` (or with the day) it sets `permalink` and writes no alias for them; posts that do not follow it keep an alias stub, and a note says so. On a site on `/%postname%/` nothing changes and no stub is written.
+
+**Old listing addresses.** A WordPress site also has `/category/foo/`, `/tag/foo/`, `/author/ada/`, `/2019/03/` and `/2019/`, which have inbound links:
+
+```json
+"archiveAliases": { "tags": ["tag", "category"], "authors": ["author"], "dates": true }
+```
+
+writes one small redirect page per tag (to `tags/<tag>/`), per author (to `authors/<name>/`), per year with posts (to `archive/<year>/`, or `archive/` on a blog that keeps one archive page) and per month. The import sets it, leaving out any name the new blog already uses. A stub at an address that is, or sits below, a post's or page's is refused (`alias-collision`), naming both.
+
 ## Headings and paragraph styles
 
 Headings go from `#` to `####` (a post's own title is the page's `h1`, so use `#` sparingly). A paragraph can carry one of two styles, written as a prefix and drawn as a class the theme styles: `{.lead} An opening line.` (larger, muted) and `{.small} Fine print.` (smaller, muted). The editor offers them in the paragraph-style dropdown; they cannot be combined with a heading, list, quote or code block. The size of all body text is Settings → Look → *Text size* (14–24px), and headings, lead and small text scale with it. A custom theme can restyle `p.lead` and `p.small`.
