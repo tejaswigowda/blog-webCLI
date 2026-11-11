@@ -56,7 +56,7 @@ async function once() {
     await send('Page.enable');
     await send('Runtime.enable');
     // observers before any script of the page runs
-    await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__m={lcp:0,fcp:0,tasks:[]};new PerformanceObserver((l)=>{for(const e of l.getEntries())window.__m.lcp=e.startTime}).observe({type:'largest-contentful-paint',buffered:true});new PerformanceObserver((l)=>{for(const e of l.getEntries())if(e.name==='first-contentful-paint')window.__m.fcp=e.startTime}).observe({type:'paint',buffered:true});try{new PerformanceObserver((l)=>{for(const e of l.getEntries())window.__m.tasks.push([e.startTime,e.duration])}).observe({type:'longtask',buffered:true})}catch(e){}` });
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__m={lcp:0,fcp:0,cls:0,tasks:[]};new PerformanceObserver((l)=>{for(const e of l.getEntries())if(!e.hadRecentInput)window.__m.cls+=e.value}).observe({type:'layout-shift',buffered:true});new PerformanceObserver((l)=>{for(const e of l.getEntries())window.__m.lcp=e.startTime}).observe({type:'largest-contentful-paint',buffered:true});new PerformanceObserver((l)=>{for(const e of l.getEntries())if(e.name==='first-contentful-paint')window.__m.fcp=e.startTime}).observe({type:'paint',buffered:true});try{new PerformanceObserver((l)=>{for(const e of l.getEntries())window.__m.tasks.push([e.startTime,e.duration])}).observe({type:'longtask',buffered:true})}catch(e){}` });
     await send('Page.navigate', { url: address });
     await new Promise((r) => setTimeout(r, 1000));
     for (let i = 0; i < 150; i++) { const r = await send('Runtime.evaluate', { expression: 'document.readyState', returnByValue: true }); if (r.result.result.value === 'complete') break; await new Promise((r2) => setTimeout(r2, 200)); }
@@ -65,7 +65,7 @@ async function once() {
     const v = JSON.parse(r.result.result.value);
     const tbt = v.m.tasks.filter(([s]) => s >= v.m.fcp).reduce((a, [, dur]) => a + Math.max(0, dur - 50), 0);
     ws.close();
-    return { fcp: v.m.fcp, lcp: v.m.lcp, tbt, kb: encoded / 1024, requests: reqs.size, jsFiles: scripts.size, jsKb: [...scripts.values()].reduce((a, b) => a + b, 0) / 1024, scriptTags: v.scripts, inlineScripts: v.inline };
+    return { fcp: v.m.fcp, lcp: v.m.lcp, cls: v.m.cls, tbt, kb: encoded / 1024, requests: reqs.size, jsFiles: scripts.size, jsKb: [...scripts.values()].reduce((a, b) => a + b, 0) / 1024, scriptTags: v.scripts, inlineScripts: v.inline };
   } finally { proc.kill(); }
 }
 
@@ -75,4 +75,4 @@ for (let i = 0; i < runs; i++) all.push(await once());
 const result = Object.fromEntries(Object.keys(all[0]).map((k) => [k, Math.round(med(all.map((r) => r[k])) * 10) / 10]));
 const out = { address, runs, profile: flagv('--profile', '4g'), when: new Date().toISOString(), median: result, all };
 if (args.includes('--json')) console.log(JSON.stringify(out, null, 1));
-else console.log(`${address}  (${runs} cold runs, ${out.profile}, 4x CPU, median)\n  FCP ${Math.round(result.fcp)} ms   LCP ${Math.round(result.lcp)} ms   TBT ${Math.round(result.tbt)} ms\n  ${result.kb} KB over ${result.requests} requests; JavaScript: ${result.jsFiles} files, ${result.jsKb} KB; <script> tags ${result.scriptTags} (${result.inlineScripts} inline)`);
+else console.log(`${address}  (${runs} cold runs, ${out.profile}, 4x CPU, median)\n  FCP ${Math.round(result.fcp)} ms   LCP ${Math.round(result.lcp)} ms   TBT ${Math.round(result.tbt)} ms   CLS ${Math.round(result.cls * 1000) / 1000}\n  ${result.kb} KB over ${result.requests} requests; JavaScript: ${result.jsFiles} files, ${result.jsKb} KB; <script> tags ${result.scriptTags} (${result.inlineScripts} inline)`);
