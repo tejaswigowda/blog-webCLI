@@ -872,6 +872,8 @@ turn the feature off, or link the tag page instead of listing posts. `stylesheet
 
 Headings go from `#` to `####` (a post's own title is the page's `h1`, so use `#` sparingly). A paragraph can carry one of two styles, written as a prefix and drawn as a class the theme styles: `{.lead} An opening line.` (larger, muted) and `{.small} Fine print.` (smaller, muted). The editor offers them in the paragraph-style dropdown; they cannot be combined with a heading, list, quote or code block. The size of all body text is Settings → Look → *Text size* (14–24px), and headings, lead and small text scale with it. A custom theme can restyle `p.lead` and `p.small`.
 
+**Picture size and position.** Click a picture in the editor and a bar appears over it: *Default*, *Inline* (the height of a line of text), *Small*, *Medium*, *Large* (25, 50 and 75% of the column, centred), *Full width*, *Float left* and *Float right* (40%, text wraps; on a phone they become full width). It is written after the picture, `![alt](asset:images/x.png){.medium}`, and drawn as `<img class="img-medium">`: a closed set of classes the base theme styles (`img.img-medium` and the like), never a pixel value or inline style, so it survives markdown and every renderer. A picture with no marker is drawn as before. `{.` right after a picture that is not one of these names stays text.
+
 ## Media
 
 **Media** (a button on the blog's page, `#repo=owner/blog&media`) shows the images in the blog's asset repositories, for four jobs and nothing

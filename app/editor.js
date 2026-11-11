@@ -66,6 +66,7 @@ export async function loadQuill() {
       registerBlocks(Quill);
       // a paragraph style is a class on the line (ql-para-lead), the one block format markdown writes as "{.lead} "
       const { ClassAttributor, Scope } = Quill.import('parchment');
+      Quill.register({ 'formats/layout': new ClassAttributor('layout', 'ql-layout', { scope: Scope.INLINE, whitelist: IMAGE_PRESETS.map(([v]) => v).filter(Boolean) }) }, true);
       Quill.register({ 'formats/para': new ClassAttributor('para', 'ql-para', { scope: Scope.BLOCK, whitelist: ['lead', 'small'] }) }, true);
       Quill.import('formats/link').PROTOCOL_WHITELIST.push('asset');
       return Quill;
@@ -74,7 +75,10 @@ export async function loadQuill() {
   return loading;
 }
 
-export const FORMATS = ['header', 'para', 'bold', 'italic', 'strike', 'code', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
+// how a picture sits: the presets lib/delta.js IMAGE_LAYOUTS names, chosen from a small bar that appears on the picture
+export const IMAGE_PRESETS = [['', 'Default'], ['inline', 'Inline'], ['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['full', 'Full width'], ['left', 'Float left'], ['right', 'Float right']];
+
+export const FORMATS = ['header', 'para', 'layout', 'bold', 'italic', 'strike', 'code', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
 
 export async function createEditor(el, { onImage, onVideo }) {
   const Quill = await loadQuill();
@@ -99,6 +103,7 @@ export async function createEditor(el, { onImage, onVideo }) {
     if (v) for (const k of OTHER) quill.formatLine(r.index, r.length, k, false, 'user');
     quill.formatLine(r.index, r.length, 'para', v || false, 'user');
   });
+  wireImageBar(quill, Quill);
   quill.on('text-change', (_d, _o, source) => {
     if (source !== 'user') return;
     const r = quill.getSelection();
@@ -117,4 +122,49 @@ export async function createEditor(el, { onImage, onVideo }) {
     }
   }
   return quill;
+}
+
+// Click a picture and a bar of presets appears over it: Default, Inline, Small, Medium, Large, Full width, Float left, Float right.
+function wireImageBar(quill, Quill) {
+  const bar = document.createElement('div');
+  bar.className = 'img-bar';
+  bar.hidden = true;
+  bar.setAttribute('role', 'toolbar');
+  bar.setAttribute('aria-label', 'Picture size and position');
+  quill.container.append(bar);
+  let at = -1;
+  const hide = () => {
+    bar.hidden = true;
+    at = -1;
+  };
+  for (const [value, label] of IMAGE_PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.dataset.value = value;
+    b.addEventListener('mousedown', (e) => e.preventDefault());
+    b.addEventListener('click', () => {
+      if (at < 0) return;
+      quill.formatText(at, 1, 'layout', value || false, 'user');
+      hide();
+    });
+    bar.append(b);
+  }
+  quill.root.addEventListener('click', (e) => {
+    const img = e.target;
+    if (!img || img.tagName !== 'IMG') return hide();
+    const blot = Quill.find(img);
+    if (!blot) return hide();
+    at = quill.getIndex(blot);
+    const current = quill.getFormat(at, 1).layout || '';
+    for (const b of bar.children) b.setAttribute('aria-pressed', String(b.dataset.value === current));
+    const host = quill.container.getBoundingClientRect();
+    const r = img.getBoundingClientRect();
+    bar.style.top = `${Math.max(0, r.top - host.top + quill.container.scrollTop - 38)}px`;
+    bar.style.left = `${Math.max(0, r.left - host.left)}px`;
+    bar.hidden = false;
+  });
+  quill.on('text-change', (_d, _o, source) => {
+    if (source === 'user' && !bar.hidden) hide();
+  });
 }

@@ -83,3 +83,24 @@ test('settings: the text size is a choice, and the form round-trips it', async (
   assert.equal(formToBlog(blog, { ...blogToForm(blog), fontSize: '20px' }).customize.fontSize, '20px');
   assert.equal(formToBlog(blog, { ...blogToForm(blog), fontSize: '' }).customize?.fontSize, undefined);
 });
+
+test('picture layouts: ![alt](src){.medium} round-trips, renders as a class, and only the closed set is accepted', async () => {
+  const { mdToDelta, mdRoundTrips, deltaToMarkdownChecked } = await import('../lib/markdown.js');
+  const { deltaToHtml } = await import('../lib/html.js');
+  const { IMAGE_LAYOUTS } = await import('../lib/delta.js');
+  for (const l of IMAGE_LAYOUTS) {
+    const md = `Words ![a pic](asset:images/x.png){.${l}} more.\n`;
+    assert.equal(mdRoundTrips(md).ok, true, l);
+    const html = deltaToHtml(mdToDelta(md), { resolve: (r) => `/${r}`, resolveVideo: (r) => r });
+    assert.match(html, new RegExp(`<img src="/asset:images/x\\.png" alt="a pic" class="img-${l}" loading="lazy">`), l);
+  }
+  // no layout, as before; an unknown one is just text after the picture
+  assert.match(deltaToHtml(mdToDelta('![a](asset:images/x.png)\n'), { resolve: (r) => `/${r}`, resolveVideo: (r) => r }), /<img src="[^"]*" alt="a" loading="lazy">/);
+  assert.ok(!mdToDelta('![a](asset:images/x.png){.huge}\n').ops.some((o) => o.attributes && o.attributes.layout));
+  // text that looks like a layout marker is escaped, so it stays text
+  assert.equal(mdRoundTrips('![a](asset:images/x.png) \\{.left} text\n').ok, true);
+  const img = (attributes) => ({ ops: [{ insert: { image: 'asset:images/x.png' }, attributes }, { insert: '\n' }] });
+  assert.throws(() => deltaToMarkdownChecked(img({ layout: 'huge' })));
+  assert.throws(() => deltaToMarkdownChecked({ ops: [{ insert: 'x', attributes: { layout: 'full' } }, { insert: '\n' }] }));
+  assert.equal(deltaToMarkdownChecked(img({ layout: 'full', alt: 'p' })).md, '![p](asset:images/x.png){.full}\n');
+});

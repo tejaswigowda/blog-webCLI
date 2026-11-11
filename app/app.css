@@ -341,3 +341,14 @@ dialog.theme-preview{max-width:64rem;width:calc(100% - 2rem)}
 
 .tp-bar{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;border-bottom:1px solid var(--rule);margin:.25rem 0 .75rem}
 .tp-bar .tabs{border:0;margin:0}
+
+.ql-container{position:relative}
+.img-bar{position:absolute;z-index:5;display:flex;flex-wrap:wrap;gap:.25rem;padding:.25rem;background:var(--panel);border:1px solid var(--rule);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.img-bar button{font:inherit;font-size:.8rem;padding:.2rem .5rem;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--fg);cursor:pointer}
+.img-bar button:hover,.img-bar button[aria-pressed="true"]{border-color:currentColor}
+.ql-editor img{cursor:pointer}
+.ql-editor .ql-layout-inline img{height:1.4em;width:auto;vertical-align:text-bottom}
+.ql-editor .ql-layout-small img,.ql-editor .ql-layout-medium img,.ql-editor .ql-layout-large img,.ql-editor .ql-layout-full img{display:block;margin:.8em auto}
+.ql-editor .ql-layout-small img{width:25%}.ql-editor .ql-layout-medium img{width:50%}.ql-editor .ql-layout-large img{width:75%}.ql-editor .ql-layout-full img{width:100%}
+.ql-editor .ql-layout-left img{float:left;width:40%;margin:.2em 1em .6em 0}
+.ql-editor .ql-layout-right img{float:right;width:40%;margin:.2em 0 .6em 1em}
