@@ -62,6 +62,7 @@
     "lib/markdown.js",
     "lib/order.js",
     "lib/page.js",
+    "lib/permalink.js",
     "lib/pin.js",
     "lib/provenance.js",
     "lib/rawhtml.js",

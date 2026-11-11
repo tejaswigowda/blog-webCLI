@@ -1,5 +1,7 @@
 // Reader and publisher cores. No DOM: the UI calls these, and so do the tests.
 import { Refusal } from '../lib/errors.js';
+import { parseAliases } from '../lib/aliases.js';
+import { addrOf, isDated } from '../lib/permalink.js';
 import { BULK_AT } from './github.js';
 import { CannotRebuild, loadSite } from '../lib/live-render.js';
 import { prepareIncremental } from '../lib/incremental.js';
@@ -185,10 +187,10 @@ async function computeChanges(gh, ctx) {
   changes.push(...staleOptional(site, tree, prefix));
   if (prevIndex) {
     // a post or page that is gone, or back to a draft, loses its generated page
-    const now = new Set([...site.index.map((e) => e.slug), ...(site.pages || []).map((p) => p.slug)]);
+    const now = new Set([...site.index.map((e) => e.path || e.slug), ...(site.pages || []).map((p) => p.slug)]);
     for (const e of [...(prevIndex.posts || []), ...(prevIndex.pages || [])]) {
-      const p = `${e.slug}/index.html`;
-      if (!now.has(e.slug) && tree.has(p)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
+      const p = `${e.path || e.slug}/index.html`;
+      if (!now.has(e.path || e.slug) && tree.has(p)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
     }
     // an old address that is no longer listed, or whose page is gone, loses its redirect
     for (const r of prevIndex.redirects || []) {
@@ -279,6 +281,14 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
 
   const prevIndex = tree.has('index/posts.json') ? await readIndex((p) => gh.readText(repo, prefix + p, head.sha)) : null;
   if (comments !== undefined && comments !== null) parseComments(comments, `comments/${slug}.json`); // judged before anything is built
+  // a dated address depends on `date`: editing the date of a published post must not quietly move it
+  if (prevIndex && isDated(blog) && newPost.status === 'published' && kind !== 'page' && !remove) {
+    const was = (prevIndex.posts || []).find((e) => e.slug === slug && e.status === 'published');
+    const to = addrOf(blog, { slug, date: newPost.meta.date });
+    if (was && (was.path || was.slug) !== to && !parseAliases(newPost.meta, target).includes(was.path || was.slug)) {
+      throw new Refusal('permalink-move', `changing the date moves this post from ${was.path || was.slug}/ to ${to}/; add "${was.path || was.slug}" to its aliases if the move is intended, or keep the date`, target);
+    }
+  }
   const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, runner, orderText, newComments: comments };
   const { site, changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
   if (comments !== undefined) {

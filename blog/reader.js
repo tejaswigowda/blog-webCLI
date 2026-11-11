@@ -144,11 +144,13 @@ async function preview(parsed, mine) {
   const loaded = await loadSite(get, { anyBlog: true });
   const site = { ...loaded, blog: withRepoOverrides(loaded.blog, parsed) }; // the address may point the media elsewhere
   const blog = site.blog;
-  const file = fileFor(parsed.post ? `${parsed.post}/` : parsed.path || '');
+  // &post=<slug> is the post's id; where it lives is the index's business (a dated permalink puts it at 2024/05/<slug>)
+  const named = parsed.post ? site.index.posts.find((e) => e.slug === parsed.post) : null;
+  const file = fileFor(parsed.post ? `${(named && named.path) || parsed.post}/` : parsed.path || '');
   const source = sourceOf(site, file);
   const text = source ? await gh.readText(plain, at(folder, source), parsed.ref) : null;
   if (mine !== seq) return true;
-  const commentsFile = source && /^posts\//.test(source) ? await gh.readText(plain, at(folder, `comments/${parsed.post || (/^([^/]+)\//.exec(file) || [])[1]}.json`), parsed.ref) : null;
+  const commentsFile = source && /^posts\//.test(source) ? await gh.readText(plain, at(folder, `comments/${source.replace(/^posts\//, '').replace(/\.md$/, '')}.json`), parsed.ref) : null;
   const out = previewHtml(site, file, { text, comments: commentsFile });
   if (mine !== seq) return true;
   const ctx = { parsed, blog, file };
