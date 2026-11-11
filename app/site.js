@@ -190,7 +190,7 @@ async function computeChanges(gh, ctx) {
     const now = new Set([...site.index.map((e) => e.path || e.slug), ...(site.pages || []).map((p) => p.slug)]);
     for (const e of [...(prevIndex.posts || []), ...(prevIndex.pages || [])]) {
       const p = `${e.path || e.slug}/index.html`;
-      if (!now.has(e.path || e.slug) && tree.has(p)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
+      if (!now.has(e.path || e.slug) && tree.has(p) && !(p in site.files)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
     }
     // an old address that is no longer listed, or whose page is gone, loses its redirect
     for (const r of prevIndex.redirects || []) {

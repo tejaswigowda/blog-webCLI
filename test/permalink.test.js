@@ -115,3 +115,32 @@ test('E6: the 404 soft render finds a post by its dated address, not by the last
   assert.notEqual(hit.state, 'missing', hit.why);
   assert.equal((await checkMissing({ pathname: '/b/2024/06/one/', root: '/b', get })).state, 'missing');
 });
+
+test('E7: a date change that would move a published post is refused, offering the old address as an alias', async () => {
+  const { fakeGitHub } = await import('./fake-github.js');
+  const { createNet } = await import('../app/net.js');
+  const { GitHub } = await import('../app/github.js');
+  const { planChange } = await import('../app/site.js');
+  const blog = { ...BASE, permalink: '/{year}/{month}/{slug}/', comments: undefined };
+  const built = buildSite({ blog, posts: POSTS, lock: {} });
+  assert.deepEqual(built.errors, []);
+  const files = { 'blog.json': JSON.stringify(blog), 'assets.lock.json': '{}', ...Object.fromEntries(POSTS.map((p) => [p.path, p.text])), ...built.files };
+  const server = fakeGitHub({ 'me/b': files });
+  await server.ready;
+  const gh = new GitHub(createNet(server.fetch), { token: 'github_pat_test' });
+  const edit = (text) => planChange(gh, { repo: 'me/b', branch: 'main', slug: 'one', text });
+  const original = POSTS[0].text;
+  // the same date, other words: the page is rewritten at its dated address
+  const plan = await edit(original.replace('Words of one.', 'Other words.'));
+  assert.ok(plan.changes.some((c) => c.path === '2024/05/one/index.html'));
+  assert.ok(!plan.changes.some((c) => c.path === 'one/index.html'));
+  // a new date in the same month keeps the address under {year}/{month}; a new month moves it
+  await edit(original.replace('2024-05-17', '2024-05-20'));
+  await assert.rejects(edit(original.replace('2024-05-17', '2024-07-01')), (e) => e instanceof Refusal && e.code === 'permalink-move' && /aliases/.test(e.detail) && /2024\/05\/one/.test(e.detail));
+  // the author says the move is intended: the old address is an alias, and the stub is written
+  const moved = await edit(original.replace('2024-05-17', '2024-07-01').replace('status: published\n', 'status: published\naliases: [2024/05/one]\n'));
+  assert.ok(moved.changes.some((c) => c.path === '2024/07/one/index.html'));
+  const stub = moved.changes.filter((c) => c.path === '2024/05/one/index.html');
+  assert.equal(stub.length, 1, 'the old address is written once, as the stub');
+  assert.ok(!stub[0].delete && stub[0].content.includes('http-equiv="refresh"'));
+});
