@@ -833,7 +833,7 @@ async function settingsView(repo, r) {
   });
   const themeBox = section('Theme, extensions and licences',
       h('p', {}, `Theme: ${current.theme && typeof current.theme === 'object' ? `${current.theme.name} ${current.theme.version} (${current.theme.licence})` : 'default'} · Extensions: ${(current.extensions || []).length ? current.extensions.map((e) => `${e.name} ${e.version}`).join(', ') : 'none'}`),
-      h('div', { class: 'actions' }, nav('Choose a theme', link(repo, '&themes'), { icon: 'droplet' }), nav('Extensions', link(repo, '&extensions'), { icon: 'box' }), nav('Licences', link(repo, '&licences'), { icon: 'shield' })), h('div', { class: 'actions' }, exportBtn, importBtn), h('div', { class: 'hint' }, 'The theme file is the saved theme and customization (colours, fonts, width, custom CSS, list layout, header, footer, top bar). The logo and link icons are pictures in this blog\'s images repository and are not included; the blog you import into keeps its own.'));
+      h('div', { class: 'actions' }, nav('Choose a theme', link(repo, '&themes'), { icon: 'droplet' }), nav('Licences', link(repo, '&licences'), { icon: 'shield' })), h('div', { class: 'actions' }, exportBtn, importBtn), h('div', { class: 'hint' }, 'The theme file is the saved theme and customization (colours, fonts, width, custom CSS, list layout, header, footer, top bar). The logo and link icons are pictures in this blog\'s images repository and are not included; the blog you import into keeps its own.'));
 
   const node = h(
     'div',
