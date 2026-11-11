@@ -868,6 +868,10 @@ after, plus any that listed it), and the **pre-flight states the count**: *relat
 turn the feature off, or link the tag page instead of listing posts. `stylesheet: "linked"` does not help: this is content, not CSS.
 (`test/related.test.js`)
 
+## Headings and paragraph styles
+
+Headings go from `#` to `####` (a post's own title is the page's `h1`, so use `#` sparingly). A paragraph can carry one of two styles, written as a prefix and drawn as a class the theme styles: `{.lead} An opening line.` (larger, muted) and `{.small} Fine print.` (smaller, muted). The editor offers them in the paragraph-style dropdown; they cannot be combined with a heading, list, quote or code block. The size of all body text is Settings → Look → *Text size* (14–24px), and headings, lead and small text scale with it. A custom theme can restyle `p.lead` and `p.small`.
+
 ## Media
 
 **Media** (a button on the blog's page, `#repo=owner/blog&media`) shows the images in the blog's asset repositories, for four jobs and nothing

@@ -756,7 +756,7 @@ async function settingsView(repo, r) {
     section(
       'Type and layout',
       h('div', { class: 'row' }, field('Body font', select('font', fontOpts)), field('Heading font', select('headingFont', fontOpts))),
-      h('div', { class: 'row' }, field('Content width', input('width', { placeholder: '40rem' }), '25–80rem, 400–1280px or 40–120ch'), field('Text size', input('fontSize', { placeholder: '18px' }), '14–24px or 0.875–1.5rem')),
+      h('div', { class: 'row' }, field('Content width', input('width', { placeholder: '40rem' }), '25–80rem, 400–1280px or 40–120ch'), field('Text size', select('fontSize', [['', 'Theme default'], ...[14, 15, 16, 17, 18, 19, 20, 22, 24].map((n) => [`${n}px`, `${n}px${n === 14 ? ' (smaller)' : n === 18 ? ' (comfortable)' : n === 24 ? ' (largest)' : ''}`]), ...(f0.fontSize && !/^(14|15|16|17|18|19|20|22|24)px$/.test(f0.fontSize) ? [[f0.fontSize, f0.fontSize]] : [])]), 'The size of all body text on every page. Headings, lead paragraphs and small print scale with it.')),
       h('div', { class: 'row' }, field('Post list', select('layout', [['list', 'List'], ['cards', 'Cards']])), h('div', {}, check('excerpts', 'Show excerpts'), check('dates', 'Show dates'), check('tags', 'Show tags'))),
     ),
     section(

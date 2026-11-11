@@ -79,6 +79,14 @@ dialog h2{margin-top:0;font-size:.75rem;font-weight:700;color:var(--muted);text-
 .ql-container{border-radius:0 0 6px 6px;background:var(--panel)}
 .ql-snow .ql-editor img{max-width:100%}
 .ql-snow .ql-picker.ql-header .ql-picker-label[data-value="2"]::before,.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="2"]::before{content:'Heading'}
+.ql-snow .ql-picker.ql-header .ql-picker-label[data-value="1"]::before,.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="1"]::before{content:'Large heading'}
+.ql-snow .ql-picker.ql-header .ql-picker-label[data-value="4"]::before,.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="4"]::before{content:'Small heading'}
+.ql-snow .ql-picker.ql-para{width:10rem}
+.ql-snow .ql-picker.ql-para .ql-picker-label::before,.ql-snow .ql-picker.ql-para .ql-picker-item::before{content:'Normal text'}
+.ql-snow .ql-picker.ql-para .ql-picker-label[data-value="lead"]::before,.ql-snow .ql-picker.ql-para .ql-picker-item[data-value="lead"]::before{content:'Lead paragraph'}
+.ql-snow .ql-picker.ql-para .ql-picker-label[data-value="small"]::before,.ql-snow .ql-picker.ql-para .ql-picker-item[data-value="small"]::before{content:'Small print'}
+.ql-editor .ql-para-lead{font-size:1.25em;color:var(--muted)}
+.ql-editor .ql-para-small{font-size:.85em;color:var(--muted)}
 .ql-snow .ql-picker.ql-header .ql-picker-label[data-value="3"]::before,.ql-snow .ql-picker.ql-header .ql-picker-item[data-value="3"]::before{content:'Subheading'}
 .ql-snow .ql-picker.ql-header .ql-picker-label:not([data-value])::before,.ql-snow .ql-picker.ql-header .ql-picker-item:not([data-value])::before{content:'Paragraph'}
 .hint{font-size:.78rem;color:var(--muted);margin:.4rem 0}

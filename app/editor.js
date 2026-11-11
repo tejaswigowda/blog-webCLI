@@ -64,6 +64,9 @@ export async function loadQuill() {
       }
       Quill.register('formats/video', ReleaseVideo, true);
       registerBlocks(Quill);
+      // a paragraph style is a class on the line (ql-para-lead), the one block format markdown writes as "{.lead} "
+      const { ClassAttributor, Scope } = Quill.import('parchment');
+      Quill.register({ 'formats/para': new ClassAttributor('para', 'ql-para', { scope: Scope.BLOCK, whitelist: ['lead', 'small'] }) }, true);
       Quill.import('formats/link').PROTOCOL_WHITELIST.push('asset');
       return Quill;
     });
@@ -71,7 +74,7 @@ export async function loadQuill() {
   return loading;
 }
 
-export const FORMATS = ['header', 'bold', 'italic', 'strike', 'code', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
+export const FORMATS = ['header', 'para', 'bold', 'italic', 'strike', 'code', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
 
 export async function createEditor(el, { onImage, onVideo }) {
   const Quill = await loadQuill();
@@ -82,12 +85,29 @@ export async function createEditor(el, { onImage, onVideo }) {
     formats: FORMATS,
     modules: {
       toolbar: {
-        container: [[{ header: [2, 3, false] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'mdtable', 'htmlblock'], ['clean']],
+        container: [[{ header: [1, 2, 3, 4, false] }, { para: [false, 'lead', 'small'] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'mdtable', 'htmlblock'], ['clean']],
         handlers: { image: onImage, video: onVideo, mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock() },
       },
     },
   });
   Object.assign(blocks, wireBlocks(quill, Quill));
+  // a paragraph style and another block format (heading, list, quote, code) cannot share a line: the one applied last wins
+  const OTHER = ['header', 'list', 'blockquote', 'code-block', 'indent'];
+  quill.getModule('toolbar').addHandler('para', (v) => {
+    const r = quill.getSelection();
+    if (!r) return;
+    if (v) for (const k of OTHER) quill.formatLine(r.index, r.length, k, false, 'user');
+    quill.formatLine(r.index, r.length, 'para', v || false, 'user');
+  });
+  quill.on('text-change', (_d, _o, source) => {
+    if (source !== 'user') return;
+    const r = quill.getSelection();
+    if (!r) return;
+    for (const line of quill.getLines(r.index, r.length || 1)) {
+      const f = line.formats();
+      if (f.para && OTHER.some((k) => f[k])) quill.formatLine(quill.getIndex(line), 1, 'para', false, 'api');
+    }
+  });
   const bar = quill.getModule('toolbar').container;
   for (const [name, title] of [['mdtable', 'Insert a table'], ['htmlblock', 'Insert an HTML block']]) {
     const b = bar.querySelector(`.ql-${name}`);

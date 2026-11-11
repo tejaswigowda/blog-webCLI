@@ -56,3 +56,30 @@ test('E12: seo.noindex puts noindex on every page and writes no sitemap; off by 
   assert.ok(!/name="robots"/.test(off.files['a/index.html']) && off.files['sitemap.xml']);
   assert.throws(() => buildSite({ blog: { ...BLOG, seo: { noindex: 'yes' } }, posts: [post('hi')], lock: {} }));
 });
+
+test('headings reach level 4; a paragraph style is "{.lead} " or "{.small} " and renders as a class', async () => {
+  const { mdToDelta, deltaToMd, mdRoundTrips } = await import('../lib/markdown.js');
+  const { deltaToHtml } = await import('../lib/html.js');
+  const md = '# One\n\n#### Four\n\n{.lead} An opening line.\n\n{.small} Fine print, **bold** too.\n\nPlain.\n';
+  assert.equal(mdRoundTrips(md).ok, true);
+  const html = deltaToHtml(mdToDelta(md), { resolve: (r) => r, resolveVideo: (r) => r });
+  assert.match(html, /<h1>One<\/h1>/);
+  assert.match(html, /<h4>Four<\/h4>/);
+  assert.match(html, /<p class="lead">An opening line\.<\/p>/);
+  assert.match(html, /<p class="small">Fine print, <strong>bold<\/strong> too\.<\/p>/);
+  // words that only look like the marker stay words
+  const literal = '\\{.lead} not a style\n';
+  assert.equal(mdRoundTrips(literal).ok, true);
+  assert.ok(!mdToDelta(literal).ops.some((o) => o.attributes && o.attributes.para));
+  const { deltaToMarkdownChecked } = await import('../lib/markdown.js');
+  assert.throws(() => deltaToMarkdownChecked({ ops: [{ insert: 'x' }, { insert: '\n', attributes: { para: 'huge' } }] }));
+  assert.throws(() => deltaToMarkdownChecked({ ops: [{ insert: 'x' }, { insert: '\n', attributes: { para: 'lead', header: 2 } }] }));
+});
+
+test('settings: the text size is a choice, and the form round-trips it', async () => {
+  const { blogToForm, formToBlog } = await import('../lib/settings.js');
+  const blog = { ...BLOG, customize: { fontSize: '18px' } };
+  assert.equal(blogToForm(blog).fontSize, '18px');
+  assert.equal(formToBlog(blog, { ...blogToForm(blog), fontSize: '20px' }).customize.fontSize, '20px');
+  assert.equal(formToBlog(blog, { ...blogToForm(blog), fontSize: '' }).customize?.fontSize, undefined);
+});
