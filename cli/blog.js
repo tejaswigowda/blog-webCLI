@@ -20,6 +20,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Refusal } from '../lib/errors.js';
 import { liftComments } from '../lib/comments-lift.js';
+import { imageSize } from '../lib/image-size.js';
 import { buildSite, GENERATED_MARK, GENERATED_TREES, OPTIONAL_GENERATED, validateBlog, parsePost } from '../lib/blog.js';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
@@ -274,6 +275,35 @@ async function pin(dir) {
   return 0;
 }
 
+// sizes [dir] [images-dir]: record the pixel size of every pinned picture in assets.lock.json (images/x.png#size), read from the
+// files themselves, so every <img> carries width and height and the page does not shift as pictures load. The pictures are in
+// <dir>/<folder> when the images repository is the blog's own, or in the folder given.
+async function sizes(args) {
+  const dir = args[0] || '.';
+  const { blog, lock } = await load(dir);
+  const b = validateBlog(blog);
+  const own = parseRepoRef(b.repo).repo;
+  const where = b.assets && b.assets.repos && b.assets.repos.images;
+  const folder = args[1] || (where && parseRepoRef(where).repo === own ? path.join(dir, parseRepoRef(where).folder || '') : null);
+  if (!folder) throw new Refusal('unresolved-asset', 'the pictures are in another repository: pass the folder they are in, as  blog-webcli sizes <dir> <images-folder>');
+  let done = 0;
+  let missing = 0;
+  for (const key of Object.keys(lock).filter((k) => k.startsWith('images/') && !k.endsWith('#size'))) {
+    if (lock[`${key}#size`]) continue;
+    const file = path.join(folder, key.slice('images/'.length));
+    const head = await fs.readFile(file).then((x) => x.subarray(0, 1 << 16), () => null);
+    const s = head && imageSize(new Uint8Array(head));
+    if (s) {
+      lock[`${key}#size`] = `${s.width}x${s.height}`;
+      done++;
+    } else missing++;
+  }
+  const sorted = Object.fromEntries(Object.entries(lock).sort(([a], [c]) => (a < c ? -1 : 1)));
+  await fs.writeFile(path.join(dir, 'assets.lock.json'), JSON.stringify(sorted, null, 2) + '\n');
+  console.log(`${done} picture size${done === 1 ? '' : 's'} recorded${missing ? `; ${missing} could not be read (not found, or not a PNG, JPEG, GIF or WebP)` : ''}; run: blog-webcli build`);
+  return 0;
+}
+
 // "owner/repo[/folder]@ref" -> { where, ref }
 function splitAt(spec) {
   const i = (spec || '').lastIndexOf('@');
@@ -365,9 +395,9 @@ async function licences(dir) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const commands = { comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
+const commands = { sizes: () => sizes(rest), comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
 if (!commands[cmd]) {
-  console.error('usage: blog-webcli <build|check|fmt|publish-due|pin|theme|ext|licences|import> …');
+  console.error('usage: blog-webcli <build|check|fmt|publish-due|pin|sizes|comments|theme|ext|licences|import> …');
   process.exit(2);
 }
 try {

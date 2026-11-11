@@ -104,3 +104,25 @@ test('picture layouts: ![alt](src){.medium} round-trips, renders as a class, and
   assert.throws(() => deltaToMarkdownChecked({ ops: [{ insert: 'x', attributes: { layout: 'full' } }, { insert: '\n' }] }));
   assert.equal(deltaToMarkdownChecked(img({ layout: 'full', alt: 'p' })).md, '![p](asset:images/x.png){.full}\n');
 });
+
+test('E13: "blog-webcli sizes" records the pixel size of pinned pictures from the files, and the next build draws width and height', async () => {
+  const { promises: fs } = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sizes-'));
+  const cli = (...a) => spawnSync(process.execPath, [path.resolve('cli/blog.js'), ...a], { encoding: 'utf8' });
+  const blog = { ...BLOG, assets: { base: 'https://cdn.test/{owner}/{repo}@{sha}/{path}', repos: { images: 'me/b/images' } } };
+  await fs.mkdir(path.join(dir, 'posts'));
+  await fs.mkdir(path.join(dir, 'images'));
+  await fs.writeFile(path.join(dir, 'blog.json'), JSON.stringify(blog));
+  await fs.writeFile(path.join(dir, 'posts/a.md'), post('![pic](asset:images/p.png)').text);
+  await fs.writeFile(path.join(dir, 'images/p.png'), PNG(640, 480));
+  await fs.writeFile(path.join(dir, 'assets.lock.json'), JSON.stringify({ 'images/p.png': 'a'.repeat(40) }));
+  const r = cli('sizes', dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(await fs.readFile(path.join(dir, 'assets.lock.json'), 'utf8'))['images/p.png#size'], '640x480');
+  assert.equal(cli('build', dir).status, 0);
+  assert.match(await fs.readFile(path.join(dir, 'a/index.html'), 'utf8'), /alt="pic" width="640" height="480"/);
+  await fs.rm(dir, { recursive: true });
+});

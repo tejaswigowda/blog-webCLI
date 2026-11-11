@@ -675,7 +675,8 @@ a page it shows is the page the build writes. (`test/linked-style.test.js`)
 * Order is oldest `date` first, ties by `id`; replies are flat and name who they answer. The count is in `index/posts.json`.
 * Moderation is the git history: every comment is a reviewable diff, removal is a revert, and nothing appears without a commit.
   A spam-triage agent can open a pull request against the file. Drafts and scheduled posts have no page, so no form and no comments.
-* Posts imported before sidecars existed: `node cli/blog.js comments lift [dir]` moves their "## Comments (N)" section into sidecars.
+* Posts imported before sidecars existed: `node cli/blog.js sizes  [dir] [images-folder]   record the pixel size of every pinned picture, so <img> carries width and height
+node cli/blog.js comments lift [dir]` moves their "## Comments (N)" section into sidecars.
 
 #### `comments`, `analytics`
 
