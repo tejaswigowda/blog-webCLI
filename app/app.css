@@ -358,6 +358,7 @@ dialog.theme-preview{max-width:64rem;width:calc(100% - 2rem)}
 .stats .stat:last-child{border-bottom:0}
 .stats .stat-label{color:var(--muted)}
 .stats .outline{margin:0;padding:0;list-style:none}
+.stats .caution,.stats .err,.stats .ok{display:inline;background:none;border:0;padding:0;margin:0;border-radius:0}
 .stats .caution{color:var(--amber)}
 .stats .err{color:var(--warn)}
 .stats .ok{color:var(--ok)}

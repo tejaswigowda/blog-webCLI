@@ -1387,18 +1387,36 @@ async function showPages(panel, repo, ref, memo) {
 
 async function postView(repo, r) {
   const { blog } = cache;
-  const { post, html } = await loadPost(gh, repo, r.post, r.ref, cache);
+  const { post, html, text } = await loadPost(gh, repo, r.post, r.ref, cache);
   document.title = `${post.meta.title} · ${blog.title}`;
   const body = h('article', { class: 'post' });
   body.innerHTML = html; // lib output: every text node escaped, URLs allow-listed
+  // beside the post: what can be said of it (lib/post-stats.js), its history, and whether the live page is this version
+  const { repo: plainRepo, folder } = parseRepoRef(repo);
+  const info = await gh.repoInfo(plainRepo).catch(() => null);
+  const m = post.meta;
+  const stats = createStatsPanel({
+    h, gh, where: repo, repo: plainRepo, folder, branch: r.ref || (info && info.default_branch), blog, lock: cache.lock, kind: 'post', hasPages: !!(info && info.has_pages), link,
+    saved: { slug: post.slug, status: post.status, date: m.date, text },
+    read: () => ({
+      fields: { title: m.title, slug: post.slug, date: m.date, status: post.status, tags: m.tags || [], description: m.description || '', seo_title: m.seo_title || '', image: m.image || '', canonical: m.canonical || '', noindex: m.noindex === 'true', cover: m.cover || '', aliases: m.aliases },
+      ops: post.delta.ops,
+      staged: new Set(),
+    }),
+  });
   return h(
     'div',
     {},
     h('p', {}, nav(blog.title, link(repo), { icon: 'arrow-left' })),
+    h('div', { class: 'cols' },
+    h('div', {},
     h('h1', {}, post.meta.title),
     h('p', { class: 'muted' }, dateEl(post.meta.date, { long: true }), post.meta.author ? ` · ${post.meta.author}` : '', (post.meta.tags || []).map((t) => h('span', { class: 'tag' }, `#${t}`))),
     body,
     h('div', { class: 'actions' }, h('button', { icon: 'message', onclick: () => (location.hash = link(repo, `&correct=${post.slug}`)) }, 'Suggest a correction'), gh.token ? h('button', { icon: 'edit', onclick: () => (location.hash = link(repo, `&edit=${post.slug}`)) }, 'Edit') : null, gh.token ? h('button', { class: 'danger', icon: 'trash', onclick: (e) => deleteContent(repo, { slug: post.slug, kind: 'post', ref: r.ref, button: e.currentTarget }) }, 'Delete') : null),
+    ),
+    h('div', { class: 'side' }, stats.el),
+    ),
   );
 }
 
