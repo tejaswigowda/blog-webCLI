@@ -1037,6 +1037,8 @@ with badges from tags, a feature strip and a footer bar, in about 10 KB of CSS.
 
 ## Responsive pages
 
+In a list of posts (the index, tags, authors, search), **the whole card is the link**: the title's link is stretched over its card with CSS, no script, so a click or tap anywhere on it opens the post, while a card's own links (tags, comment count) stay clickable above it. Keyboard focus draws a ring around the card. It is in the base styles every theme gets, including the WordPress-classic markup.
+
 Every generated page declares the viewport and fits it. The built-in theme collapses its header, previous/next row and card grid on a
 phone and brings its type down. A **pinned theme** (including the built-in list and a converted WordPress theme) has a small layer
 appended after its own CSS, so that no theme can leave a page that scrolls sideways: images, video, tables and code fit their column,
