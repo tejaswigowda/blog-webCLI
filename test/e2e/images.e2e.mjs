@@ -22,7 +22,7 @@ async function site(blogJson) {
   await cp(path.join(root, 'index.html'), path.join(copy, 'index.html'));
   await mkdir(path.join(copy, 'test'));
   await cp(path.join(root, 'test', 'fake-github.js'), path.join(copy, 'test', 'fake-github.js'));
-  await writeFile(path.join(copy, 'data.js'), `export const data = ${JSON.stringify({ 'example/blog': { 'blog.json': Buffer.from(blogJson).toString('base64') }, 'example/images': { 'README.md': Buffer.from('i').toString('base64') } })};\n`);
+  await writeFile(path.join(copy, 'data.js'), `export const data = ${JSON.stringify({ 'example/blog': { 'blog.json': Buffer.from(blogJson).toString('base64') }, 'example/images': { 'README.md': Buffer.from('i').toString('base64'), 'boat.png': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0AAAAABJRU5ErkJggg==' } })};\n`);
   return copy;
 }
 
@@ -40,7 +40,7 @@ const INSTALL = `
   HTMLInputElement.prototype.click = function () {
     if (this.type !== 'file') return;
     const dt = new DataTransfer();
-    dt.items.add(new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], 'Cat Pic.png', { type: 'image/png' }));
+    dt.items.add(new File([dec(data['example/images']['boat.png'])], window.__imageName || 'Cat Pic.png', { type: 'image/png' }));
     this.files = dt.files;
     this.dispatchEvent(new Event('change'));
   };
@@ -70,6 +70,70 @@ async function signedIn(blogJson) {
   return { page, close: () => { chrome.close(); web.close(); } };
 }
 const blogJson = (extra = {}) => JSON.stringify({ title: 'T', description: 'd', author: 'A', domain: 'https://example.github.io/blog', theme: 'default', ...extra });
+const clickText = (page, selector, text) => page.evaluate(`(() => { const button = [...document.querySelectorAll(${JSON.stringify(selector)})].find(b => b.textContent.trim().startsWith(${JSON.stringify(text)})); if (!button) throw new Error('No button: ' + ${JSON.stringify(text)}); button.click(); })()`);
+const fill = (page, selector, value) => page.evaluate(`(() => { const input = document.querySelector(${JSON.stringify(selector)}); input.value = ${JSON.stringify(value)}; input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+
+test('slideshow images: select from Media, upload on save, and discard cancelled uploads without losing slide fields', { skip, timeout: 120000 }, async () => {
+  const { page, close } = await signedIn(blogJson({ repo: 'example/blog', assets: { base: 'https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}', repos: { images: 'example/images' } } }));
+  try {
+    await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
+    await until(page, "document.querySelector('.ql-editor')");
+    await page.evaluate("window.__imageName = 'discard.png'; document.querySelector('button.ql-slideshow').click(); 0");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    await page.evaluate("document.querySelector('button[aria-label=\"Choose image for slide 1\"]').click(); 0");
+    await until(page, "document.querySelector('dialog.media-dialog[open] .media-tile')");
+    await clickText(page, 'dialog.media-dialog button', 'Upload a new image');
+    await until(page, "/discard\\.png$/.test(document.querySelector('input[aria-label=\"Slide 1 image\"]').value)");
+    await clickText(page, 'dialog.blk-dialog button', 'Cancel');
+    assert.equal(await page.evaluate("document.querySelectorAll('.ql-editor .ql-htmlblock').length"), 0);
+
+    await page.evaluate("window.__imageName = 'Cat Pic.png'; document.querySelector('button.ql-slideshow').click(); 0");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    await fill(page, 'input[aria-label="Slide 1 heading"]', 'Keep this heading');
+    await fill(page, 'input[aria-label="Slide 1 alternative text"]', 'Our boat');
+    await page.evaluate("document.querySelector('button[aria-label=\"Choose image for slide 1\"]').click(); 0");
+    await until(page, "document.querySelector('dialog.media-dialog[open] .media-tile')");
+    await page.evaluate("document.querySelector('dialog.media-dialog .media-tile[title=\"asset:images/boat.png\"]').click(); 0");
+    assert.equal(await page.evaluate("document.querySelector('input[aria-label=\"Slide 1 image\"]').value"), 'asset:images/boat.png');
+    assert.equal(await page.evaluate("document.querySelector('input[aria-label=\"Slide 1 heading\"]').value"), 'Keep this heading');
+    await page.evaluate("document.querySelector('button[aria-label=\"Choose image for slide 1\"]').click(); 0");
+    await until(page, "document.querySelector('dialog.media-dialog[open]')");
+    await clickText(page, 'dialog.media-dialog button', 'Cancel');
+    assert.equal(await page.evaluate("document.querySelector('input[aria-label=\"Slide 1 image\"]').value"), 'asset:images/boat.png', 'cancelling the picker leaves the selection intact');
+
+    await page.evaluate("document.querySelector('button[aria-label=\"Choose image for slide 2\"]').click(); 0");
+    await until(page, "document.querySelector('dialog.media-dialog[open]')");
+    await clickText(page, 'dialog.media-dialog button', 'Upload a new image');
+    await until(page, "/cat-pic\\.png$/.test(document.querySelector('input[aria-label=\"Slide 2 image\"]').value)");
+    const ref = await page.evaluate("document.querySelector('input[aria-label=\"Slide 2 image\"]').value");
+    assert.deepEqual(Object.keys(await page.evaluate("window.__fake.files('example/images')")).sort(), ['README.md', 'boat.png'], 'opening Media or choosing a file uploads nothing');
+    assert.equal(await page.evaluate("document.querySelectorAll('.ql-editor img').length"), 0, 'the picker updates the slide, not the underlying editor');
+    await fill(page, 'input[aria-label="Slide 2 alternative text"]', 'New platform');
+    assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog .primary').disabled"), false, 'a picker selection refreshes validation');
+    await clickText(page, 'dialog.blk-dialog button', 'Apply');
+    await until(page, "document.querySelector('.ql-editor .ql-htmlblock')");
+    await clickText(page, '.ql-editor .blk-edit', 'Edit slideshow');
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    assert.equal(await page.evaluate("document.querySelector('input[aria-label=\"Slide 2 image\"]').value"), ref, 'existing slides use the same picker-enabled form');
+    await clickText(page, 'dialog.blk-dialog button', 'Apply');
+    await fill(page, '#view input[placeholder="Title"]', 'Boat slideshow');
+    await fill(page, '#view input[placeholder^="set once"]', 'boat-slideshow');
+    await clickText(page, '#view button', 'Save draft');
+    await until(page, "document.querySelector('dialog[open] .preflight')");
+    assert.doesNotMatch(await page.evaluate("document.querySelector('dialog[open]').innerText"), /discard\.png/);
+    await clickText(page, 'dialog[open] button', 'Commit and push');
+    await until(page, "window.__fake.files('example/blog')['posts/boat-slideshow.md']");
+    const saved = await page.evaluate("window.__fake.files('example/blog')");
+    assert.ok(saved['posts/boat-slideshow.md'].includes(ref));
+    assert.match(saved['posts/boat-slideshow.md'], /asset:images\/boat\.png/);
+    const lock = JSON.parse(saved['assets.lock.json']);
+    assert.equal(lock['images/boat.png'], undefined, 'existing images are not pinned until publication');
+    assert.ok(lock[ref.slice('asset:'.length)], 'the staged HTML-block image is uploaded and pinned');
+    assert.deepEqual(Object.keys(await page.evaluate("window.__fake.files('example/images')")).sort(), ['README.md', 'boat.png', ref.slice('asset:images/'.length)].sort());
+  } finally {
+    close();
+  }
+});
 
 test('images: a blog that says where it lives needs nothing configured; the Settings fields show the default', { skip, timeout: 120000 }, async () => {
   const { page, close } = await signedIn(blogJson({ repo: 'example/blog' }));
@@ -77,6 +141,8 @@ test('images: a blog that says where it lives needs nothing configured; the Sett
     await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
     await until(page, "document.querySelector('.ql-editor')");
     await page.evaluate("document.querySelector('.ql-image').click(); 0");
+    await until(page, "document.querySelector('dialog.media-dialog[open]')");
+    await clickText(page, 'dialog.media-dialog button', 'Upload a new image');
     await until(page, "document.querySelector('.ql-editor img')");
     assert.equal(await page.evaluate("document.querySelector('.toast.error')"), null, 'no complaint: images default to this repository');
 

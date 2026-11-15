@@ -19,7 +19,7 @@ import { SLUG_RE, joinFile, newFront, parseMeta, setMeta, splitFile } from '../l
 import { parsePost } from '../lib/blog.js';
 import { filterMedia } from '../lib/media.js';
 import { SCHEDULE_WARN_DAYS, daysUntil } from '../lib/schedule.js';
-import { resolveAsset } from '../lib/assets.js';
+import { collectAssetRefs, resolveAsset } from '../lib/assets.js';
 import { videoBase, videoEmbedUrl } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { DEFAULT_CONTENT_BASE, defaultDomain, defaultTitle } from '../lib/init.js';
@@ -1571,7 +1571,7 @@ async function editorView(repo, r) {
   );
   // The Quill container must be in the document before Quill measures it.
   view.replaceChildren(node);
-  const quill = await createEditor(editorEl, { onImage: () => pickImage(), onVideo: () => pickVideo() });
+  const quill = await createEditor(editorEl, { onImage: () => pickImage(), onVideo: () => pickVideo(), chooseImage });
   quill.setContents(existing ? existing.post.delta.ops : mdToDelta('').ops, 'silent');
   // beside the Publish card: what can be said about the post (lib/post-stats.js), and its history and whether the live page is this version
   const readFields = () => ({
@@ -1725,8 +1725,8 @@ async function editorView(repo, r) {
     try {
       const creating = isNew;
       const { slug, text, md } = buildText();
-      const used = new Set([...text.matchAll(/asset:([^\s)\]]+)/g)].map((x) => x[1]));
-      const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, kind, staged: [...staged.values()].filter((s) => used.has(`${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
+      const used = new Set(collectAssetRefs(quill.getContents(), readFields()));
+      const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, kind, staged: [...staged.values()].filter((s) => used.has(`asset:${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
       if (!plan.changes.length && !plan.assetGroups.length) {
         noted('Nothing to publish: the repository already matches.');
         return;

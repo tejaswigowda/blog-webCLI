@@ -144,7 +144,10 @@ calls and `textContent`: nothing typed in a cell becomes markup in the editor, w
 ### Slideshows
 
 The editor's **Insert a slideshow** button opens a form for 2-10 slides. Each needs an image
-(`asset:images/...` copied from Media, or an HTTPS image address) and alternative text; headings,
+and alternative text. **Choose from Media…** beside each image opens the searchable library;
+**Upload a new image…** in that picker stages a new file for upload when you publish or save
+the draft. Cancelling the slideshow does not upload it. You can also enter an `asset:images/...`
+reference or an HTTPS image address directly. Headings,
 captions and links are optional. A link needs both a label and an address. Add, remove or reorder
 slides in the form, and reopen it with **Edit slideshow**.
 

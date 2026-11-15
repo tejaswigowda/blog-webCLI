@@ -80,7 +80,7 @@ export const IMAGE_PRESETS = [['', 'Default'], ['inline', 'Inline'], ['small', '
 
 export const FORMATS = ['header', 'para', 'layout', 'bold', 'italic', 'strike', 'code', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
 
-export async function createEditor(el, { onImage, onVideo }) {
+export async function createEditor(el, { onImage, onVideo, chooseImage }) {
   const Quill = await loadQuill();
   // the table and HTML block buttons need the editor to exist, so their handlers close over it
   const blocks = {};
@@ -94,7 +94,7 @@ export async function createEditor(el, { onImage, onVideo }) {
       },
     },
   });
-  Object.assign(blocks, wireBlocks(quill, Quill));
+  Object.assign(blocks, wireBlocks(quill, Quill, { chooseImage }));
   // a paragraph style and another block format (heading, list, quote, code) cannot share a line: the one applied last wins
   const OTHER = ['header', 'list', 'blockquote', 'code-block', 'indent'];
   quill.getModule('toolbar').addHandler('para', (v) => {

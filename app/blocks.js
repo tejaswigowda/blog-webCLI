@@ -178,15 +178,21 @@ export function editHtml(initial = '') {
 
 const blankSlide = () => ({ image: '', alt: '', title: '', text: '', label: '', url: '', animation: DEFAULT_SLIDE_ANIMATION });
 
-export function editSlideshow(initial = [blankSlide(), blankSlide()]) {
+export function editSlideshow(initial = [blankSlide(), blankSlide()], chooseImage) {
   const slides = initial.map((slide) => ({ ...slide }));
   const rows = el('div');
-  const body = el('div', {}, el('p', { class: 'hint' }, '2-10 slides. Use an asset: image reference from Media, or an https:// image address. Choose an Animate.css entrance effect for each slide (Fade In by default). Slides rotate every 6 seconds, with pause, previous/next and numbered controls. Reduced motion disables animation and starts paused. Without JavaScript, every slide stays visible.'), rows);
+  const body = el('div', {}, el('p', { class: 'hint' }, '2-10 slides. Choose an image from Media, upload a new image from the picker, or enter an asset: reference or https:// image address. New images upload only when you publish or save the draft. Choose an Animate.css entrance effect for each slide (Fade In by default). Slides rotate every 6 seconds, with pause, previous/next and numbered controls. Reduced motion disables animation and starts paused. Without JavaScript, every slide stays visible.'), rows);
   const draw = () => {
     rows.replaceChildren(...slides.map((slide, i) => {
-      const fields = [['image', 'Image', 'asset:images/photo.jpg'], ['alt', 'Alternative text', 'Describe the picture'], ['title', 'Heading', 'Optional'], ['text', 'Caption', 'Optional'], ['label', 'Link label', 'Optional'], ['url', 'Link address', 'https://example.com/products/']].map(([key, title, placeholder]) =>
-        el('label', {}, title, el('input', { value: slide[key], placeholder, 'aria-label': `Slide ${i + 1} ${title.toLowerCase()}`, oninput: (e) => { slide[key] = e.target.value; } })),
-      );
+      const fields = [['image', 'Image', 'asset:images/photo.jpg'], ['alt', 'Alternative text', 'Describe the picture'], ['title', 'Heading', 'Optional'], ['text', 'Caption', 'Optional'], ['label', 'Link label', 'Optional'], ['url', 'Link address', 'https://example.com/products/']].map(([key, title, placeholder]) => {
+        const input = el('input', { value: slide[key], placeholder, 'aria-label': `Slide ${i + 1} ${title.toLowerCase()}`, oninput: (e) => { slide[key] = e.target.value; } });
+        const label = el('label', {}, title, input);
+        if (key !== 'image') return label;
+        return el('div', {}, label, el('button', { type: 'button', 'aria-label': `Choose image for slide ${i + 1}`, onclick: () => chooseImage((ref) => {
+          input.value = ref;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }) }, 'Choose from Media…'));
+      });
       const move = (offset) => {
         [slides[i], slides[i + offset]] = [slides[i + offset], slides[i]];
         draw();
@@ -261,7 +267,7 @@ export function registerBlocks(Quill) {
 }
 
 // Insert and edit from the toolbar and by clicking a block's Edit button.
-export function wireBlocks(quill, Quill) {
+export function wireBlocks(quill, Quill, { chooseImage }) {
   // the cursor is read before the dialog opens: the dialog takes focus, and the editor has no selection when it closes
   const cursor = () => {
     const range = quill.getSelection(true);
@@ -276,7 +282,7 @@ export function wireBlocks(quill, Quill) {
   };
   const tableHandler = () => insert('mdtable', () => editTable());
   const htmlHandler = () => insert('htmlblock', () => editHtml());
-  const slideshowHandler = () => insert('htmlblock', () => editSlideshow());
+  const slideshowHandler = () => insert('htmlblock', () => editSlideshow(undefined, chooseImage));
   quill.root.addEventListener('click', async (e) => {
     const button = e.target.closest && e.target.closest('.blk-edit');
     const node = button && button.closest('.ql-mdtable, .ql-htmlblock');
@@ -287,7 +293,7 @@ export function wireBlocks(quill, Quill) {
     const isTable = node.classList.contains('ql-mdtable');
     const src = node.getAttribute('data-htmlblock');
     const slides = !isTable && readSlideshow(src);
-    const next = isTable ? await editTable(JSON.parse(node.getAttribute('data-mdtable'))) : slides ? await editSlideshow(slides) : await editHtml(src);
+    const next = isTable ? await editTable(JSON.parse(node.getAttribute('data-mdtable'))) : slides ? await editSlideshow(slides, chooseImage) : await editHtml(src);
     if (!next) return;
     quill.deleteText(index, 1, 'user');
     quill.insertEmbed(index, isTable ? 'mdtable' : 'htmlblock', next, 'user');
