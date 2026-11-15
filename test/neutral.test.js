@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENTRIES = ['lib/blog.js', 'lib/live-render.js', 'lib/preview.js'].map((f) => path.join(root, f));
-const RUNTIME_DIRS = ['lib/', 'vendor/moment/'];
+const RUNTIME_DIRS = ['lib/', 'vendor/moment/', 'vendor/animate/'];
 const GLOBALS = ['document', 'window', 'self', 'localStorage', 'sessionStorage', 'navigator', 'DOMParser', 'XMLHttpRequest', 'HTMLElement', 'process', 'Buffer', 'require', '__dirname', '__filename', 'global'];
 
 // -> { inputs: [file…], globals: [name…] }; rejects when something cannot be resolved on a neutral platform.

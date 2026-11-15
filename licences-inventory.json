@@ -34,6 +34,7 @@
   },
   "runtimeBuiltFrom": [
     "lib/aliases.js",
+    "lib/animations.js",
     "lib/archive-aliases.js",
     "lib/assets.js",
     "lib/blockrefs.js",
@@ -77,11 +78,15 @@
     "lib/sha256.js",
     "lib/site-model.js",
     "lib/skeleton.js",
+    "lib/slideshow-entry.js",
+    "lib/slideshow-player.js",
+    "lib/slideshow.js",
     "lib/taxonomy.js",
     "lib/theme-pack.js",
     "lib/theme.js",
     "lib/version.js",
     "lib/video.js",
+    "vendor/animate/animate.esm.js",
     "vendor/moment/moment.esm.js"
   ],
   "items": [
@@ -463,6 +468,20 @@
       ],
       "paths": [
         "node_modules/esbuild/"
+      ]
+    },
+    {
+      "name": "animate.css",
+      "version": "4.1.1",
+      "licence": "MIT",
+      "upstream": "https://github.com/animate-css/animate.css",
+      "kind": "vendored",
+      "surfaces": [
+        "runtime",
+        "tool"
+      ],
+      "paths": [
+        "vendor/animate/"
       ]
     },
     {

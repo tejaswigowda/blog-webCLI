@@ -18,6 +18,7 @@ import { fileFor, previewHtml, sourceOf } from '../lib/preview.js';
 import { withRepoOverrides } from '../lib/blog.js';
 import { Refusal } from '../lib/errors.js';
 import { parseRepoRef } from '../lib/reporef.js';
+import { mountSlideshows } from '../lib/slideshow-player.js';
 
 const net = createNet();
 const gh = new GitHub(net); // anonymous on purpose: a reader holds no token
@@ -33,6 +34,7 @@ net.subscribe((l) => {
 
 const notice = (html, warn = false) => `<div class="notice${warn ? ' warn' : ''}">${html}</div>`;
 const q = (el, s) => el.querySelector(s);
+let clearSlideshows = () => {};
 
 function home() {
   page.innerHTML = `<h1>Read a blog</h1>
@@ -130,7 +132,9 @@ function showPreview(html, ctx, css = '') {
   retarget(doc, ctx);
   document.body.className = doc.body.className;
   document.title = doc.title;
+  clearSlideshows();
   page.innerHTML = doc.body.innerHTML;
+  clearSlideshows = mountSlideshows(page);
 }
 
 // true when the page was shown; throws when the blog has no generated site to preview (the caller falls back to the source)
@@ -193,6 +197,7 @@ page.addEventListener('click', (e) => {
 
 let seq = 0;
 async function route() {
+  clearSlideshows();
   const mine = ++seq;
   const parsed = parseReaderHash(location.hash);
   document.title = 'blog.webcli.app/blog';
@@ -249,7 +254,9 @@ async function route() {
     const chrome = { blog, home: linkHome, feed: `${blog.domain}/feed.xml`, logoUrl };
     const show = (b) => {
       document.body.className = b.bodyClass;
+      clearSlideshows();
       page.innerHTML = themeNote + b.html;
+      clearSlideshows = mountSlideshows(page);
     };
 
     if (parsed.post) {

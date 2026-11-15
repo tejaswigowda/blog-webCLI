@@ -89,8 +89,8 @@ export async function createEditor(el, { onImage, onVideo }) {
     formats: FORMATS,
     modules: {
       toolbar: {
-        container: [[{ header: [1, 2, 3, 4, false] }, { para: [false, 'lead', 'small'] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'mdtable', 'htmlblock'], ['clean']],
-        handlers: { image: onImage, video: onVideo, mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock() },
+        container: [[{ header: [1, 2, 3, 4, false] }, { para: [false, 'lead', 'small'] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'slideshow', 'mdtable', 'htmlblock'], ['clean']],
+        handlers: { image: onImage, video: onVideo, slideshow: () => blocks.slideshow(), mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock() },
       },
     },
   });
@@ -110,11 +110,11 @@ export async function createEditor(el, { onImage, onVideo }) {
     if (!r) return;
     for (const line of quill.getLines(r.index, r.length || 1)) {
       const f = line.formats();
-      if (f.para && OTHER.some((k) => f[k])) quill.formatLine(quill.getIndex(line), 1, 'para', false, 'api');
+      if (f?.para && OTHER.some((k) => f[k])) quill.formatLine(quill.getIndex(line), 1, 'para', false, 'api');
     }
   });
   const bar = quill.getModule('toolbar').container;
-  for (const [name, title] of [['mdtable', 'Insert a table'], ['htmlblock', 'Insert an HTML block']]) {
+  for (const [name, title] of [['mdtable', 'Insert a table'], ['htmlblock', 'Insert an HTML block'], ['slideshow', 'Insert a slideshow']]) {
     const b = bar.querySelector(`.ql-${name}`);
     if (b) {
       b.title = title;

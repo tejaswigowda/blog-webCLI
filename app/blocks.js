@@ -4,6 +4,8 @@
 // cannot run in the editor, which holds the token. Editing happens in a dialog, because a table or a block is not typed into.
 import { canonCell, deltaToMarkdownChecked, parseInline } from '../lib/markdown.js';
 import { MAX_BLOCK, canonHtml, tokenizeHtml, ALLOWED_TAGS } from '../lib/rawhtml.js';
+import { slideshowHtml } from '../lib/slideshow.js';
+import { DEFAULT_SLIDE_ANIMATION, SLIDE_ANIMATIONS } from '../lib/animations.js';
 
 const el = (tag, attrs = {}, ...kids) => {
   const n = document.createElement(tag);
@@ -41,7 +43,28 @@ export function paintTable(node, t) {
 }
 
 export function paintHtml(node, src) {
-  node.replaceChildren(el('div', { class: 'blk-bar', contenteditable: 'false' }, el('span', {}, 'HTML block'), el('button', { type: 'button', class: 'blk-edit' }, 'Edit HTML')), el('pre', {}, src));
+  const slides = readSlideshow(src);
+  node.replaceChildren(el('div', { class: 'blk-bar', contenteditable: 'false' }, el('span', {}, slides ? `Slideshow · ${slides.length} slides` : 'HTML block'), el('button', { type: 'button', class: 'blk-edit' }, slides ? 'Edit slideshow' : 'Edit HTML')), el('pre', {}, src));
+}
+
+function readSlideshow(src) {
+  if (!src.startsWith('<section class="webcli-slideshow"')) return null;
+  const doc = new DOMParser().parseFromString(src, 'text/html');
+  const slides = [...doc.querySelectorAll('figure.webcli-slide')].map((figure) => ({
+    image: figure.querySelector('img')?.getAttribute('src') || '',
+    alt: figure.querySelector('img')?.getAttribute('alt') || '',
+    title: figure.querySelector('h2')?.textContent || '',
+    text: figure.querySelector('p')?.textContent || '',
+    label: figure.querySelector('a')?.textContent || '',
+    url: figure.querySelector('a')?.getAttribute('href') || '',
+    animation: [...figure.classList].find((name) => name.startsWith('webcli-animate-'))?.slice('webcli-animate-'.length),
+  }));
+  // Hand-edited HTML must stay in the HTML editor rather than lose anything this form cannot express.
+  try {
+    return slideshowHtml(slides) === src ? slides : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------- dialogs ----------
@@ -153,10 +176,45 @@ export function editHtml(initial = '') {
   return dialog('HTML block', body, { check: read, apply: read });
 }
 
+const blankSlide = () => ({ image: '', alt: '', title: '', text: '', label: '', url: '', animation: DEFAULT_SLIDE_ANIMATION });
+
+export function editSlideshow(initial = [blankSlide(), blankSlide()]) {
+  const slides = initial.map((slide) => ({ ...slide }));
+  const rows = el('div');
+  const body = el('div', {}, el('p', { class: 'hint' }, '2-10 slides. Use an asset: image reference from Media, or an https:// image address. Choose an Animate.css entrance effect for each slide (Fade In by default). Slides rotate every 6 seconds, with pause, previous/next and numbered controls. Reduced motion disables animation and starts paused. Without JavaScript, every slide stays visible.'), rows);
+  const draw = () => {
+    rows.replaceChildren(...slides.map((slide, i) => {
+      const fields = [['image', 'Image', 'asset:images/photo.jpg'], ['alt', 'Alternative text', 'Describe the picture'], ['title', 'Heading', 'Optional'], ['text', 'Caption', 'Optional'], ['label', 'Link label', 'Optional'], ['url', 'Link address', 'https://example.com/products/']].map(([key, title, placeholder]) =>
+        el('label', {}, title, el('input', { value: slide[key], placeholder, 'aria-label': `Slide ${i + 1} ${title.toLowerCase()}`, oninput: (e) => { slide[key] = e.target.value; } })),
+      );
+      const move = (offset) => {
+        [slides[i], slides[i + offset]] = [slides[i + offset], slides[i]];
+        draw();
+      };
+      const animation = el('label', {}, 'Animation', el('select', { 'aria-label': `Slide ${i + 1} animation`, onchange: (e) => { slide.animation = e.target.value; } },
+        SLIDE_ANIMATIONS.map((name) => el('option', { value: name, selected: (slide.animation ?? DEFAULT_SLIDE_ANIMATION) === name }, name === 'none' ? 'None' : name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()))),
+      ));
+      return el('fieldset', {}, el('legend', {}, `Slide ${i + 1}`), ...fields, animation, el('div', { class: 'actions' },
+        el('button', { type: 'button', disabled: i === 0, onclick: () => move(-1), 'aria-label': `Move slide ${i + 1} up` }, 'Move up'),
+        el('button', { type: 'button', disabled: i === slides.length - 1, onclick: () => move(1), 'aria-label': `Move slide ${i + 1} down` }, 'Move down'),
+        el('button', { type: 'button', disabled: slides.length <= 2, onclick: () => { slides.splice(i, 1); draw(); }, 'aria-label': `Remove slide ${i + 1}` }, 'Remove'),
+      ));
+    }));
+    add.disabled = slides.length >= 10;
+    body.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const add = el('button', { type: 'button', onclick: () => { slides.push(blankSlide()); draw(); } }, '+ Slide');
+  body.append(add);
+  draw();
+  const read = () => slideshowHtml(slides);
+  return dialog('Slideshow', body, { check: read, apply: read });
+}
+
 // ---------- Quill ----------
 const ICONS = {
   mdtable: '<svg viewBox="0 0 18 18"><rect class="ql-stroke" x="2" y="3" width="14" height="12" fill="none"/><line class="ql-stroke" x1="2" x2="16" y1="7" y2="7"/><line class="ql-stroke" x1="2" x2="16" y1="11" y2="11"/><line class="ql-stroke" x1="9" x2="9" y1="3" y2="15"/></svg>',
   htmlblock: '<svg viewBox="0 0 18 18"><polyline class="ql-even ql-stroke" points="5 5 2 9 5 13"/><polyline class="ql-even ql-stroke" points="13 5 16 9 13 13"/><line class="ql-stroke" x1="10" x2="8" y1="4" y2="14"/></svg>',
+  slideshow: '<svg viewBox="0 0 18 18"><rect class="ql-stroke" x="2" y="2" width="14" height="11" fill="none"/><polyline class="ql-stroke" points="4 10 7 6 10 9 12 7 14 10" fill="none"/><circle class="ql-fill" cx="6" cy="16" r="1"/><circle class="ql-fill" cx="9" cy="16" r="1"/><circle class="ql-fill" cx="12" cy="16" r="1"/></svg>',
 };
 
 // Register the two block embeds with Quill.
@@ -199,6 +257,7 @@ export function registerBlocks(Quill) {
   const icons = Quill.import('ui/icons');
   icons.mdtable = ICONS.mdtable;
   icons.htmlblock = ICONS.htmlblock;
+  icons.slideshow = ICONS.slideshow;
 }
 
 // Insert and edit from the toolbar and by clicking a block's Edit button.
@@ -217,6 +276,7 @@ export function wireBlocks(quill, Quill) {
   };
   const tableHandler = () => insert('mdtable', () => editTable());
   const htmlHandler = () => insert('htmlblock', () => editHtml());
+  const slideshowHandler = () => insert('htmlblock', () => editSlideshow());
   quill.root.addEventListener('click', async (e) => {
     const button = e.target.closest && e.target.closest('.blk-edit');
     const node = button && button.closest('.ql-mdtable, .ql-htmlblock');
@@ -225,10 +285,12 @@ export function wireBlocks(quill, Quill) {
     const blot = Quill.find(node);
     const index = quill.getIndex(blot);
     const isTable = node.classList.contains('ql-mdtable');
-    const next = isTable ? await editTable(JSON.parse(node.getAttribute('data-mdtable'))) : await editHtml(node.getAttribute('data-htmlblock'));
+    const src = node.getAttribute('data-htmlblock');
+    const slides = !isTable && readSlideshow(src);
+    const next = isTable ? await editTable(JSON.parse(node.getAttribute('data-mdtable'))) : slides ? await editSlideshow(slides) : await editHtml(src);
     if (!next) return;
     quill.deleteText(index, 1, 'user');
     quill.insertEmbed(index, isTable ? 'mdtable' : 'htmlblock', next, 'user');
   });
-  return { mdtable: tableHandler, htmlblock: htmlHandler };
+  return { mdtable: tableHandler, htmlblock: htmlHandler, slideshow: slideshowHandler };
 }

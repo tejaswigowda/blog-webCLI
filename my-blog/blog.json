@@ -1,0 +1,12 @@
+{
+  "title": "Swim Platform",
+  "description": "Custom boat swim platforms",
+  "author": "Swim Platform",
+  "domain": "https://tejaswigowda.github.io/blogtest",
+  "repo": "tejaswigowda/blogtest",
+  "theme": "default",
+  "content": {
+    "base": "https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
+  },
+  "search": true
+}

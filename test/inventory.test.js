@@ -21,7 +21,8 @@ test('R4: the committed inventory is exactly what the build generates, and the r
   const by = (n) => inv.items.find((i) => i.name === n);
   assert.deepEqual([by('moment').licence, by('moment').surfaces], ['MIT', ['runtime', 'tool']], 'moment.js is in the generated scripts and the app');
   assert.deepEqual([by('quill').licence, by('quill').surfaces], ['BSD-3-Clause', ['tool']], 'quill is the editor only');
-  assert.ok(inv.runtimeBuiltFrom.includes('vendor/moment/moment.esm.js') && inv.runtimeBuiltFrom.every((f) => f.startsWith('lib/') || f.startsWith('vendor/moment/')));
+  assert.deepEqual([by('animate.css').licence, by('animate.css').surfaces], ['MIT', ['runtime', 'tool']]);
+  assert.ok(inv.runtimeBuiltFrom.includes('vendor/moment/moment.esm.js') && inv.runtimeBuiltFrom.every((f) => f.startsWith('lib/') || f.startsWith('vendor/moment/') || f.startsWith('vendor/animate/')));
 });
 
 test('R5: licence expressions are judged, not string-matched', () => {

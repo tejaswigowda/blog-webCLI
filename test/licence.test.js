@@ -16,6 +16,7 @@ const read = (f) => fs.readFile(path.join(root, f), 'utf8');
 const RUNTIME = [
   { dir: 'lib/', licence: /^MIT License\b/ },
   { dir: 'vendor/moment/', licence: /Permission is hereby granted, free of charge/ },
+  { dir: 'vendor/animate/', licence: /Permission is hereby granted, free of charge/ },
 ];
 
 test('R3: a generated page\'s scripts are built only from the runtime directories', async () => {

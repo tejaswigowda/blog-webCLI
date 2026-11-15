@@ -141,6 +141,26 @@ dialog (a grid of cells, an alignment for each column, add and remove rows and c
 `{ mdtable: { head, align, rows } }` only while Quill has it; what is stored is the markdown above. Cells are drawn with DOM
 calls and `textContent`: nothing typed in a cell becomes markup in the editor, which holds the token.
 
+### Slideshows
+
+The editor's **Insert a slideshow** button opens a form for 2-10 slides. Each needs an image
+(`asset:images/...` copied from Media, or an HTTPS image address) and alternative text; headings,
+captions and links are optional. A link needs both a label and an address. Add, remove or reorder
+slides in the form, and reopen it with **Edit slideshow**.
+
+Animate.css is bundled locally with every theme (no CDN request). Each slide's **Animation**
+dropdown offers its entrance and attention effects, including Fade In, Fade In Up, Zoom In
+and Bounce In, plus **None**. Fade In is the default, including for existing slideshows.
+The effect plays when a slide is shown, on autoplay or manual navigation. Exit effects are
+not offered because they would hide the newly selected slide.
+
+Slideshows are saved as allowlisted HTML blocks, not plugin code. Repository images are pinned
+on publish like other images. Published pages and the local reader provide previous/next,
+numbered navigation and play/pause controls. Autoplay advances every six seconds, pauses on
+focus or manual navigation, suspends while hovered or the tab is hidden, and starts paused for
+reduced-motion users, with animations disabled. Without JavaScript, all slides remain readable
+without animation. Animate.css is MIT-licensed; its notice is included in the generated CSS.
+
 ### HTML blocks
 
 ```
