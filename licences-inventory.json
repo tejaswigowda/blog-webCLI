@@ -91,13 +91,14 @@
     "lib/taxonomy.js",
     "lib/theme-pack.js",
     "lib/theme.js",
+    "lib/vary-path.js",
     "lib/version.js",
     "lib/video.js",
     "lib/widgets.js",
     "lib/xml.js",
     "vendor/animate/animate.esm.js",
     "vendor/moment/moment.esm.js",
-    "vendor/temml/render.mjs"
+    "vendor/temml/temml.esm.js"
   ],
   "items": [
     {

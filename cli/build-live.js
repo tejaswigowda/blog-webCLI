@@ -91,9 +91,17 @@ export async function temmlModule() {
   const src = await fs.readFile(path.join(root, 'vendor/temml/temml.mjs'), 'utf8');
   const ast = parse(src, { ecmaVersion: 'latest', sourceType: 'module' });
   const edits = [];
-  let methods = 0, exports = 0;
+  let methods = 0, exports = 0, quirks = 0;
   const visit = (node) => {
     if (!node || typeof node !== 'object') return;
+    if (node.type === 'IfStatement' && node.test.type === 'BinaryExpression' &&
+        node.test.operator === '!==' && node.test.left.type === 'UnaryExpression' &&
+        node.test.left.operator === 'typeof' && node.test.left.argument.name === 'document' &&
+        node.test.right.value === 'undefined') {
+      edits.push({ start: node.start, end: node.end, text: '' });
+      quirks++;
+      return;
+    }
     if (node.type === 'MethodDefinition' && node.key.name === 'toNode') {
       edits.push({ start: node.start, end: node.end, text: '' });
       methods++;
@@ -111,7 +119,7 @@ export async function temmlModule() {
     }
   };
   visit(ast);
-  if (methods !== 7 || exports !== 1) throw new Error('Temml DOM surface changed; review the string-only adapter.');
+  if (methods !== 7 || exports !== 1 || quirks !== 1) throw new Error('Temml DOM surface changed; review the string-only adapter.');
   let text = src;
   for (const edit of edits.sort((a, b) => b.start - a.start)) text = text.slice(0, edit.start) + edit.text + text.slice(edit.end);
   const licence = await fs.readFile(path.join(root, 'vendor/temml/LICENSE'), 'utf8');
@@ -167,16 +175,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.log(`wrote vendor/animate/animate.esm.js (${animate.length} bytes)`);
   }
   const temml = await temmlModule();
-  const tfile = path.join(root, 'vendor/temml/render.mjs');
+  const tfile = path.join(root, 'vendor/temml/temml.esm.js');
   if (check) {
     const have = await fs.readFile(tfile, 'utf8').catch(() => '');
     if (have !== temml) {
-      console.error('vendor/temml/render.mjs is stale: run `node cli/build-live.js`');
+      console.error('vendor/temml/temml.esm.js is stale: run `node cli/build-live.js`');
       stale = true;
-    } else console.log('ok: vendor/temml/render.mjs matches Temml and its licence');
+    } else console.log('ok: vendor/temml/temml.esm.js matches Temml and its licence');
   } else {
     await fs.writeFile(tfile, temml);
-    console.log(`wrote vendor/temml/render.mjs (${temml.length} bytes)`);
+    console.log(`wrote vendor/temml/temml.esm.js (${temml.length} bytes)`);
   }
   for (const t of TARGETS) {
     const text = await buildTarget(t);

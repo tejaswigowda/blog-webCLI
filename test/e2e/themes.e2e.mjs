@@ -99,6 +99,23 @@ test('themes: chosen by address and read without contacting the theme repository
     assert.equal(JSON.parse(state['blog.json']).theme.contract, 'wordpress-classic');
     assert.ok(state['index.html'].includes('<body class="home blog">') && state['theme.css'].includes('.entry-title'));
 
+    // CDN links are settings, not executable editor content or part of a theme file.
+    await page.evaluate("location.hash = '#repo=example/blog&settings'; 0");
+    await until(page, "document.querySelector('textarea[name=cdnScripts]')");
+    const integrity = `sha256-${Buffer.alloc(32).toString('base64')}`;
+    await page.evaluate(`(() => {
+      const input = document.querySelector('textarea[name=cdnScripts]');
+      input.value = ${JSON.stringify(`https://unpkg.com/example@1/index.js | ${integrity}`)};
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await click(page, '#view button', 'Save settings');
+    await until(page, "document.querySelector('dialog[open] .preflight')");
+    await click(page, 'dialog[open] button', 'Commit and push');
+    await until(page, "JSON.parse(window.__fake.files('example/blog')['blog.json']).scripts?.length === 1");
+    const publishedState = JSON.parse(await page.evaluate("JSON.stringify(window.__fake.files('example/blog'))"));
+    assert.ok(publishedState['index.html'].includes(`integrity="${integrity}"`));
+    assert.equal(await page.evaluate("document.querySelectorAll('script[src*=\"unpkg.com\"]').length"), 0);
+
     // the licences, in one place
     await page.evaluate("location.hash = '#repo=example/blog&licences'; 0");
     await until(page, "document.querySelector('#view h1')?.textContent === 'What is in this site'");
@@ -107,7 +124,7 @@ test('themes: chosen by address and read without contacting the theme repository
     page.close();
 
     // ---------- the reader: a different page that has only the blog repository ----------
-    const blogOnly = Buffer.from(JSON.stringify(Object.fromEntries(Object.entries(state).map(([p, t]) => [p, Buffer.from(t).toString('base64')])))).toString('base64');
+    const blogOnly = Buffer.from(JSON.stringify(Object.fromEntries(Object.entries(publishedState).map(([p, t]) => [p, Buffer.from(t).toString('base64')])))).toString('base64');
     const reader = await openPage(chrome, `${base}/blog/`);
     await until(reader, "document.querySelector('#reader')");
     await reader.evaluate(`(async () => {

@@ -2,7 +2,7 @@
 // generated page (lib/live.js): a plain GET of a static file, no credentials, a path that is not in any cache, and an unreachable
 // registry degrades the list to the snapshot rather than breaking the screen (R6).
 import { KINDS, parseRegistry } from '../lib/registry.js';
-import { varyPath } from '../lib/live.js';
+import { varyPath } from '../lib/vary-path.js';
 
 const FILES = { themes: 'themes.json' };
 

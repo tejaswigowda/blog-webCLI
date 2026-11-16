@@ -74,6 +74,7 @@ test('V6/V7: macros, links, resources, unsupported commands and excessive work f
   for (const tex of ['x'.repeat(MAX_MATH_LENGTH + 1), '{'.repeat(49) + 'x' + '}'.repeat(49), '\\alpha '.repeat(257), String.raw`\begin{equation}x\end{equation}`, '', String.raw`\frac{a}`]) {
     assert.throws(() => renderMath(tex), (e) => e.code === 'bad-math');
   }
+  assert.throws(() => renderMath('\\iff '.repeat(50)), (e) => e.code === 'bad-math' && /Too many expansions/.test(e.detail));
   assert.doesNotMatch(renderMath(String.raw`\text{<img src=x onerror=alert(1)>}`), /<img|onerror="/);
   assert.match(renderMath(String.raw`\frac{a}{b}`), /<mfrac>/, 'a refusal does not leak macros or state into the next expression');
 });

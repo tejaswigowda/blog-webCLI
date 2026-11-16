@@ -4,7 +4,11 @@ A blog is one or more GitHub repositories. `https://blog.webcli.app/#repo=owner/
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-blog deployment.
 
-[Hands-on tutorials](guides/tutorials/): migrate a WordPress site and rebuild its look step by step, with no AI required.
+[About blog-webCLI](about/) and [hands-on tutorials](about/tutorials/): recreate webcli.app, migrate a WordPress site,
+and rebuild its look step by step. These are standalone static pages at `blog.webcli.app/about/`, readable without
+JavaScript or sign-in, and linked from the editor header. The existing guides, screenshots and theme download now live
+under `about/`. Edit `docs/about.md` or `docs/tutorial.md` and run `npm run build:about`; `npm run check:about` verifies
+the committed HTML matches those sources.
 
 **Licence, by surface** ([LICENSE](LICENSE)). The repository has two, because what it conveys is of two kinds:
 
@@ -159,8 +163,8 @@ the editor preserves the inline format and the fence language when reopening and
 There is no formula toolbar or equation editor.
 
 Write `\\(` in prose for a literal `\(`. Only the literal delimiter `\)` closes inline math;
-`\right)` does not. A literal `\)` *inside* the expression cannot be represented inline:
-use a display fence instead. An unclosed opener is refused as `unclosed-math`. Delimiters
+`\right)` does not. A literal `\)` *inside* the expression is refused rather than
+ambiguously ending the span. An unclosed opener is refused as `unclosed-math`. Delimiters
 inside inline code, non-math code fences and authored HTML blocks remain literal text.
 Use `\mid` for a vertical bar in a table-cell equation; table rows still use their usual pipe syntax.
 
@@ -179,6 +183,11 @@ expression and reason, never a fallback to raw text. CSS-dependent or non-Core M
 outside the closed subset are refused too. Expressions are capped at 4,096 characters,
 48 nested groups, 256 commands and 200 macro expansions.
 
+The upstream module is kept intact. `build:live` uses a build-time AST transform to
+exclude its DOM-only methods and quirks-mode guard and export only the string API;
+`check:live` verifies the resulting adapter. The shared renderer's no-DOM and no-evaluator
+gates still apply; Acorn is a development dependency, never reader code.
+
 Published equations are native MathML with their exact LaTeX source in
 `<annotation encoding="application/x-tex">`, and math pages record
 `<meta name="x-math" content="Temml@0.14.0">`. They work with JavaScript disabled and add
@@ -193,7 +202,7 @@ can render before Pages catches up. The existing live script imports it **only w
 a post that contains math**; an unchanged math page or a prose-only rebuild does not fetch it.
 Generator and live output use the same renderer, and a recorded renderer-version mismatch
 leaves the deployed page intact with an explicit live-check reason. The optional renderer
-measures about **224 KB raw / 65 KB gzip**; it is not part of `webcli-live.js`.
+measures about **217 KB raw / 63 KB gzip**; it is not part of `webcli-live.js`.
 
 Math contributes no words to excerpts, word counts or `search.json`, including in table cells.
 The Atom feed replaces each equation with its annotated LaTeX source as escaped text, rather
@@ -783,6 +792,7 @@ four keys are required, and the real file is plain JSON (no comments):
 | `archiveAliases` | no | `{ tags, authors, dates }`: old listing addresses that redirect ([below](#addresses-permalinks-old-archive-addresses)) | none |
 | `comments` | no | `mailto`, a plain `form` to a relay, or a `script`: [below](#anonymous-comments-no-server) | none |
 | `analytics` | no | a script from an address you name, [below](#comments-analytics) | none |
+| `scripts` | no | up to 8 integrity-pinned [CDN script links](#custom-js-cdn-links-only); no inline JavaScript | none |
 | `subscribe` | no | an email form that posts to an address you name, [below](#subscribe) | none |
 | `customize` | no | colours, fonts, width, header, footer, list layout, CSS: see [Customization](#customization) | the default look |
 
@@ -1031,7 +1041,7 @@ node cli/blog.js comments lift [dir]` moves their "## Comments (N)" section into
 comments widget inserts itself (a GitHub-Discussions widget fits; the generator names no provider). `analytics`
 places `<script src=… defer …></script>` at the end of every page. Both are off unless you set them.
 
-**These are the one place a page runs someone else's code.** The script has the page's full powers on your
+**These and the opt-in [CDN script links](#custom-js-cdn-links-only) are the declared third-party-code exceptions.** The script has the page's full powers on your
 readers' browsers, and the reader's browser contacts that service. Name only a service you trust, and give an
 `integrity` value to pin the exact bytes. Nothing in the editor, the generator or the `/blog/` reader loads them:
 only the generated pages do.
@@ -1075,7 +1085,7 @@ enters nothing keeps a `blog.json` that says nothing, and an author who writes a
 #### Editing it
 
 * **In the editor:** *Settings* edits the title, description, author, media repositories and their URL templates,
-  `content`, `order`, the reader features (`search`, `pagination`, `subscribe`, `seo`, `comments`, `analytics`) and `customize`.
+  `content`, `order`, the reader features (`search`, `pagination`, `subscribe`, `seo`, `comments`, `analytics`, `scripts`) and `customize`.
   `domain` is shown read-only, the theme has its own screen, and
   `repo`, `cover` and any key it does not know are edited by hand (they are carried through untouched). *Save settings…* shows the usual pre-flight and commits `blog.json` together with every
   regenerated page, in one commit. Keys the form does not know are carried through; blank fields are removed.
@@ -1285,7 +1295,7 @@ any editing; deleting is safe but later (a pinned page keeps working after a del
 Signed in, open your blog and press **Settings** (`#repo=owner/repo[/folder]&settings`). It edits
 `blog.json` without hand-editing JSON: general info, media repositories (and the CDN/player URL
 templates), colours with light and dark values, fonts, width and text size, post list layout,
-header logo and links, footer text and links, and custom CSS; and the reader features: search, posts per page,
+header logo and links, footer text and links, custom CSS and integrity-pinned CDN script links; and the reader features: search, posts per page,
 the email subscribe form, the Twitter handle, `sitemap.xml` and `robots.txt`, and the comments and analytics scripts. A **live preview** restyles as you
 type (in an isolated shadow root, following your system light/dark setting); a value the validator
 refuses shows why and leaves the last good preview in place.
@@ -1296,6 +1306,59 @@ from the defaults is written, blank fields are removed, and keys the form does n
 carried through. A header logo must already exist in your images repository; it is pinned when you
 save, and a file that does not exist is refused before anything is sent. A post that cannot be
 published as it is blocks a settings change, as it would block any publish.
+
+### Custom JS (CDN links only)
+
+Next to **Custom CSS**, **Settings → Custom JS (CDN links only)** accepts links, never JavaScript source or
+`<script>` tags. Leave it blank to disable it. One link per line:
+
+```text
+https://cdn.jsdelivr.net/npm/package@version/file.js | sha384-BASE64_DIGEST
+https://esm.sh/package@version | sha384-BASE64_DIGEST | module
+```
+
+Replace these illustrative package names and digest placeholders with an actual, versioned script URL and
+its SRI hash. Use the CDN's supplied hash, or compute SHA-384 over the exact downloaded bytes:
+
+```sh
+curl --fail --location 'https://cdn.jsdelivr.net/npm/package@version/file.js' -o script.js
+printf 'sha384-'; openssl dgst -sha384 -binary script.js | openssl base64 -A
+```
+
+The corresponding top-level `blog.json` setting is:
+
+```json
+"scripts": [
+  {
+    "src": "https://cdn.jsdelivr.net/npm/package@version/file.js",
+    "integrity": "sha384-BASE64_DIGEST"
+  },
+  {
+    "src": "https://esm.sh/package@version",
+    "integrity": "sha384-BASE64_DIGEST",
+    "type": "module"
+  }
+]
+```
+
+* At most **8** entries. Only HTTPS URLs on **`cdn.jsdelivr.net`**, **`cdnjs.cloudflare.com`**,
+  **`unpkg.com`** or **`esm.sh`** are accepted, with an explicit script path and no credentials, custom
+  port or fragment. Other hosts, relative URLs, `data:`, `javascript:`, inline code and extra fields refuse
+  as `bad-blog-json`. This restriction applies to Custom JS; existing comments and analytics configuration is unchanged.
+* Every entry requires one correctly shaped **SHA-256, SHA-384 or SHA-512 SRI** hash. The generator validates
+  the declaration without fetching or executing the script; the reader's browser verifies the actual bytes.
+  A hash mismatch or missing CDN CORS support blocks execution and is reported in the browser console.
+* Classic scripts use `defer`; add `| module` (JSON: `"type": "module"`) for ES modules. Classic scripts
+  retain list order. Module graphs follow browser loading rules; do not assume ordering across classic and module scripts.
+  Tags carry `crossorigin="anonymous"` and `referrerpolicy="no-referrer"`.
+* Links are emitted at the end of published content and listing pages, not into feeds or redirect pages.
+  The editor, settings preview and `/blog/` reader **never load or execute them**. They are site settings,
+  not theme code, and theme export/import does not transfer them.
+* **A CDN is not a sandbox.** A linked script has the page's full powers and can make further requests.
+  SRI pins only the entry file, **not module imports or resources it subsequently loads**. Check the library,
+  its licence, dependency graph, redirects and network behavior before enabling it. Sites that require no
+  third-party requests must leave this setting, comments scripts and analytics off. Core content must still
+  work without scripting; a CDN link is progressive enhancement, not a way to insert inline initialization code.
 
 ## Customization
 
@@ -1357,6 +1420,16 @@ posts. They are all ordinary content and `blog.json`:
 [the dealsinaz.com recreation](https://github.com/tejaswigowda/dealsinaz) is built this way: a hero, eight category tiles, a card grid
 with badges from tags, a feature strip and a footer bar, in about 10 KB of CSS.
 
+[webcli.app](https://webcli.app/) is another example: its pre-migration system-font layout, light/dark palette,
+section navigation, tool cards, same-origin screenshots and worked example were restored as blog-webCLI pages.
+Allowlisted HTML blocks supply the cards and definition lists; `customize.css` supplies their appearance.
+Its `tools.json` remains authoritative and a small publish-time script writes the canonical home pages before
+blog-webCLI builds them. All twelve current tools and their states are retained; the example's older measurement
+is labelled historical. No custom JavaScript is enabled on that site. The restoration passed ten site tests and
+390px/1280px light/dark checks with scripting disabled; its five-run cold phone measurement was **0 JavaScript
+files**, **0 ms blocking time**, **664 ms LCP**, with the method committed alongside the site. These are measurements
+of that restoration, not a performance guarantee for a blog that enables CDN scripts.
+
 ## Responsive pages
 
 In a list of posts (the index, tags, authors, search), **the whole card is the link**: the title's link is stretched over its card with CSS, no script, so a click or tap anywhere on it opens the post, while a card's own links (tags, comment count) stay clickable above it. Keyboard focus draws a ring around the card. It is in the base styles every theme gets, including the WordPress-classic markup.
@@ -1381,7 +1454,7 @@ extension registry, Worker sandbox or extension-output file. Heading links and
 `build` and `check` regenerate directly from the blog's source files; no editor-run
 preprocessing or output-coverage step is required. The same applies to scheduled publishing
 and imports into existing blogs. Themes remain pinned CSS and data; sandboxed video embeds
-and declared integrity-pinned comments and analytics scripts remain separate, supported features.
+and declared comments, analytics and integrity-pinned CDN script links remain separate, supported features.
 
 ### Extension retirement audit (2026-11-15)
 
@@ -1415,7 +1488,7 @@ manager or registry service.
 The published static HTML depends on no third-party JavaScript at read time by default. Font Awesome's
 pinned CDN stylesheet and fonts are the shared icon dependency. A theme's CSS is baked into
 every page. Themes execute no code. Reader-side embeds remain a separate, sandboxed category
-(below), and declared hash-pinned comments and analytics scripts remain opt-in.
+(below), and declared comments, analytics and integrity-pinned CDN script links remain opt-in.
 
 ### Pinning
 
@@ -1614,7 +1687,7 @@ Embeds remain separate from authored post HTML: the first-party video renderer e
 an iframe with `sandbox="allow-scripts"` and no `allow-same-origin`. The frame has an
 opaque origin and cannot access the parent's cookies, storage or editor token.
 The video release and player configuration are unchanged; `iframe` is still not an
-authored HTML-block tag. Declared comments and analytics scripts are configuration,
+authored HTML-block tag. Declared comments, analytics and CDN script links are configuration,
 not content blocks, and keep their integrity-pinning requirements.
 
 ### Licences
@@ -1899,6 +1972,7 @@ share image, canonical address and `noindex` per post.
 *Archive*, *Tags* (when any post has a tag), *Search* (when on), and *Feed*.
 
 **Comments, analytics, subscribe.** [Opt-in](#comments-analytics) embeds you point at an address; see above.
+**Custom JS.** [CDN links only](#custom-js-cdn-links-only), with required integrity hashes; never inline source.
 
 **Standalone pages.** `pages/<slug>.md`: see [Post frontmatter](#post-frontmatter). The editor lists them under
 *Pages* on the blog's start screen, and *New page* opens the same editor without date, tags or author.
@@ -2112,6 +2186,9 @@ upload, and nothing is uploaded until you confirm.
 `bad-release` · `unknown-slug-in-order` · `duplicate-slug-in-order` · `bad-order-list` ·
 `missing-order-field` · `mixed-order-field-types` · `bad-order-field` · `bad-html` · `bad-alias` · `alias-collision` · `stale-app` · `missing-source` · `bad-wp-export` · `bad-wp-site` · `import-refused`. A build that is refused writes nothing.
 
+Math refusals: `dollar-math` · `unclosed-math` · `math-macro` · `bad-math` · `math-in-heading`
+([syntax and limits](#latex-math)). A refused equation prevents the entire build from writing files.
+
 ## Gates
 
 `npm test` runs everything; the example blog in [examples/blog/](examples/blog) is the fixture.
@@ -2129,7 +2206,7 @@ upload, and nothing is uploaded until you confirm.
 | B9 drafts in no index, page or feed | `test/gates.test.js`, `test/app.test.js` |
 | B10 renaming a title does not change the URL | `test/gates.test.js` |
 | B11 ledger reads zero uploaded after render-and-browse | `test/app.test.js` |
-| X1 published-page code is built from `lib/`, plus any declared hash-pinned script | `test/x1.test.js`, `test/live.test.js`, `test/features.test.js`, `test/e2e/themes.e2e.mjs`: no evaluators or Workers, no theme code; declared integrity-pinned comments and analytics scripts remain the opt-in exception |
+| X1 published-page code is built from `lib/`, plus any declared hash-pinned script | `test/x1.test.js`, `test/live.test.js`, `test/features.test.js`, `test/e2e/themes.e2e.mjs`: no evaluators or Workers, no theme code; declared comments/analytics and integrity-pinned CDN links are opt-in exceptions; Custom JS accepts no inline source |
 | X3 embeds are `sandbox="allow-scripts"` without `allow-same-origin` | `test/packs.test.js`, `test/video-embed.test.js`, `test/x1.test.js` |
 | X4 themes pinned by ref and hash; a branch is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/cli-packs.test.js` |
 | X5 no declared licence is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/wp-import.test.js` |
@@ -2162,7 +2239,7 @@ upload, and nothing is uploaded until you confirm.
 | S3 pagination: absent, unchanged; present, previous/next that exist, canonical per page, the index and feed whole | `test/features.test.js`, `test/e2e/features.e2e.mjs` |
 | S4 search runs in the browser against `search.json`, writes results as text, loads one same-origin script on one page | `test/features.test.js` (ranking, files), `test/e2e/features.e2e.mjs` (real Chrome: a hostile post, the request log) |
 | S5 JSON-LD cannot end its `<script>`; `seo_title`, `image`, `canonical`, `noindex` each do exactly what they say | `test/features.test.js` |
-| S6 comments, analytics and the subscribe form are off by default and, when named, are exactly the address and attributes `blog.json` gives | `test/features.test.js` |
+| S6 comments, analytics, CDN script links and the subscribe form are off by default; CDN links require an allowed HTTPS host and integrity hash | `test/features.test.js`, `test/settings.test.js`, `test/e2e/themes.e2e.mjs` |
 | S7 standalone pages: no date or tags, in the menu by position, in no index, feed or search; drafts invisible; one address space | `test/features.test.js`, `test/features-app.test.js`, `test/e2e/features.e2e.mjs` |
 | S8 every feature on, the live renderer's post is byte-identical to the generator's; regenerating in any input order is byte-identical | `test/features.test.js` |
 | S9 turning a feature off deletes what it wrote, in the editor's pre-flight and in the CLI; `check` finds a stale file | `test/features-app.test.js` |
@@ -2227,6 +2304,20 @@ upload, and nothing is uploaded until you confirm.
 | P3 `/feed/` is a page that points at the feed, never the Atom document; every page has feed autodiscovery; an `<img>` carries `width` and `height` from the lock file; `seo.noindex` | `test/discovery.test.js` |
 | P4 headings to level 4, paragraph styles and picture layouts round-trip through markdown and render as classes | `test/discovery.test.js`, `test/markdown.test.js` |
 | N12 the media grid is lazy with explicit dimensions, opening it uploads nothing, and "unused" is computed from the index and the lock file | `test/media.test.js` |
+| V1 math is published as native MathML and remains visible with scripting disabled | `test/math.test.js`, `test/e2e/math.e2e.mjs` |
+| V2 inline delimiters and math fences are supported; dollar math is refused with the currency reason | `test/math.test.js` |
+| V3 code and HTML are excluded; escaped openers stay prose; an unclosed opener is refused | `test/math.test.js` |
+| V4 adversarial math survives byte-identical Markdown/Delta round trips, including real Quill reopen and edit | `test/corpus/math.md`, `test/markdown.test.js`, `test/math.test.js`, `test/e2e/math.e2e.mjs` |
+| V5 inline math is verbatim, alongside inline code in the Delta | `test/math.test.js`, `test/e2e/math.e2e.mjs` |
+| V6 macros and unsupported commands are refused with the file, expression and reason | `test/math.test.js` |
+| V7 trust is false and strict errors are enabled; links, URLs and images are refused | `test/math.test.js` |
+| V8 MathML is checked and reserialized; no addresses or unnecessary styles survive | `test/math.test.js` |
+| V9 every expression contains its exact LaTeX source annotation | `test/math.test.js`, `test/e2e/math.e2e.mjs` |
+| V10 only a live rebuild containing math imports the separate math bundle; normal pages fetch nothing new | `test/math.test.js`, `test/e2e/math.e2e.mjs` |
+| V11 the generator and lazy browser bundle return byte-identical complete HTML; math metadata records the renderer/version | `test/math.test.js`, `test/e2e/math.e2e.mjs` |
+| V12 math in headings is refused, preserving text-derived anchors | `test/math.test.js` |
+| V13 math is absent from plain text, excerpts, word count and search; the feed carries source text | `test/math.test.js` |
+| V14 no math stylesheet/font is shipped; desktop and phone measurements cover native layout | `test/e2e/math.e2e.mjs` |
 
 `npm test` runs the unit tests; `npm run test:e2e` drives a real Chrome (set `CHROME=` if it is not
 in a standard place; the tests skip themselves when it is absent). `test/imports.test.js` resolves
@@ -2298,9 +2389,9 @@ fast and the send is patient. A repository over what a browser can hold in memor
   `posts/<slug>.md`, so `/about/` is a 404 until the build finishes. An edited page, like any page, shows what was built.
 * The search index, tag pages, archive and sitemap are as of the last build; only post pages are refreshed from the live copy.
 * The `/blog/` reader shows every page the build writes, made by the same code, except the **search** page (it needs its own
-  script) and the third-party scripts (comments, analytics), which it never runs. A blog that has not been built yet is read from
+  script) and the third-party scripts (comments, analytics, CDN links), which it never runs. A blog that has not been built yet is read from
   its source, without the site's menu, tag pages or archive.
-* Comments and analytics are third-party scripts on your readers' pages (see [above](#comments-analytics)); the generator
+* Comments, analytics and opt-in CDN links are third-party scripts on your readers' pages (see [above](#custom-js-cdn-links-only)); the generator
   cannot vouch for them, only pin them with `integrity`.
 * Two tags that share an address (`C++`, `c`) share a page, and the first alphabetically names it; nothing refuses it.
 * `index/posts.json` now records each post's `author`, and the standalone `pages`; readers that ignore unknown fields are unaffected.

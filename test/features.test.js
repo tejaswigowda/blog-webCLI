@@ -9,6 +9,7 @@ import { rank, snippet, tokenize } from '../lib/search-client.js';
 import { slugify, groupTags, paginate, byYear } from '../lib/taxonomy.js';
 import { loadSite, renderFromSite } from '../lib/live-render.js';
 import { stripData } from './helpers.js';
+import { validateScripts } from '../lib/embeds.js';
 
 const enc = new TextEncoder();
 
@@ -291,6 +292,39 @@ test('embeds: comments under a post, analytics on every page, a subscribe form; 
   assert.ok(!files['archive/index.html'].includes('class="subscribe"'));
   // the analytics script is placed once, and a page never gets a handler or inline code from this
   for (const html of Object.values(files)) if (typeof html === 'string') assert.ok(!/\son[a-z]+=|javascript:/.test(html.replace(/<style>[\s\S]*?<\/style>/g, '')));
+});
+
+// ---------- CDN scripts ----------
+test('CDN scripts: only approved HTTPS hosts, pinned hashes and external classic/module links', async () => {
+  const integrity = `sha384-${Buffer.alloc(48).toString('base64')}`;
+  const scripts = [
+    { src: 'https://cdn.jsdelivr.net/npm/example@1/index.js?a=1&b=2', integrity },
+    { src: 'https://cdnjs.cloudflare.com/ajax/libs/example/1/example.js', integrity },
+    { src: 'https://unpkg.com/example@1/index.js', integrity },
+    { src: 'https://esm.sh/example@1', integrity, type: 'module' },
+  ];
+  const blog = { scripts, search: true, repo: 'me/blog', content: { base: 'https://content.test/{owner}/{repo}/{ref}/{path}' } };
+  const { files } = ok(blog, [...POSTS, page('about')]);
+  for (const f of ['index.html', 'alpha/index.html', 'about/index.html', 'archive/index.html', 'tags/video/index.html', 'search/index.html']) {
+    const html = files[f];
+    assert.equal((html.match(/crossorigin="anonymous" referrerpolicy="no-referrer"><\/script>/g) || []).length, 4, f);
+    assert.ok(html.includes('index.js?a=1&amp;b=2" defer integrity='), f);
+    assert.ok(html.includes(`src="https://esm.sh/example@1" type="module" integrity="${integrity}"`), f);
+  }
+  assert.ok(!files['feed.xml'].includes('<script'));
+  const map = new Map(Object.entries({ ...files, 'blog.json': JSON.stringify(blogJson(blog)), 'assets.lock.json': '{}' }));
+  const live = await loadSite(async (p) => map.has(p) ? enc.encode(map.get(p)) : null);
+  assert.equal(renderFromSite(live, { slug: 'alpha', text: POSTS[0].text }).html, files['alpha/index.html']);
+  const invalid = (s) => assert.throws(() => validateScripts(s), (e) => e.code === 'bad-blog-json');
+  for (const src of ['http://unpkg.com/x.js', '//unpkg.com/x.js', '/x.js', 'data:text/javascript,alert(1)', 'javascript:alert(1)', 'https://unpkg.com.evil.test/x.js', 'https://evil.test/unpkg.com/x.js', 'https://user@unpkg.com/x.js', 'https://unpkg.com:444/x.js', 'https://unpkg.com/x.js#fragment', 'https://unpkg.com/']) {
+    invalid([{ src, integrity }]);
+  }
+  for (const patch of [{ integrity: '' }, { integrity: 'sha384-nope' }, { integrity: undefined }, { code: 'alert(1)' }, { onload: 'alert(1)' }, { type: 'text/javascript' }]) {
+    invalid([{ ...scripts[0], ...patch }]);
+  }
+  invalid({});
+  invalid([null]);
+  invalid(Array(9).fill(scripts[0]));
 });
 
 // ---------- standalone pages ----------

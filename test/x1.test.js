@@ -115,11 +115,14 @@ test('X1: nothing reachable from the /blog/ reader can run code it fetched', asy
   for (const [file, src] of files) {
     // the shipped scripts are string constants the generator hands out, never code that runs here (test/live.test.js and
     // test/search.test.js check what they contain)
-    if (/(?:live|search)-source\.js$/.test(file)) {
+    if (/(?:live|search|math)-source\.js$/.test(file)) {
       assert.match(src, /^(?:\/\/[^\n]*\n)*export const [A-Z_]+ = "(?:[^"\\\n]|\\.)*";\n$/, `${path.relative(root, file)} is a single string constant`);
       continue;
     }
-    const code = stripCommentsAndStrings(src);
+    // Temml's DOM-free string adapter stores URL strings on its own tree nodes, not browser nodes.
+    // neutral.test.js independently proves it has no DOM globals; all other load/eval checks still apply.
+    const dataFields = file.endsWith('/vendor/temml/temml.esm.js') ? src.replace(/\bthis\.(?:src|href)\s*=/g, 'this.url=') : src;
+    const code = stripCommentsAndStrings(dataFields);
     for (const [re, what] of EVALUATORS) assert.ok(!re.test(code), `${path.relative(root, file)} uses ${what}`);
   }
   // and the page that hosts it

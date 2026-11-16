@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="description" content="About the GitHub-native editor, reader and static-site generator, with tutorials and migration guides.">
+<title>About blog-webCLI</title>
+<link rel="canonical" href="https://blog.webcli.app/about/">
+<link rel="stylesheet" href="/about/tutorials/tutorials.css">
+</head>
+<body>
+<main>
+<nav class="actions" aria-label="Site"><a href="/">Open the editor</a><a href="/about/">About</a><a href="/about/tutorials/">Tutorials and guides</a></nav>
+<h1>About blog-webCLI</h1>
+<p class="lead">A blog is a GitHub repository. blog-webCLI is a browser editor, reader and shared static-site generator for publishing that repository as a site you can inspect, copy and keep.</p>
+<h2>Your content, in your repository</h2>
+<p>Posts and standalone pages are canonical markdown with frontmatter. Site settings live in blog.json. Publishing commits the source and regenerated HTML, index and feed to GitHub; GitHub Pages can serve the result without an application server.</p>
+<p>The editor uses Quill, but markdown is the stored format. A round-trip check refuses content that cannot survive conversion without loss. HTML blocks have an allowlist; CSS classes connect authored structure to the site&#39;s styling.</p>
+<p>Themes, system typography, Custom CSS, widgets, slideshows, heading anchors, optional contents and publish-time MathML provide presentation without embedding arbitrary code in a post.</p>
+<h2>What runs where</h2>
+<p>The editor and the token-free reader are JavaScript applications. The editor talks directly to GitHub for repository operations; an optional GitHub sign-in configuration can use an OAuth exchange proxy. A fine-grained token is another supported sign-in method.</p>
+<p>Publishing is egress: source, generated pages and any selected media are sent to the repositories shown in the pre-flight. The egress ledger makes those requests visible. Nothing is published until you confirm the operation.</p>
+<p>Published content is static HTML and remains readable without scripting. Optional search, live updates and slideshow playback add first-party scripts for those features. Math is rendered at publish time rather than requiring a reader-side math library.</p>
+<p>Comments scripts, analytics and Custom JS CDN links are explicit opt-ins. Custom JS accepts approved HTTPS CDN links with required integrity hashes, never inline JavaScript. These scripts run with the published page&#39;s full powers, not inside a sandbox; they can make further requests. The editor and reader preview do not execute them.</p>
+<h2>Not just chronological blogs</h2>
+<p>Standalone pages, home-page slots, reusable content widgets and Custom CSS can make a portfolio, documentation site or directory. The <a href="/about/tutorials/recreate-webcli-app.html">webcli.app tutorial</a> explains a real rebuild: an existing tool directory recreated with structured data, canonical pages and CSS, without its former client-side rendering dependency.</p>
+<p>The <a href="/about/tutorials/">tutorials and guides</a> also cover the Swim Platform migration, with screenshots and a downloadable theme recipe. For a shorter starting point, read the <a href="/about/WP-MIGRATION-GUIDE.md">WordPress migration guide</a>.</p>
+<h2>Inspect the implementation</h2>
+<p>The shared lib code is used by the generator and live renderer so that publishing and rebuilding follow the same rules. Tests cover round trips, validation, generated output, runtime boundaries and browser workflows.</p>
+<p>The <a href="https://github.com/tejaswigowda/blog-webCLI#readme" rel="noopener noreferrer">README</a> describes the markdown dialect, configuration, commands, limitations and verification gates. The <a href="https://github.com/tejaswigowda/blog-webCLI" rel="noopener noreferrer">source repository</a> holds the implementation and issue tracker.</p>
+<h2>Licences and contributions</h2>
+<p>The runtime library and generated-page code are MIT-licensed. The editor, reader and command-line tool are GPL-3.0-only. Third-party components retain their own licences; see <a href="/#licences">Licences and dependencies</a> for the generated inventory and the repository&#39;s licence files for the terms.</p>
+<p>Report a problem or propose an improvement through <a href="https://github.com/tejaswigowda/blog-webCLI/issues" rel="noopener noreferrer">GitHub issues</a>. A useful report names the command or editor action, expected result and refusal or error, without including tokens or other secrets.</p>
+<p><a href="/about/tutorials/recreate-webcli-app.html">Tutorial: recreating webcli.app</a> · <a href="/">Open the editor</a></p>
+<footer>blog-webCLI · <a href="https://github.com/tejaswigowda/blog-webCLI">Source and documentation</a></footer>
+</main>
+</body>
+</html>

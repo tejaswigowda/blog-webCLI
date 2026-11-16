@@ -13,6 +13,8 @@
     "build:example": "node cli/blog.js build examples/blog",
     "check:example": "node cli/blog.js check examples/blog",
     "build:live": "node cli/build-live.js",
+    "build:about": "node cli/build-about.js",
+    "check:about": "node cli/build-about.js --check",
     "check:live": "node cli/build-live.js --check",
     "serve": "node cli/serve.js",
     "test:e2e": "node --test \"test/e2e/*.e2e.mjs\""

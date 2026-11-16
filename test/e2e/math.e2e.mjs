@@ -6,6 +6,7 @@ import { buildSite } from '../../lib/blog.js';
 import { EXAMPLE_BLOG } from '../../lib/sample.js';
 import { MATH_ID } from '../../lib/math-syntax.js';
 import { chromePath, launch, openPage } from './cdp.mjs';
+import { buildTarget } from '../../cli/build-live.js';
 
 const skip = chromePath() ? false : 'Chrome is not installed';
 const source = await readFile(new URL('../corpus/math.md', import.meta.url), 'utf8');
@@ -21,10 +22,13 @@ const wait = async (page, expression) => {
 
 async function world({ live = false } = {}) {
   let built, latest, origin, unavailable = false;
+  const probe = live ? await buildTarget({ name: 'live', entry: 'live.js', constant: 'LIVE_PROBE', what: 'live-render parity probe' }) : '';
+  const probeCode = probe ? JSON.parse(/^export const LIVE_PROBE = (.*);$/m.exec(probe)[1]) : '';
   const requests = [];
   const server = createServer(async (req, res) => {
     const path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
     requests.push(path);
+    if (path === '/probe.js') return res.writeHead(200, { 'content-type': 'text/javascript' }).end(probeCode);
     if (path === '/editor.html') return res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><meta charset="utf-8"><div id="editor"></div>');
     if (/^\/(?:app|lib|vendor)\/[\w/.-]+$/.test(path) && !path.includes('..')) {
       try {
@@ -109,6 +113,19 @@ test('V10/V11: live checks fetch math only for changed math, including a new pos
       }
       page.close();
     }
+    const parity = await openPage(chrome, `${w.origin}/editor.html`);
+    await wait(parity, "location.pathname === '/editor.html' && document.querySelector('#editor')");
+    const rebuilt = await parity.evaluate(`(async () => {
+      const {checkPage} = await import('/probe.js');
+      const get = async path => {
+        const response = await fetch('/content/me/blog/HEAD/' + path);
+        return response.status === 404 ? null : new Uint8Array(await response.arrayBuffer());
+      };
+      return checkPage({base:'parity',slug:'math',builtSha:'old',get});
+    })()`);
+    assert.equal(rebuilt.state, 'rebuilt');
+    assert.equal(rebuilt.html, w.latest['math/index.html'], 'the lazy browser bundle and generator return byte-identical complete HTML');
+    parity.close();
     w.unavailable(true);
     const failed = await openPage(chrome, `${w.origin}/math/?failed=1`);
     await wait(failed, "document.documentElement.dataset.webcliLive === 'left'");
@@ -122,6 +139,7 @@ test('V4/V5: real Quill preserves inline math and the math fence language on reo
   const chrome = await launch();
   try {
     const page = await openPage(chrome, `${w.origin}/editor.html`);
+    await wait(page, "location.pathname === '/editor.html' && document.querySelector('#editor')");
     const result = await page.evaluate(`(async () => {
       const {createEditor} = await import('/app/editor.js');
       const {mdToDelta,deltaToMarkdownChecked} = await import('/lib/markdown.js');

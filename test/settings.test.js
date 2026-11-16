@@ -7,7 +7,7 @@ import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
 import { describePlan, executePlan, loadBlog, planSettings } from '../app/site.js';
 import { buildSite, validateBlog } from '../lib/blog.js';
-import { blogToForm, customizeFromForm, formToBlog, linksToText, parseLinks } from '../lib/settings.js';
+import { blogToForm, customizeFromForm, formToBlog, linksToText, parseLinks, parseScripts } from '../lib/settings.js';
 import { stripData } from './helpers.js';
 import { fakeGitHub } from './fake-github.js';
 
@@ -22,6 +22,21 @@ test('links: "Label | url" per line, and back', () => {
   assert.equal(linksToText(parseLinks('A | https://a.b', 'x')), 'A | https://a.b');
   assert.throws(() => parseLinks('A https://a.b', 'Header links'), (e) => e.code === 'bad-blog-json' && /Header links line 1/.test(e.detail));
   assert.deepEqual(parseLinks('Pipes | https://a.b/?x=1|2', 'x'), [{ label: 'Pipes', url: 'https://a.b/?x=1|2' }], 'only the first | separates');
+});
+
+test('CDN script settings preserve links and module mode; blank removes them and pasted code refuses', async () => {
+  const hash = `sha256-${Buffer.alloc(32).toString('base64')}`;
+  const base = { ...await exampleBlog(), scripts: [
+    { src: 'https://cdn.jsdelivr.net/npm/example@1/index.js', integrity: hash },
+    { src: 'https://esm.sh/example@1', integrity: hash, type: 'module' },
+  ] };
+  const form = blogToForm(base);
+  assert.deepEqual(formToBlog(base, form).scripts, base.scripts);
+  assert.ok(!('scripts' in formToBlog(base, { ...form, cdnScripts: '' })));
+  assert.doesNotThrow(() => validateBlog(formToBlog(base, form)));
+  for (const text of ['alert(1)', '<script src="https://unpkg.com/x"></script>', `https://unpkg.com/x | ${hash} | async`, 'https://unpkg.com/x |', `https://example.test/x | ${hash}`]) {
+    refused(() => parseScripts(text));
+  }
 });
 
 test('form <-> blog.json: the example round-trips to the same site', async () => {

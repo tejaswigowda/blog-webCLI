@@ -362,6 +362,9 @@ function renderTop(repo, ref) {
     h('span', { class: 'badge-local', title: 'The editor commits straight to GitHub from this page. There is no server in between.' }, 'No server in between'),
     form,
     auth,
+    h('nav', { class: 'help-nav', 'aria-label': 'Help' },
+      h('a', { href: 'about/tutorials/' }, 'Tutorials'),
+      h('a', { href: 'about/' }, 'About')),
     outbound('Fork on GitHub', 'https://github.com/tejaswigowda/blog-webCLI', { class: 'gh-link' }),
   );
 }
@@ -764,6 +767,8 @@ async function settingsView(repo, r) {
       h('div', { class: 'row' }, field('Footer text', input('footerText', { placeholder: '© 2026 Your Name' })), field('Footer links', area('footerLinks', 3, { placeholder: 'Source | https://github.com/you/blog' }))),
     ),
     section('Custom CSS', highlightedTextarea(area('css', 6, { class: 'mono', spellcheck: 'false', placeholder: '.posts h2 { letter-spacing: .02em }' })), h('div', { class: 'hint' }, 'Rules, @media, @supports and @keyframes only. No url(), @import, @font-face or escapes: a stylesheet cannot load anything.')),
+    section('Custom JS (CDN links only)', field('CDN script links', area('cdnScripts', 4, { name: 'cdnScripts', class: 'mono', spellcheck: 'false', placeholder: 'https://cdn.jsdelivr.net/npm/package@version/file.js | sha384-…' }), 'One per line: URL | integrity. Add | module for ES modules. Up to 8 links from cdn.jsdelivr.net, cdnjs.cloudflare.com, unpkg.com or esm.sh. No pasted JavaScript or script tags.'),
+      h('div', { class: 'hint' }, 'Off when blank. These scripts run with the published page\'s full powers and can make network requests. An integrity hash is required; the CDN must support CORS. Nothing runs in this editor, the settings preview or the /blog/ reader.')),
   );
   let timer = null;
   form.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(redraw, 120); });
@@ -1063,7 +1068,7 @@ function licencesView(repo, r) {
     h('p', { class: 'hint' }, nav('Licences of the tool itself', '#licences')),
     h('p', { class: 'muted' }, 'The theme this blog depends on, with its licence. Recorded in blog.json, written to licences.json, and stamped into each generated page as a comment.'),
     h('table', { style: 'width:100%;border-collapse:collapse' }, h('thead', {}, h('tr', {}, ['Kind', 'Name', 'Version', 'Licence', 'Pinned to'].map((t) => h('th', { style: 'text-align:left;border-bottom:1px solid var(--rule);padding:.3rem' }, t)))), h('tbody', {}, rows.map((x) => h('tr', {}, [x.kind, x.name, x.version || '', x.licence, x.repo ? `${x.repo}@${x.ref}` : 'built in'].map((t) => h('td', { style: 'padding:.3rem;border-bottom:1px solid var(--rule)' }, String(t))))))),
-    h('p', { class: 'hint' }, `The first-party generator and ${blog.theme && typeof blog.theme === 'object' ? 'your pinned theme' : 'the default theme'} shape the pages. Posts and images are your own content. Declared, hash-pinned comments and analytics scripts remain opt-in.`),
+    h('p', { class: 'hint' }, `The first-party generator and ${blog.theme && typeof blog.theme === 'object' ? 'your pinned theme' : 'the default theme'} shape the pages. Posts and images are your own content. Comments, analytics and integrity-pinned CDN script links remain opt-in.`),
   );
 }
 

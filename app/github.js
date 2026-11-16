@@ -1,7 +1,7 @@
 // Minimal GitHub client: raw reads for public repos, REST for everything with a token,
 // and the Git Data API for multi-file commits.
 import { Refusal } from '../lib/errors.js';
-import { varyPath } from '../lib/live.js';
+import { varyPath } from '../lib/vary-path.js';
 
 export class GitHubError extends Error {
   constructor(status, message, hint = '') {
