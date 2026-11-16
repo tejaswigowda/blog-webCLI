@@ -259,7 +259,7 @@ not per-post CSS. `theme-check --classes` lists the complete reserved inventory;
 The [layout corpus](test/layout/widgets.md) exercises the whole contract at desktop and phone widths.
 
 Content headings (`h1` through `h6`) automatically receive deterministic, collision-safe
-IDs derived from their text, with a permalink link inside each heading. Duplicates take
+IDs derived from their text, including non-Latin text, with a permalink link inside each heading. Duplicates take
 `-2`, `-3`, in document order; inserting an unrelated heading above does not change existing
 anchors. **Known limit:** deleting the first of two identically titled headings promotes
 the second to the unsuffixed ID, changing its anchor. Authored IDs are kept.
@@ -270,6 +270,16 @@ that default. It is off when neither says. Only **h2 and h3** count, and fewer t
 qualifying headings produce no contents block. The list is at the top of the body, below
 the cover, in document order, linking the same heading anchors. Both features work without
 JavaScript in the reader and published HTML and never rewrite the source Markdown.
+
+For one article, add this inside its existing frontmatter delimiters (`---`):
+
+```yaml
+contents: true
+```
+
+For every article by default, add `"contents": true` to `blog.json`. Set
+`contents: false` in an individual article's frontmatter to hide its list without
+removing heading links. Do not write a separate contents widget or maintain its links by hand.
 
 FAQ accordions are supported now using native HTML, with no scripting or invented ARIA.
 The attribute allowlist is unchanged: authored roles and ARIA state are not accepted.
@@ -1297,6 +1307,17 @@ variables). A theme's own margins, colours and layout are left alone, and your `
 a classic theme styles (`page-header alignwide`, `page-title`, `entry-content`, `navigation pagination`), so they take the theme's look.
 
 ## Themes
+
+### First-party generation
+
+Extensions are no longer supported: there is no Extensions screen, `ext` command,
+extension registry, Worker sandbox or extension-output file. Heading links and
+[optional contents lists](#widgets-and-automatic-navigation) are built into generation.
+
+`build` and `check` regenerate directly from the blog's source files; no editor-run
+preprocessing or output-coverage step is required. The same applies to scheduled publishing
+and imports into existing blogs. Themes remain pinned CSS and data; sandboxed video embeds
+and declared integrity-pinned comments and analytics scripts remain separate, supported features.
 
 ### Extension retirement audit (2026-11-15)
 
