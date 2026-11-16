@@ -56,6 +56,20 @@ test('Animate.css ships locally with default and pinned themes, retaining its MI
   assert.equal(generated, await animateModule(), 'run npm run build:live after replacing the upstream stylesheet');
 });
 
+test('individual slide effects round-trip with relative links and reject unsupported animations', () => {
+  const html = slideshowHtml([{ ...slides[0], animation: 'none', imageAnimation: 'zoomIn', titleAnimation: 'fadeInUp', textAnimation: 'fadeIn', labelAnimation: 'bounceIn', url: './products/?type=boat#sizes' }, slides[1]]);
+  for (const [tag, effect] of [['img', 'zoomIn'], ['h2', 'fadeInUp'], ['p', 'fadeIn'], ['a', 'bounceIn']]) {
+    assert.ok(html.includes(`<${tag} class="webcli-animate-${effect}"`));
+  }
+  assert.equal(deltaToMd(mdToDelta(`${html}\n`)), `${html}\n`);
+  assert.match(deltaToHtml(mdToDelta(html), { resolve: (ref) => `https://images.example/${ref.slice(6)}` }), /href="\.\/products\/\?type=boat#sizes"/);
+  for (const key of ['imageAnimation', 'titleAnimation', 'textAnimation', 'labelAnimation']) {
+    for (const value of ['fadeOut', 'oops" onclick="alert(1)', null]) {
+      assert.throws(() => slideshowHtml([{ ...slides[0], [key]: value }, slides[1]]), /choose an animation/);
+    }
+  }
+});
+
 test('slideshow builds on the landing and standalone page, shipping a local runtime only when needed', () => {
   const blog = { title: 'T', author: 'A', description: 'D', domain: 'https://example.com', repo: 'me/blog', assets: { repos: { images: 'me/blog/images' }, base: 'https://images.example/{sha}/{path}' } };
   const lock = { 'images/first.jpg': 'a'.repeat(40), 'images/second.jpg': 'a'.repeat(40) };

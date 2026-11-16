@@ -141,6 +141,17 @@ dialog (a grid of cells, an alignment for each column, add and remove rows and c
 `{ mdtable: { head, align, rows } }` only while Quill has it; what is stored is the markdown above. Cells are drawn with DOM
 calls and `textContent`: nothing typed in a cell becomes markup in the editor, which holds the token.
 
+### Icons
+
+Every themed generated page and the `/blog/` reader loads Font Awesome Free 6.7.2 from
+cdnjs, pinned with Subresource Integrity (CSS and webfonts only, no third-party JavaScript).
+An internet connection is needed for the icons. Use icons in HTML blocks, for example
+`<i class="fa-solid fa-piggy-bank" aria-hidden="true"></i>` beside a descriptive text label,
+or use the `"Font Awesome 6 Free"` font in custom CSS pseudo-elements. Custom CSS takes
+literal glyph characters; backslash escapes remain disallowed.
+Font Awesome's CSS is MIT-licensed and its fonts use SIL OFL 1.1
+([upstream licences](https://fontawesome.com/license/free)); they are loaded externally, not vendored.
+
 ### Slideshows
 
 The editor's **Insert a slideshow** button opens a form for 2-10 slides. Each needs an image
@@ -156,6 +167,11 @@ dropdown offers its entrance and attention effects, including Fade In, Fade In U
 and Bounce In, plus **None**. Fade In is the default, including for existing slideshows.
 The effect plays when a slide is shown, on autoplay or manual navigation. Exit effects are
 not offered because they would hide the newly selected slide.
+Separate dropdowns animate the image, heading, caption and link label independently (None
+by default). Set the whole-slide **Animation** to **None** to use only these element effects.
+All selected effects restart together when the slide appears and respect reduced motion.
+Use relative link addresses such as `./products/` where possible; these are preserved as
+written and resolve relative to the displayed page. Keep absolute addresses for external sites.
 
 Slideshows are saved as allowlisted HTML blocks, not plugin code. Repository images are pinned
 on publish like other images. Published pages and the local reader provide previous/next,
@@ -1054,6 +1070,8 @@ posts. They are all ordinary content and `blog.json`:
 * **`customize.topbar`, link icons and the `cards` thumbnails** above, with the footer text's own class, are the hooks.
 * **`customize.css`** does the rest: a grid for `.home`, tiles from a list of image-link-text items, badges from `li:has(a[href*="hot-deal"])`,
   a footer bar. Structure is selected by position (`.home > ul`, `.home > p:nth-child(3)`) because the markup is the page's own markdown.
+  Under the default markup contract, standalone pages also expose their slug as `article[data-page="products"]`, so page-specific
+  layouts work in generated pages and the reader without depending on the page title. Posts have no `data-page` attribute.
 
 [the dealsinaz.com recreation](https://github.com/tejaswigowda/dealsinaz) is built this way: a hero, eight category tiles, a card grid
 with badges from tags, a feature strip and a footer bar, in about 10 KB of CSS.
@@ -1078,9 +1096,10 @@ manager, no build step and no registry service: both are named by address and pi
 
 > **Extensions run at publish, not at read. Their output is committed.**
 
-The published static HTML depends on no third-party code at read time. A theme's CSS is baked into
+The published static HTML depends on no third-party JavaScript at read time by default. Font Awesome's
+pinned CDN stylesheet and fonts are the shared icon dependency. A theme's CSS is baked into
 every page; an extension's effect lands in the committed output, where it is diffed, reviewed and
-reverted like any other change. The reader executes nothing. Something that must run in a reader's
+reverted like any other change. No theme or extension code executes while reading. Something that must run in a reader's
 browser is not an extension: it is a *sandboxed embed* (below).
 
 ### Pinning
@@ -1389,7 +1408,7 @@ and `BLOG_WEBCLI_EXTENSIONS` to point elsewhere) and skips when they are absent.
 
 ## Dependencies and licences
 
-Every third-party file or package, its licence, its upstream and **which surface it lands on** is in
+Every distributed third-party file or package, its licence, its upstream and **which surface it lands on** is in
 [licences-inventory.json](licences-inventory.json). It is generated (`node cli/inventory.js`, from `package-lock.json`, the `SOURCE.json` beside
 each vendored file and what the shipped scripts are bundled from), never maintained by hand, and shown in the app at
 [`#licences`](https://blog.webcli.app/#licences) (and linked from the home page).
@@ -1847,7 +1866,7 @@ upload, and nothing is uploaded until you confirm.
 | B9 drafts in no index, page or feed | `test/gates.test.js`, `test/app.test.js` |
 | B10 renaming a title does not change the URL | `test/gates.test.js` |
 | B11 ledger reads zero uploaded after render-and-browse | `test/app.test.js` |
-| X1 no third-party code executes when reading a published blog | `test/x1.test.js`, `test/live.test.js` (a page has no executable script, event handler or foreign stylesheet; JSON-LD is data and is the one script type allowed besides the one same-origin module the live script and the search page add; import-graph scan of the reader and generator for evaluators, Workers and dynamic import; CSPs), `test/e2e/themes.e2e.mjs` (the reader contacts neither the theme nor the extension repository). The opt-in comments and analytics scripts are the stated exception, off by default |
+| X1 no third-party code executes when reading a published blog | `test/x1.test.js`, `test/live.test.js` (a page has no executable script, event handler or foreign stylesheet other than the SRI-pinned Font Awesome CSS; JSON-LD is data and is the one script type allowed besides the one same-origin module the live script and the search page add; import-graph scan of the reader and generator for evaluators, Workers and dynamic import; CSPs), `test/e2e/themes.e2e.mjs` (the reader contacts neither the theme nor the extension repository). The opt-in comments and analytics scripts are the stated exception, off by default |
 | X2 build extensions run in a Worker with no DOM, no network, no credentials | `test/e2e/sandbox.e2e.mjs` (real Chrome: hostile extensions, an attacker server that must see nothing, the frame CSP alone, a runaway loop killed) |
 | X3 embeds are `sandbox="allow-scripts"` without `allow-same-origin` | `test/packs.test.js` (sanitizer), `test/packs-app.test.js`, `test/x1.test.js` |
 | X4 themes and extensions pinned by ref and hash; a branch is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/cli-packs.test.js` |

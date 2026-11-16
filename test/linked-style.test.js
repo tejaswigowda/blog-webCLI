@@ -12,6 +12,7 @@ import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
 import { executePlan, planSettings } from '../app/site.js';
 import { fakeGitHub } from './fake-github.js';
+import { readFile } from 'node:fs/promises';
 
 const enc = new TextEncoder();
 const BLOG = { title: 'Deals', description: 'Live better', author: 'Ada', domain: 'https://example.test/blog', repo: 'me/blog', search: true, pagination: { size: 3 } };
@@ -43,8 +44,28 @@ test('linked stylesheet: pages link style.css and carry no <style>; the file is 
 test('linked stylesheet: the default is unchanged, and "inline" says so', () => {
   const plain = build(withCss('.x{color:red}'));
   assert.ok(!('style.css' in plain));
-  assert.ok(plain['index.html'].includes('<style>') && !plain['index.html'].includes('rel="stylesheet"'));
+  assert.ok(plain['index.html'].includes('<style>') && !plain['index.html'].includes('href="./style.css"'));
   assert.deepEqual(build(withCss('.x{color:red}', { stylesheet: 'inline' })), plain);
+});
+
+test('Font Awesome: themed pages and the reader share a pinned CSS-only CDN dependency', async () => {
+  const reader = await readFile(new URL('../blog/index.html', import.meta.url), 'utf8');
+  const link = reader.match(/<link\b[^>]*href="https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/font-awesome\/6\.7\.2\/css\/all\.min\.css"[^>]*>/)?.[0];
+  assert.ok(link);
+  assert.match(link, /integrity="sha512-[A-Za-z0-9+/]+=*"/);
+  assert.match(link, /crossorigin="anonymous"/);
+  assert.match(link, /referrerpolicy="no-referrer"/);
+  const csp = reader.match(/Content-Security-Policy" content="([^"]+)"/)[1];
+  assert.match(csp, /style-src 'self' 'unsafe-inline' https:\/\/cdnjs\.cloudflare\.com;/);
+  assert.match(csp, /script-src 'self';/);
+  for (const stylesheet of ['inline', 'linked']) {
+    const files = build({ ...BLOG, stylesheet });
+    for (const [file, html] of Object.entries(files)) {
+      if (!file.endsWith('.html') || /http-equiv="refresh"/.test(html)) continue;
+      assert.equal(html.split(link).length - 1, 1, `${stylesheet}: ${file} loads the same pinned stylesheet exactly once`);
+      assert.doesNotMatch(html, /<script[^>]+(?:font-awesome|cdnjs\.cloudflare\.com)/);
+    }
+  }
 });
 
 test('linked stylesheet: changing the CSS changes one file; inline, it changes every page', () => {

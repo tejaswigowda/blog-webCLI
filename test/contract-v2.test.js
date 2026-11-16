@@ -12,6 +12,13 @@ const idx = { blog, home: '', feed: 'feed.xml', hrefFor: (s) => `${s}/`, entries
 const post = { blog, meta: { slug: 's', title: 'S', date: '2026-01-01', tags: [] }, bodyHtml: '<p>x</p>', home: '', feed: 'feed.xml', logoUrl: 'logo.png' };
 const pg = { n: 2, of: 3, at: 2, stable: false, nav: { prev: { href: '../' }, next: { href: '../3/' } } };
 
+test('default standalone pages expose an escaped slug for page-specific styling, not posts', () => {
+  const data = { ...post, page: true, meta: { ...post.meta, slug: 'products' } };
+  assert.match(postBody('blog-webcli-v1', data).html, /<article data-page="products">/);
+  assert.match(postBody('blog-webcli-v1', post).html, /<article>/);
+  assert.match(postBody('blog-webcli-v1', { ...data, meta: { ...data.meta, slug: 'a"b' } }).html, /data-page="a&quot;b"/);
+});
+
 // wordpress-classic-2 is wordpress-classic plus classes a blog can truthfully carry. It is a new name, so that the output of the
 // two older contracts stays what it was byte for byte (the blog's pinned themes are written against it).
 test('wordpress-classic-2 is a known contract, and takes a skeleton as the classic one does', () => {

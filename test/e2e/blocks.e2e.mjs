@@ -139,8 +139,9 @@ test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsa
     await fill(page, 'dialog input[aria-label="Slide 1 caption"]', '<script>not executable</script>');
     await fill(page, 'dialog input[aria-label="Slide 1 link label"]', 'Products');
     assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog button.primary').disabled"), true, 'a label requires its address');
-    await fill(page, 'dialog input[aria-label="Slide 1 link address"]', 'https://example.com/products/');
+    await fill(page, 'dialog input[aria-label="Slide 1 link address"]', './products/');
     await page.evaluate("for (const [i, value] of [[1, 'fadeInUp'], [2, 'none']]) { const select = document.querySelector('select[aria-label=\"Slide ' + i + ' animation\"]'); select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); }");
+    await page.evaluate("for (const [field, value] of [['image', 'zoomIn'], ['heading', 'fadeInDown'], ['caption', 'fadeInLeft'], ['link label', 'bounceIn']]) { const select = document.querySelector('select[aria-label=\"Slide 1 ' + field + ' animation\"]'); select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); }");
     await clickText(page, 'dialog button', '+ Slide');
     assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog button.primary').disabled"), true);
     await page.evaluate("document.querySelector('button[aria-label=\"Remove slide 3\"]').click(); document.querySelector('button[aria-label=\"Move slide 2 up\"]').click(); 0");
@@ -152,6 +153,10 @@ test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsa
     assert.equal(await page.evaluate("document.querySelector('input[aria-label=\"Slide 2 heading\"]').value"), 'Platform 1');
     assert.equal(await page.evaluate("document.querySelector('select[aria-label=\"Slide 1 animation\"]').value"), 'none');
     assert.equal(await page.evaluate("document.querySelector('select[aria-label=\"Slide 2 animation\"]').value"), 'fadeInUp');
+    for (const [field, value] of [['image', 'zoomIn'], ['heading', 'fadeInDown'], ['caption', 'fadeInLeft'], ['link label', 'bounceIn']]) {
+      assert.equal(await page.evaluate(`document.querySelector('select[aria-label="Slide 2 ${field} animation"]').value`), value, 'element choices survive reordering and reopening');
+    }
+    assert.equal(await page.evaluate("document.querySelector('input[aria-label=\"Slide 2 link address\"]').value"), './products/');
     await clickText(page, 'dialog button', 'Apply');
     await until(page, "!document.querySelector('dialog.blk-dialog')");
     await clickText(page, '#view button', 'Save draft');
@@ -164,7 +169,8 @@ test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsa
     assert.match(withSlides, /&lt;script&gt;not executable&lt;\/script&gt;/);
     assert.match(withSlides, /webcli-animate-none/);
     assert.match(withSlides, /webcli-animate-fadeInUp/);
-    assert.ok(withSlides.indexOf('<h2>Platform 2</h2>') < withSlides.indexOf('<h2>Platform 1</h2>'));
+    assert.match(withSlides, /<a class="webcli-animate-bounceIn" href="\.\/products\/">Products<\/a>/);
+    assert.ok(withSlides.indexOf('<h2>Platform 2</h2>') < withSlides.indexOf('<h2 class="webcli-animate-fadeInDown">Platform 1</h2>'));
     assert.equal(await page.evaluate("document.querySelectorAll('.ql-editor script').length"), 0);
     assert.deepEqual(await page.evaluate('window.__alerts'), []);
   } finally {
@@ -188,7 +194,7 @@ test('slideshow player: autoplay, pause, controls, reduced motion and cleanup in
       style.textContent = THEME_DEFAULT;
       document.head.append(style);
       window.__player = await import('/lib/slideshow-player.js');
-      const html = slideshowHtml([1, 2, 3].map(n => ({ image: 'https://example.com/' + n + '.jpg', alt: 'Boat ' + n, title: 'Slide ' + n, text: '', label: 'Products', url: '/products/', animation: [undefined, 'fadeInUp', 'none'][n - 1] })));
+      const html = slideshowHtml([1, 2, 3].map(n => ({ image: 'https://example.com/' + n + '.jpg', alt: 'Boat ' + n, title: 'Slide ' + n, text: 'Caption ' + n, label: 'Products', url: './products/', animation: [undefined, 'fadeInUp', 'none'][n - 1], ...(n === 3 ? { imageAnimation: 'fadeIn', titleAnimation: 'fadeInDown', textAnimation: 'fadeInLeft', labelAnimation: 'zoomIn' } : {}) })));
       document.body.innerHTML = html;
       window.__timers = new Map();
       let id = 0;
@@ -218,16 +224,23 @@ test('slideshow player: autoplay, pause, controls, reduced motion and cleanup in
     await clickText(page, 'button', 'Next');
     assert.equal(await active(), 'Slide 3');
     assert.equal(await page.evaluate("getComputedStyle(document.querySelector('figure:not([hidden])')).animationName"), 'none');
+    assert.deepEqual(await page.evaluate("[...document.querySelector('figure:not([hidden])').querySelectorAll('img, h2, p, a')].map(el => getComputedStyle(el).animationName)"), ['fadeIn', 'fadeInDown', 'fadeInLeft', 'zoomIn']);
+    await page.evaluate("window.__titleAnimation = document.querySelector('figure:not([hidden]) h2').getAnimations()[0]; 0");
+    await clickText(page, 'button', '3');
+    assert.equal(await page.evaluate("document.querySelector('figure:not([hidden]) h2').getAnimations()[0] !== window.__titleAnimation"), true, 'reselecting a slide restarts its element effects');
     await page.evaluate("document.querySelector('section').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))");
     assert.equal(await active(), 'Slide 1');
+    assert.equal(await page.evaluate("document.querySelectorAll('figure[hidden] .animate__animated').length"), 0, 'hidden slides retain no running element effects');
     await page.evaluate("document.querySelector('section').dispatchEvent(new Event('pointerleave'))");
     await clickText(page, 'button', 'Play');
     assert.equal(await page.evaluate('window.__timers.size'), 1);
     await page.evaluate("document.querySelector('figure:not([hidden]) a').focus()");
     assert.equal(await page.evaluate('window.__timers.size'), 0, 'focus pauses rotation');
+    await clickText(page, 'button', '3');
     await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await until(page, "document.querySelectorAll('.animate__animated').length === 0");
     assert.equal(await page.evaluate("getComputedStyle(document.querySelector('figure:not([hidden])')).animationName"), 'none', 'switching reduced motion on cancels the effect');
+    assert.equal(await page.evaluate("document.querySelectorAll('.animate__animated').length"), 0, 'reduced motion cancels child effects too');
     await page.evaluate('window.__cleanup()');
     assert.equal(await page.evaluate("document.querySelectorAll('figure:not([hidden])').length"), 3);
     assert.equal(await page.evaluate("document.querySelectorAll('.webcli-slide-controls').length"), 0);

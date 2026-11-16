@@ -45,7 +45,7 @@ async function configs() {
   ];
 }
 
-test('X1: a generated page has no script, no event handler, no foreign stylesheet, and only isolated frames', async () => {
+test('X1: a generated page has no script, no event handler, only the pinned icon stylesheet, and isolated frames', async () => {
   for (const [name, input] of await configs()) {
     const result = await buildSiteWith(input, localRunner);
     assert.deepEqual(result.errors, [], name);
@@ -58,7 +58,8 @@ test('X1: a generated page has no script, no event handler, no foreign styleshee
       assert.ok(!/<noscript\b/i.test(html), `${where}: <noscript>`);
       assert.ok(!/\son[a-z]+\s*=/i.test(markup), `${where}: an event handler attribute`);
       assert.ok(!/javascript:|vbscript:/i.test(markup), `${where}: a script URL`);
-      assert.ok(!/<link\b[^>]*rel=["']?(?:stylesheet|preload|modulepreload|prefetch|import)/i.test(html), `${where}: a linked resource`);
+      const withoutIcons = html.replace('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer">', '');
+      assert.ok(!/<link\b[^>]*rel=["']?(?:stylesheet|preload|modulepreload|prefetch|import)/i.test(withoutIcons), `${where}: an unpinned linked resource`);
       // the one page that refreshes is /feed/, which says the feed moved; a page that points a person at the feed cannot be an Atom document
       const redirects = file === 'feed/index.html' ? markup.replace(/<meta[^>]*http-equiv="refresh"[^>]*>/i, '') : markup;
       assert.ok(!/<(?:object|embed|applet|base|meta[^>]*http-equiv)/i.test(redirects), `${where}: an embedding or redirecting element`);
@@ -70,9 +71,9 @@ test('X1: a generated page has no script, no event handler, no foreign styleshee
         assert.ok(!/allow-same-origin|allow-top-navigation|allow-popups|allow-forms|srcdoc/i.test(m[0]), `${where}: a frame with extra privileges`);
         assert.match(m[0], /\ssrc="https:\/\//, `${where}: a frame that is not https`);
       }
-      // the only <meta> are the ones the generator writes; the only <link> are canonical, the feed, and prev/next to
+      // Besides the pinned icons, the only <link> are canonical, the feed, and prev/next to
       // another page of the same blog (a relative address, so it cannot name another site)
-      for (const m of html.matchAll(/<link\b[^>]*>/gi)) assert.match(m[0], /rel="(?:canonical|alternate)"|rel="(?:prev|next)" href="\.\.\/[a-z0-9-]+\/"/, `${where}: ${m[0]}`);
+      for (const m of withoutIcons.matchAll(/<link\b[^>]*>/gi)) assert.match(m[0], /rel="(?:canonical|alternate)"|rel="(?:prev|next)" href="\.\.\/[a-z0-9-]+\/"/, `${where}: ${m[0]}`);
     }
     // the stylesheet itself loads nothing but https assets and small inline data
     for (const m of (result.files['index.html'].match(/<style>[\s\S]*?<\/style>/) || [''])[0].matchAll(/url\(\s*["']?([^"')]+)/g)) assert.match(m[1], /^(https:\/\/|data:image\/|#)/, `${name}: url(${m[1].slice(0, 50)})`);

@@ -50,6 +50,7 @@ export function paintHtml(node, src) {
 function readSlideshow(src) {
   if (!src.startsWith('<section class="webcli-slideshow"')) return null;
   const doc = new DOMParser().parseFromString(src, 'text/html');
+  const animationOf = (node) => node && [...node.classList].find((name) => name.startsWith('webcli-animate-'))?.slice('webcli-animate-'.length);
   const slides = [...doc.querySelectorAll('figure.webcli-slide')].map((figure) => ({
     image: figure.querySelector('img')?.getAttribute('src') || '',
     alt: figure.querySelector('img')?.getAttribute('alt') || '',
@@ -57,7 +58,11 @@ function readSlideshow(src) {
     text: figure.querySelector('p')?.textContent || '',
     label: figure.querySelector('a')?.textContent || '',
     url: figure.querySelector('a')?.getAttribute('href') || '',
-    animation: [...figure.classList].find((name) => name.startsWith('webcli-animate-'))?.slice('webcli-animate-'.length),
+    animation: animationOf(figure),
+    imageAnimation: animationOf(figure.querySelector('img')) ?? undefined,
+    titleAnimation: animationOf(figure.querySelector('h2')) ?? undefined,
+    textAnimation: animationOf(figure.querySelector('p')) ?? undefined,
+    labelAnimation: animationOf(figure.querySelector('a')) ?? undefined,
   }));
   // Hand-edited HTML must stay in the HTML editor rather than lose anything this form cannot express.
   try {
@@ -181,26 +186,27 @@ const blankSlide = () => ({ image: '', alt: '', title: '', text: '', label: '', 
 export function editSlideshow(initial = [blankSlide(), blankSlide()], chooseImage) {
   const slides = initial.map((slide) => ({ ...slide }));
   const rows = el('div');
-  const body = el('div', {}, el('p', { class: 'hint' }, '2-10 slides. Choose an image from Media, upload a new image from the picker, or enter an asset: reference or https:// image address. New images upload only when you publish or save the draft. Choose an Animate.css entrance effect for each slide (Fade In by default). Slides rotate every 6 seconds, with pause, previous/next and numbered controls. Reduced motion disables animation and starts paused. Without JavaScript, every slide stays visible.'), rows);
+  const body = el('div', {}, el('p', { class: 'hint' }, '2-10 slides. Choose an image from Media, upload a new image from the picker, or enter an asset: reference or https:// image address. New images upload only when you publish or save the draft. Choose effects for the whole slide and its image, heading, caption and link label. Set the whole slide to None to animate only individual elements. Use relative link addresses such as ./products/ for nearby pages. Slides rotate every 6 seconds. Reduced motion disables animation and starts paused. Without JavaScript, every slide stays visible.'), rows);
   const draw = () => {
     rows.replaceChildren(...slides.map((slide, i) => {
-      const fields = [['image', 'Image', 'asset:images/photo.jpg'], ['alt', 'Alternative text', 'Describe the picture'], ['title', 'Heading', 'Optional'], ['text', 'Caption', 'Optional'], ['label', 'Link label', 'Optional'], ['url', 'Link address', 'https://example.com/products/']].map(([key, title, placeholder]) => {
+      const animation = (key, title, fallback) => el('label', {}, title, el('select', { 'aria-label': `Slide ${i + 1} ${title.toLowerCase()}`, onchange: (e) => { slide[key] = e.target.value; } },
+        SLIDE_ANIMATIONS.map((name) => el('option', { value: name, selected: (slide[key] ?? fallback) === name }, name === 'none' ? 'None' : name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()))),
+      ));
+      const fields = [['image', 'Image', 'asset:images/photo.jpg'], ['alt', 'Alternative text', 'Describe the picture'], ['title', 'Heading', 'Optional'], ['text', 'Caption', 'Optional'], ['label', 'Link label', 'Optional'], ['url', 'Link address', './products/']].map(([key, title, placeholder]) => {
         const input = el('input', { value: slide[key], placeholder, 'aria-label': `Slide ${i + 1} ${title.toLowerCase()}`, oninput: (e) => { slide[key] = e.target.value; } });
         const label = el('label', {}, title, input);
+        if (['title', 'text', 'label'].includes(key)) return el('div', {}, label, animation(`${key}Animation`, `${title} animation`, 'none'));
         if (key !== 'image') return label;
         return el('div', {}, label, el('button', { type: 'button', 'aria-label': `Choose image for slide ${i + 1}`, onclick: () => chooseImage((ref) => {
           input.value = ref;
           input.dispatchEvent(new Event('input', { bubbles: true }));
-        }) }, 'Choose from Media…'));
+        }) }, 'Choose from Media…'), animation('imageAnimation', 'Image animation', 'none'));
       });
       const move = (offset) => {
         [slides[i], slides[i + offset]] = [slides[i + offset], slides[i]];
         draw();
       };
-      const animation = el('label', {}, 'Animation', el('select', { 'aria-label': `Slide ${i + 1} animation`, onchange: (e) => { slide.animation = e.target.value; } },
-        SLIDE_ANIMATIONS.map((name) => el('option', { value: name, selected: (slide.animation ?? DEFAULT_SLIDE_ANIMATION) === name }, name === 'none' ? 'None' : name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()))),
-      ));
-      return el('fieldset', {}, el('legend', {}, `Slide ${i + 1}`), ...fields, animation, el('div', { class: 'actions' },
+      return el('fieldset', {}, el('legend', {}, `Slide ${i + 1}`), ...fields, animation('animation', 'Animation', DEFAULT_SLIDE_ANIMATION), el('div', { class: 'actions' },
         el('button', { type: 'button', disabled: i === 0, onclick: () => move(-1), 'aria-label': `Move slide ${i + 1} up` }, 'Move up'),
         el('button', { type: 'button', disabled: i === slides.length - 1, onclick: () => move(1), 'aria-label': `Move slide ${i + 1} down` }, 'Move down'),
         el('button', { type: 'button', disabled: slides.length <= 2, onclick: () => { slides.splice(i, 1); draw(); }, 'aria-label': `Remove slide ${i + 1}` }, 'Remove'),

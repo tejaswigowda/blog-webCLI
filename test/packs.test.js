@@ -208,7 +208,7 @@ test('theme manifest: closed fields, safe paths, a known contract', () => {
 });
 
 // ---------- the generator with a theme ----------
-test('theme: pages inline its css over the base; theme.css matches; nothing is fetched at read time', async () => {
+test('theme: pages inline its css over the base; theme.css matches; only the shared icon stylesheet is linked', async () => {
   const { theme, pin: tp } = await pinnedTheme('theme-plain');
   const input = await exampleInput({ theme: tp });
   const { files, errors } = buildSite({ ...input, theme });
@@ -220,7 +220,10 @@ test('theme: pages inline its css over the base; theme.css matches; nothing is f
   assert.ok(page.includes('.screen-reader-text{'), 'the structural base is always present');
   assert.ok(!page.includes('header.site{display:flex'), 'the default theme is replaced, not layered under');
   assert.equal(files['theme.css'], page.match(/<style>([\s\S]*?)<\/style>/)[1] + '\n');
-  assert.ok(!/<script|<link[^>]+rel="stylesheet"|@import/i.test(stripData(page)), 'no script and no external stylesheet');
+  assert.ok(!/<script|@import/i.test(stripData(page)), 'no script or CSS imports');
+  const stylesheets = [...page.matchAll(/<link[^>]+rel="stylesheet"[^>]*>/g)];
+  assert.equal(stylesheets.length, 1, 'no external theme stylesheet');
+  assert.match(stylesheets[0][0], /^<link rel="stylesheet" href="https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/font-awesome\/6\.7\.2\/css\/all\.min\.css" integrity="sha512-/);
   // customize still layers on top of a theme
   assert.ok(page.includes('--width:42rem'));
 });
