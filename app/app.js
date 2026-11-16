@@ -364,8 +364,8 @@ function renderTop(repo, ref) {
     auth,
     h('nav', { class: 'help-nav', 'aria-label': 'Help' },
       h('a', { href: 'about/tutorials/' }, 'Tutorials'),
-      h('a', { href: 'about/' }, 'About')),
-    outbound('Fork on GitHub', 'https://github.com/tejaswigowda/blog-webCLI', { class: 'gh-link' }),
+      h('a', { href: 'about/', class: 'header-icon', title: 'About blog-webCLI', 'aria-label': 'About blog-webCLI' }, icon('info')),
+      outbound('', 'https://github.com/tejaswigowda/blog-webCLI', { class: 'header-icon gh-link', title: 'Fork on GitHub', 'aria-label': 'Fork on GitHub' })),
   );
 }
 

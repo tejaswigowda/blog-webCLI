@@ -6,6 +6,63 @@ import { chromePath, launch, openPage } from './cdp.mjs';
 
 const skip = chromePath() ? false : 'Chrome is not installed';
 
+test('editor header groups accessible About and GitHub icons at desktop and phone widths', { skip, timeout: 60000 }, async () => {
+  const web = await serve(fileURLToPath(new URL('../../', import.meta.url)));
+  const chrome = await launch();
+  const base = `http://127.0.0.1:${web.address().port}`;
+  try {
+    const page = await openPage(chrome, 'about:blank');
+    await page.send('Network.enable');
+    await page.send('Network.setBlockedURLs', { urls: ['https://*'] });
+    await page.send('Page.navigate', { url: base });
+    let ready = false;
+    for (let i = 0; i < 200; i++) {
+      ready = await page.evaluate(`!!document.querySelector('#top .help-nav .gh-link')`);
+      if (ready) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(ready, 'editor header rendered');
+    for (const width of [1280, 390]) {
+      await page.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
+      const result = await page.evaluate(`(() => {
+        const about = document.querySelector('#top a[aria-label="About blog-webCLI"]');
+        const github = document.querySelector('#top .gh-link');
+        const a = about.getBoundingClientRect(), g = github.getBoundingClientRect();
+        return {
+          aboutPath: new URL(about.href).pathname,
+          aboutIcon: !!about.querySelector('svg'),
+          githubUrl: github.dataset.href,
+          githubLabel: github.getAttribute('aria-label'),
+          githubIcon: getComputedStyle(github, '::before').maskImage !== 'none',
+          text: about.textContent + github.textContent,
+          adjacent: about.nextElementSibling === github && a.top === g.top && g.left >= a.right && g.left - a.right < 12,
+          overflow: document.documentElement.scrollWidth > innerWidth
+        };
+      })()`);
+      assert.equal(result.aboutPath, '/about/');
+      assert.equal(result.aboutIcon, true);
+      assert.equal(result.githubUrl, 'https://github.com/tejaswigowda/blog-webCLI');
+      assert.equal(result.githubLabel, 'Fork on GitHub');
+      assert.equal(result.githubIcon, true);
+      assert.equal(result.text, '');
+      assert.equal(result.adjacent, true, `${width}px`);
+      assert.equal(result.overflow, false, `${width}px`);
+    }
+    await page.evaluate(`document.querySelector('#top a[aria-label="About blog-webCLI"]').click()`);
+    let navigated = false;
+    for (let i = 0; i < 200; i++) {
+      navigated = await page.evaluate(`location.pathname === '/about/' && document.querySelector('h1')?.textContent === 'About blog-webCLI'`);
+      if (navigated) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(navigated, 'About icon opens the public About page');
+    page.close();
+  } finally {
+    chrome.close();
+    web.close();
+  }
+});
+
 test('public About and guides work at their real paths without scripting, at desktop and phone widths', { skip, timeout: 60000 }, async () => {
   const web = await serve(fileURLToPath(new URL('../../', import.meta.url)));
   const chrome = await launch();
