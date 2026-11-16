@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Move a WordPress site into blog webCLI by hand: pages, media, links, an animated slideshow, a measured design, and a repeatable publishing checklist.">
+  <title>Move a WordPress site, then rebuild its look - blog webCLI tutorials</title>
+  <link rel="stylesheet" href="tutorials.css">
+</head>
+<body>
+<main>
+  <a class="back" href="./">All tutorials</a>
+  <p class="eyebrow">WordPress to blog webCLI / A worked migration</p>
+  <h1>Move a WordPress site, then rebuild its look</h1>
+  <p class="lead">Bring the pages across first. Keep the pictures. Repair the navigation. Then rebuild the design with settings, a slideshow, and a small theme recipe. This follows the Swim Platform migration into <code>tejaswigowda/blogtest</code>, using controls you can operate yourself. No AI required.</p>
+  <p><strong>The route:</strong> source &rarr; import &rarr; media &rarr; links &rarr; slideshow &rarr; design &rarr; checks. Most work happens in the browser. The image-copying obstacle, and the optional command-line alternative, are called out rather than hidden.</p>
+  <div class="actions">
+    <a class="button" href="../../blog/#repo=tejaswigowda/blogtest&amp;ref=a7a2e656">Open the finished example</a>
+    <a class="button" href="swim-platform-theme.json" download>Download the theme recipe</a>
+  </div>
+  <figure>
+    <a href="swim-platform-home.jpg"><img src="swim-platform-home.jpg" width="2560" height="1800" alt="The migrated Swim Platform homepage, with a white navigation bar, an image slideshow, overlay arrows, dot controls, and an icon-only playback button."></a>
+    <figcaption>The finished reader at desktop width. The example is pinned to a saved revision so later edits do not change what this tutorial demonstrates. Select any screenshot to view it full size.</figcaption>
+  </figure>
+
+  <aside class="warning">
+    <p><strong>Move only content you may use.</strong> Publicly readable does not mean freely licensed. Use your own WordPress site, or get permission for its writing, photographs, and logo. The downloadable recipe contains the new styling, not the source site's photographs, font files, or WordPress theme.</p>
+  </aside>
+
+  <nav class="contents" aria-label="On this page">
+    <strong>On this page</strong>
+    <ol>
+      <li><a href="#prepare">Prepare a destination and a source</a></li>
+      <li><a href="#import">Import the content, not the theme</a></li>
+      <li><a href="#pictures">Finish copying the pictures</a></li>
+      <li><a href="#review">Review the eight pages</a></li>
+      <li><a href="#links">Make navigation work from both addresses</a></li>
+      <li><a href="#slideshow">Build the three-slide hero</a></li>
+      <li><a href="#animation">Animate individual elements</a></li>
+      <li><a href="#measure">Measure the design without copying its CSS</a></li>
+      <li><a href="#theme">Apply the recipe and choose the logo</a></li>
+      <li><a href="#icons">Use icons without losing button names</a></li>
+      <li><a href="#publish">Publish and check the result</a></li>
+      <li><a href="#limits">Finish what an importer cannot move</a></li>
+    </ol>
+  </nav>
+
+  <h2 class="step" id="prepare"><span>1</span> Prepare a destination and a source</h2>
+  <ol>
+    <li>Create a GitHub repository you can write to. Use your own repository for the exercise; the example repository is not a shared practice area.</li>
+    <li>Open <a href="../../">blog webCLI</a> and sign in with GitHub. Give it access to that repository.</li>
+    <li>Keep the original site open in a second tab. The reference here was <a href="https://swim-platform.com/">swim-platform.com</a>.</li>
+    <li>If you administer WordPress, choose <strong>Tools &rarr; Export &rarr; All content</strong> and download the XML export. Also obtain a backup copy of <code>wp-content/uploads</code> from your host if possible.</li>
+  </ol>
+  <p>The live-site importer can read a public WordPress REST API. It does not give you private content or drafts. An administrator's export is the better starting point when you need those too.</p>
+  <aside class="note"><p><strong>Keep the old site running.</strong> Do not change DNS, remove the uploads folder, or cancel the old host until the final link and image checks pass.</p></aside>
+
+  <h2 class="step" id="import"><span>2</span> Import the content, not the theme</h2>
+  <ol>
+    <li>Open <a href="../../#import">Import from WordPress</a>.</li>
+    <li>Choose your XML export under <strong>Export files (.xml)</strong>. Alternatively, enter the site's address under <strong>A live site's address</strong> and click <strong>Read site</strong>.</li>
+    <li>If you have an uploads backup, select it under <strong>A copy of the old site's uploads folder (optional)</strong>. Choose the folder containing the year folders, not one individual photograph.</li>
+    <li>Click <strong>Review step by step</strong>. Check the title, author, description, and destination folder. For a single site at the repository root, leave the folder blank.</li>
+    <li>Keep <strong>Import every picture and file in the media library</strong> checked if you want the whole library, including images not used in page bodies.</li>
+    <li>Click <strong>Next: bring the pictures across</strong>, read the report, and then <strong>Next: choose where it goes</strong>. Name your destination repository.</li>
+    <li>Review the pre-flight file list. Only click <strong>Commit and push</strong> when the repository and changes are correct.</li>
+  </ol>
+  <p>In this migration, the live API reported <strong>8 pages, 0 posts, and 78 media entries</strong>. Copying media involved 114 image files or variants, so the counts were not interchangeable. Your source may have changed since that run.</p>
+  <p><strong>Expected result:</strong> editable Markdown pages and generated site files in the destination. Importing content does not reproduce a page builder, a WordPress plugin, or a commercial theme.</p>
+
+  <h2 class="step" id="pictures"><span>3</span> Finish copying the pictures</h2>
+  <p>The browser could read the page content, but the original host refused cross-origin image downloads. That is a CORS restriction, not a bad GitHub token.</p>
+  <p><strong>For the browser-only route:</strong></p>
+  <ol>
+    <li>At the blocked-pictures screen, click <strong>Back to choose the uploads folder</strong>.</li>
+    <li>Select the backup of <code>wp-content/uploads</code>, keeping its directory structure intact.</li>
+    <li>Run the pictures step again. Review both copied-file counts and warnings before committing.</li>
+    <li>If a specific image is still missing, obtain a permitted local copy and use the editor's image picker to upload and replace it.</li>
+  </ol>
+  <aside class="warning">
+    <p><strong>"Keep the pictures linked" is not a completed media migration.</strong> That option leaves image URLs pointing to the old host. It is useful temporarily, but the pictures can disappear when that host goes away. An image displaying in the browser proves that it can be displayed, not that it was copied.</p>
+  </aside>
+  <p><strong>What happened in the worked example:</strong> the initial browser import kept external images. A later, explicitly approved command-line media pass copied 114 image files, about 7.6 MB, and replaced 44 source references with repository-backed assets. That part was not accomplished by browser clicks.</p>
+  <details>
+    <summary>Optional: import into a fresh local folder when you cannot use an uploads backup</summary>
+    <p>With Node.js 20 or newer and this project checked out, the CLI importer is not subject to the browser's CORS restriction:</p>
+    <pre><code>node cli/blog.js import wp https://swim-platform.com/ swim-platform-import --repo YOUR-USER/YOUR-REPO</code></pre>
+    <p>Replace the source with a site you may migrate and the destination with your repository. This writes a local blog; it is <strong>not</strong> a command to paste over an already edited destination or a media-only repair command. Inspect its output and compare changes before pushing. Use the <a href="../WP-MIGRATION-GUIDE.md">migration guide</a> for the broader workflow.</p>
+  </details>
+  <p><strong>Check:</strong> open <strong>Media</strong>, find a copied image, and choose it in a page. An <code>asset:images/...</code> reference is resolved to the pinned asset when you save. Check the actual saved references too; do not rely only on thumbnails.</p>
+
+  <h2 class="step" id="review"><span>4</span> Review the eight pages</h2>
+  <p>Open your repository in the editor and select <strong>Pages</strong>. For the supplied design recipe, keep these slugs:</p>
+  <div class="table-scroll">
+    <table>
+      <caption>The imported page inventory</caption>
+      <thead><tr><th scope="col">Page</th><th scope="col">Slug</th><th scope="col">What to check</th></tr></thead>
+      <tbody>
+        <tr><td>Home</td><td><code>home</code></td><td>Product/build rows, three features, quote call to action</td></tr>
+        <tr><td>Products</td><td><code>products</code></td><td>Five images, accessories, four ordering steps</td></tr>
+        <tr><td>Testimonials</td><td><code>testimonials</code></td><td>Review text and its attribution stay together</td></tr>
+        <tr><td>Gallery</td><td><code>gallery</code></td><td>35 images in four named model groups</td></tr>
+        <tr><td>FAQ</td><td><code>faq</code></td><td>Questions, answers, and category headings</td></tr>
+        <tr><td>About</td><td><code>about</code></td><td>Two photographs and the service/feature sections</td></tr>
+        <tr><td>Contact</td><td><code>contact</code></td><td>Introductory text; the form needs separate work</td></tr>
+        <tr><td>Request a Quote</td><td><code>request-a-quote</code></td><td>Instructions; the original form was not imported</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>A page with the slug <code>home</code> also supplies the front page. Edit that page rather than creating a second copy for the root. The standalone <code>/home/</code> address still exists.</p>
+  <p>Leave <strong>Menu position</strong> blank when you plan to use the explicit header links below. Otherwise, automatically generated menu entries can duplicate your custom navigation.</p>
+
+  <h2 class="step" id="links"><span>5</span> Make navigation work from both addresses</h2>
+  <p>There are two different places to test: the <code>/blog/</code> reader and the generated public site. A link can work in one and fail in the other.</p>
+  <ol>
+    <li>Open <strong>Settings &rarr; Header and footer</strong>.</li>
+    <li>Enter header links as <code>Label | https://address</code>, one per line. The header accepts up to eight links; the Feed link is added automatically.</li>
+    <li>Use your actual working public address. In the example, these navigation links used GitHub's HTTPS address, not an unverified HTTPS custom domain.</li>
+    <li>Repeat for footer links. Open each destination and confirm it is a migrated page, not a page left on the original site.</li>
+  </ol>
+  <pre><code>Home | https://YOUR-USER.github.io/YOUR-REPO/
+Products | https://YOUR-USER.github.io/YOUR-REPO/products/
+Testimonials | https://YOUR-USER.github.io/YOUR-REPO/testimonials/
+Gallery | https://YOUR-USER.github.io/YOUR-REPO/gallery/
+FAQ | https://YOUR-USER.github.io/YOUR-REPO/faq/
+About | https://YOUR-USER.github.io/YOUR-REPO/about/
+Get a quote | https://YOUR-USER.github.io/YOUR-REPO/request-a-quote/
+Shop | https://shop.swim-platform.com/</code></pre>
+  <p>The shop remains external in this example. Replace it with your own destination or omit it. The footer uses Products, Gallery, Testimonials, FAQ, About, Contact, and Request a quote.</p>
+  <h3>Relative links: choose a base deliberately</h3>
+  <p>For body links and slideshow links, <code>./products/</code> is useful when the document is at the site root. But at <code>/YOUR-REPO/home/</code> it means <code>/YOUR-REPO/home/products/</code>, which is a different address.</p>
+  <p>The example slideshow therefore uses <code>/blogtest/products/</code>, <code>/blogtest/testimonials/</code>, and <code>/blogtest/faq/</code>. For another repository, replace <code>/blogtest/</code> with its actual served prefix; for a custom domain serving the site at its root, that prefix may simply be <code>/</code>. Use <code>./</code> where the same document-relative destination is correct, not everywhere indiscriminately.</p>
+  <aside class="note"><p><strong>The settings link fields are different.</strong> Header and footer settings require HTTP(S) or mail addresses. They do not accept <code>./products/</code>. Do not paste the reader's <code>#repo=...</code> address into published site navigation.</p></aside>
+
+  <h2 class="step" id="slideshow"><span>6</span> Build the three-slide hero</h2>
+  <ol>
+    <li>Open <strong>Pages &rarr; Home</strong>. Put the insertion point before the first product image.</li>
+    <li>Click the toolbar control titled <strong>Insert a slideshow</strong>. If a slideshow already exists, click <strong>Edit slideshow</strong> instead; do not add a duplicate.</li>
+    <li>For each slide, click <strong>Choose from Media...</strong> and select an existing image. Search by its filename if necessary.</li>
+    <li>For a new local picture, choose <strong>Upload a new image...</strong> inside the picker. It is staged until you publish or save the draft.</li>
+    <li>Enter meaningful alternative text, a heading, caption, link label, and link address. Give both the label and address, or leave both empty.</li>
+    <li>Use <strong>+ Slide</strong> to make three slides. Use <strong>Move up</strong> and <strong>Move down</strong> to arrange them, then <strong>Apply</strong>.</li>
+  </ol>
+  <div class="table-scroll">
+    <table>
+      <caption>The example's three hero slides; find the corresponding permitted images in Media</caption>
+      <thead><tr><th scope="col">Heading</th><th scope="col">Image filename</th><th scope="col">Link label / destination slug</th></tr></thead>
+      <tbody>
+        <tr><td>Custom Swim Platforms</td><td><code>swim-platform_custom-built-boat-platforms_hero-b.jpg</code></td><td>Shop Our Platforms / <code>products</code></td></tr>
+        <tr><td>Customer Reviews</td><td><code>swim-platform_customer-reviews_hero-b.jpg</code></td><td>Testimonials / <code>testimonials</code></td></tr>
+        <tr><td>FAQ's</td><td><code>swim-platform_faq-frequently-asked-questions_hero.jpg</code></td><td>See FAQ / <code>faq</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure>
+    <a href="swim-platform-media.jpg"><img src="swim-platform-media.jpg" width="2278" height="1114" loading="lazy" alt="The image picker opened from the slideshow editor, offering existing Media images and an Upload a new image button."></a>
+    <figcaption>Choose a repository image first; uploading a new one is an option inside the same picker. A cancelled choice does not replace the slide's current image.</figcaption>
+  </figure>
+  <p>Write short captions. A desktop hero has much more room than a phone. The example's first caption describes custom storage and ladder options; the other two introduce reviews and frequently asked questions.</p>
+
+  <h2 class="step" id="animation"><span>7</span> Animate individual elements</h2>
+  <p>In the slideshow dialog, use these dropdown values for each slide:</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Dropdown</th><th scope="col">Value</th><th scope="col">Effect</th></tr></thead>
+      <tbody>
+        <tr><td>Animation</td><td>None</td><td>No whole-slide effect competing with its children</td></tr>
+        <tr><td>Image animation</td><td>Fade In</td><td>Photograph fades in</td></tr>
+        <tr><td>Heading animation</td><td>Fade In Down</td><td>Title enters from above</td></tr>
+        <tr><td>Caption animation</td><td>Fade In Up</td><td>Description enters from below</td></tr>
+        <tr><td>Link label animation</td><td>Fade In Up</td><td>Call to action enters with the caption</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure>
+    <a href="swim-platform-slideshow.jpg"><img src="swim-platform-slideshow.jpg" width="2278" height="1114" loading="lazy" alt="The Slideshow dialog showing the first slide's image, alternative text, heading, caption, and separate animation dropdowns."></a>
+    <figcaption>Independent effects are ordinary editor fields. Animate.css is included by the app; do not add an external animation script.</figcaption>
+  </figure>
+  <p>The slideshow supports 2-10 slides and advances every six seconds. It pauses for interaction and respects reduced-motion preferences. Without JavaScript, the slides remain visible rather than disappearing. Check the published result, not only the editor's block preview.</p>
+
+  <h2 class="step" id="measure"><span>8</span> Measure the design without copying its CSS</h2>
+  <p>Open the old and new pages at the same viewport width. Compare the header height, full content width, individual columns, image aspect ratios, heading sizes, and whitespace. Do not copy the source's stylesheet or download its webfont files.</p>
+  <p>These are the values used for this rebuild:</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Setting or measurement</th><th scope="col">Value</th></tr></thead>
+      <tbody>
+        <tr><td>Accent / text / background / muted</td><td><code>#21759b</code> / <code>#737373</code> / <code>#ffffff</code> / <code>#ababab</code></td></tr>
+        <tr><td>Body and heading font choices</td><td>Sans; nearest system stack, not an exact Roboto webfont match</td></tr>
+        <tr><td>Body text</td><td>16px</td></tr>
+        <tr><td>Desktop content</td><td>1120px at a 1280px viewport</td></tr>
+        <tr><td>Two-column row</td><td>550px + 20px gap + 550px</td></tr>
+        <tr><td>Desktop header / hero</td><td>80px / about 591px</td></tr>
+        <tr><td>Phone hero</td><td>406px at a 390px viewport</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <aside class="warning"><p><strong>The 550px trap.</strong> A measurement tool reported 550px because it found one text column. Setting the entire site to that width would collapse the desktop composition. Measure the surrounding layout as well.</p></aside>
+  <p>For another source, you may inspect rendered values with your browser's developer tools. The project's optional <code>node cli/measure.mjs https://YOUR-SITE/</code> command reports a starting palette, font category, and text width; it does not produce a complete design. See the <a href="../../docs/theming-rules.md">measure, never extract rules</a>.</p>
+
+  <h2 class="step" id="theme"><span>9</span> Apply the recipe and choose the logo</h2>
+  <ol>
+    <li>Before replacing an existing design, use <strong>Settings &rarr; Export theme (JSON)</strong> to keep a backup.</li>
+    <li>Download <a href="swim-platform-theme.json" download>this tutorial's theme recipe</a>. In <strong>Settings</strong>, choose <strong>Import theme from JSON...</strong> and select that file.</li>
+    <li>Inspect the import pre-flight before committing. <strong>The recipe includes the example's header/footer URLs and wording.</strong> It is a full look import, not a colors-only preset. If those demo destinations appear, commit the import only on your practice repository, then replace them in Settings before sharing the site.</li>
+    <li>Set your own header/footer URLs and footer text. Follow step 5; do not leave navigation pointing at <code>tejaswigowda/blogtest</code>.</li>
+    <li>Under <strong>Header and footer &rarr; Logo</strong>, enter the asset reference for your copied logo. The example uses <code>asset:images/wp/2021/06/swim-platform_header-logo-regular-57px.png</code>. Use that only if it exists in your own imported library and you have permission to use it.</li>
+    <li>Uncheck <strong>Show the title next to the logo</strong> if the logo is sufficient. The theme export deliberately excludes logo images and link-image icons.</li>
+    <li>Check <strong>Type and layout</strong>: content width <code>1120px</code>, text size <code>16px</code>, body and heading fonts <strong>Sans</strong>. Check both light and dark color values if you want the same light site in either system mode.</li>
+    <li>Keep <strong>Link the stylesheet instead of putting it in every page</strong> enabled. Later CSS-only saves can update the shared stylesheet instead of regenerating every page.</li>
+  </ol>
+  <p><strong>What the recipe does:</strong> a full-width hero with overlay controls; paired product/build sections; centered feature icons; a product/accessory grid; a three-column desktop gallery; narrower FAQ text; testimonial columns; responsive stacking; and a dark, two-column footer with a simple original wave treatment.</p>
+  <aside class="note">
+    <p><strong>This is a recipe for these pages, not an automatic WordPress theme converter.</strong> It targets the imported slugs and their block order. The current renderer exposes hooks such as <code>article[data-page="gallery"]</code>; the root homepage uses <code>section.home</code>. Use a recent build of the editor and reader that includes those hooks and the per-element animation controls.</p>
+    <p>Keep Home in this order: slideshow; product image/heading/text/button; custom-build heading/text/button/image; Why heading; three feature heading/paragraph pairs; quote heading/text/button. Extra blocks inserted into those sequences need corresponding CSS changes.</p>
+  </aside>
+  <p>For a different site, change the layout rather than forcing unrelated content into this recipe. <strong>Custom CSS</strong> accepts up to 16,000 characters, including whitespace. It rejects resource-loading rules, <code>url()</code>, font imports, and backslash escapes. Keep images in Media and use the font choices supplied by the app.</p>
+
+  <h2 class="step" id="icons"><span>10</span> Use icons without losing button names</h2>
+  <p>The recipe already includes blue feature icons, envelope/cart accents, an icon-only Feed link, and an icon-only Play/Pause toggle. Font Awesome is loaded by the current app through its pinned CDN stylesheet; no separate icon script is needed.</p>
+  <p>The playback icon follows the button's existing <code>aria-label</code>, so the picture changes with the actual playback state. Its text remains in the markup and the click target stays 44px square. The Feed link similarly keeps its accessible name.</p>
+  <p>If you want to understand or adapt the icon-only toggle in <strong>Custom CSS</strong>, this is the pattern used:</p>
+  <pre><code>.webcli-slideshow .webcli-slide-controls button:nth-child(2) {
+  font-size: 0;
+}
+.webcli-slide-controls button[aria-label$="slideshow"]::after {
+  display: inline-block;
+  font: 900 16px/1 "Font Awesome 6 Free";
+  content: "&#xf04c;" / "";
+}
+.webcli-slide-controls button[aria-label="Play slideshow"]::after {
+  content: "&#xf04b;" / "";
+}</code></pre>
+  <p>The two small glyphs in the code are literal Font Awesome characters, not <code>\f04c</code> or <code>\f04b</code> escape sequences. Those escapes are refused by Custom CSS. The downloaded recipe already contains the correct characters; do not paste a second copy of this block unless you are adapting another theme.</p>
+  <aside class="note"><p><strong>Icons are decorative; names are not.</strong> Do not remove <code>aria-label="Play slideshow"</code> or <code>aria-label="Pause slideshow"</code>. An unlabeled triangle is not an accessible replacement for a playback button.</p></aside>
+
+  <h2 class="step" id="publish"><span>11</span> Publish and check the result</h2>
+  <ol>
+    <li>For page edits, choose the intended status, click <strong>Publish</strong> (or <strong>Save draft</strong>), review the pre-flight, and click <strong>Commit and push</strong>.</li>
+    <li>For settings edits, click <strong>Save settings...</strong>, inspect the file list, and commit. Wait for the success receipt; closing the pre-flight alone is not proof of success.</li>
+    <li>Reload the reader and visit every page. Then visit the public site separately. Repository commits and hosting deployment are different events.</li>
+    <li>If GitHub's branch-address cache is still showing an older look, open the reader with <code>&amp;ref=COMMIT-SHA</code> from the success receipt. That checks the saved revision without waiting for the branch cache.</li>
+  </ol>
+  <p>This example used an existing legacy, branch-based Pages deployment. It did not require a GitHub Actions workflow. For an already served site, leave its working hosting configuration alone. For a new repository, configure its hosting separately after verifying the content.</p>
+  <h3>Run the same checklist on desktop and a phone</h3>
+  <ul class="checklist">
+    <li>At 1280px, the hero spans the viewport and the main content is 1120px wide.</li>
+    <li>At 390px, there is no sideways scrolling, text is readable, and the hero caption stays inside its image.</li>
+    <li>Home works at both the root and its standalone page address.</li>
+    <li>All header links, footer links, image links, and calls to action reach their intended destinations.</li>
+    <li>All five Products images and all 35 Gallery images load. Scroll through the whole gallery; lazy-loaded images below the fold may not have loaded yet.</li>
+    <li>Previous, Next, numbered dots, keyboard navigation, and Play/Pause still work after styling.</li>
+    <li>Pause shows a pause icon; once paused, the button shows a play icon and its accessible name changes accordingly.</li>
+    <li>Reduced motion starts the slideshow paused and suppresses the entrance animations.</li>
+    <li>Refresh a saved page and reopen its slideshow dialog; images, links, and selected effects are still there.</li>
+    <li>No supposedly copied picture still depends on the old host.</li>
+  </ul>
+  <p>At the saved example revision, all eight pages were checked at desktop and mobile widths, all 35 Gallery images loaded, and the hero measured about 591px on desktop and 406px on a phone. These are checks on this example, not a guarantee about another import.</p>
+
+  <h2 class="step" id="limits"><span>12</span> Finish what an importer cannot move</h2>
+  <p><strong>The result is a static rebuild, not WordPress running inside GitHub.</strong> The following differences remain important:</p>
+  <ul>
+    <li><strong>Forms:</strong> the Contact and Request a Quote introductions were imported, but their original interactive forms were not. A sentence saying "use the form below" is not a working form. Before launch, replace it with an explicitly labeled link to your approved form service, or implement a supported replacement and test submissions. Raw HTML blocks do not accept forms or iframes.</li>
+    <li><strong>FAQ behavior:</strong> the answers remain readable content, not the original plugin's collapsible accordion.</li>
+    <li><strong>Typography:</strong> the system font is an approximation. The original site's Roboto files were not copied.</li>
+    <li><strong>Layout:</strong> the footer wave, mobile navigation, and testimonial columns are reconstructions, not pixel-identical copies of the original theme. Check review attributions after changing content or column widths.</li>
+    <li><strong>Commerce:</strong> an external Shop link does not migrate a store, checkout, inventory, or customer data.</li>
+    <li><strong>Media:</strong> missing files and externally linked pictures need explicit follow-up. Keep the source backup until those are resolved.</li>
+  </ul>
+  <p>Once those checks pass, export your final theme from Settings as a backup. Keep the content repository, image references, and a record of the working public address. Change hosting or retire WordPress only when the replacement does what your visitors need.</p>
+
+  <h2 id="credits">Example, assets, and tools</h2>
+  <p>The worked source is <a href="https://swim-platform.com/">Swim Platform</a>; its writing, photographs, and branding remain the property of their respective rights holders. The screenshots illustrate the migrated example, not a grant to reuse its assets.</p>
+  <p>The <a href="swim-platform-theme.json">downloadable JSON</a> was produced with blog webCLI's theme exporter from <code>tejaswigowda/blogtest</code> at <code>a7a2e656</code>. It includes the custom design and example navigation but excludes logo assets. It does not contain a copy of the source site's CSS.</p>
+  <p>Tools used in the workflow: the WordPress importer, Media picker, page editor, slideshow dialog, Settings, GitHub, and the optional local media/measurement tools. Animate.css supplies the animation effects; Font Awesome supplies the icons. No AI tool is needed to follow the steps.</p>
+  <footer>
+    <a href="./">All tutorials</a> &middot;
+    <a href="../WP-MIGRATION-GUIDE.md">Quick migration guide</a> &middot;
+    <a href="../../">Open the editor</a>
+  </footer>
+</main>
+</body>
+</html>
