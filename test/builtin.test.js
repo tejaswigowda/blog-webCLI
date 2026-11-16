@@ -1,9 +1,6 @@
-// The listed themes and extensions live in two sibling repositories
-// (blog-webCLI-themes, blog-webCLI-extensions). This checks the real folders against this app:
-// every one loads and pins under the app's own rules, builds a real blog, is listed in
-// the bundled registry snapshot with the right licence and a tag that exists, and every
-// extension does what its README says. Skipped when the siblings are not checked out
-// (set BLOG_WEBCLI_THEMES / BLOG_WEBCLI_EXTENSIONS to point elsewhere).
+// The listed themes live in a sibling repository (blog-webCLI-themes).
+// Check their pins, manifests, registry entries and generated markup.
+// Skipped when the sibling is absent (BLOG_WEBCLI_THEMES overrides its path).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -12,23 +9,18 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { buildSite } from '../lib/blog.js';
-import { buildSiteWith } from '../lib/build-async.js';
 import { checkPublishedCss, loadTheme, pinFor, themeDigest, themeFilePaths } from '../lib/theme-pack.js';
-import { extensionFilePaths, loadExtension, pinForExtension } from '../lib/extensions.js';
-import { filesDigest, isPinnedRef } from '../lib/pin.js';
+import { isPinnedRef } from '../lib/pin.js';
 import { stripComments } from '../lib/css.js';
-import { EX, localRunner, readDirFiles, stripData } from './helpers.js';
+import { EX, readDirFiles, stripData } from './helpers.js';
 
 const run = promisify(execFile);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const THEMES = process.env.BLOG_WEBCLI_THEMES || path.join(root, '..', 'blog-webCLI-themes');
 const CORPUS = process.env.BLOG_WEBCLI_CORPUS || path.join(root, '..', 'blog-webCLI-corpus');
-const EXTS = process.env.BLOG_WEBCLI_EXTENSIONS || path.join(root, '..', 'blog-webCLI-extensions');
 const THEMES_REPO = 'tejaswigowda/blog-webCLI-themes';
-const EXTS_REPO = 'tejaswigowda/blog-webCLI-extensions';
 const skipThemes = existsSync(path.join(THEMES, 'essay')) ? false : 'blog-webCLI-themes is not checked out next to this repository';
 const skipCorpus = existsSync(path.join(CORPUS, 'wp', 'twentytwentyone')) ? false : 'blog-webCLI-corpus is not checked out next to this repository';
-const skipExts = existsSync(path.join(EXTS, 'heading-anchors')) ? false : 'blog-webCLI-extensions is not checked out next to this repository';
 const dec = new TextDecoder();
 
 async function folders(dir, file) {
@@ -50,12 +42,6 @@ async function pinTheme(folder, ref = 'v1.0.0', base = THEMES) {
   const manifest = JSON.parse(dec.decode(files['theme.json']));
   const pin = pinFor(`${THEMES_REPO}/${folder}`, ref, manifest, themeDigest(files, themeFilePaths(manifest)));
   return { files, manifest, pin, theme: loadTheme(pin, files) };
-}
-async function pinExt(folder, ref = 'v1.0.0') {
-  const files = await readDirFiles(path.join(EXTS, folder));
-  const manifest = JSON.parse(dec.decode(files['extension.json']));
-  const pin = pinForExtension(`${EXTS_REPO}/${folder}`, ref, manifest, filesDigest(files, extensionFilePaths(manifest), (m) => new Error(m)));
-  return { files, manifest, pin, ext: loadExtension(pin, files) };
 }
 
 const RICH_POST = `---
@@ -96,7 +82,6 @@ async function input(patch = {}, { rich = true } = {}) {
 // ---------- the lists ----------
 for (const [what, dir, file, listFile, key, repo, skip] of [
   ['themes', THEMES, 'theme.json', 'themes.json', 'themes', THEMES_REPO, skipThemes],
-  ['extensions', EXTS, 'extension.json', 'extensions.json', 'extensions', EXTS_REPO, skipExts],
 ]) {
   test(`built in ${what}: every folder is listed, every entry matches its manifest and a tag that exists`, { skip }, async () => {
     // the bundled snapshot (what the app lists when the registry is unreachable), which is a copy of the registry repository's file
@@ -172,62 +157,4 @@ test('corpus: a WordPress theme is the classic contract and styles the classic m
   assert.deepEqual(out.errors, []);
   const page = out.files['markdown-is-the-format/index.html'];
   for (const c of ['site-header', 'entry-title', 'entry-content', 'site-footer', 'hentry']) assert.match(page, new RegExp(`class="[^"]*\\b${c}\\b`), c);
-});
-
-// ---------- extensions ----------
-test('built in extensions: each runs alone, is deterministic, and regenerates from its recorded output', { skip: skipExts }, async () => {
-  for (const folder of await folders(EXTS, 'extension.json')) {
-    const { manifest, pin, ext } = await pinExt(folder);
-    const inp = await input({ extensions: [pin] });
-    const done = await buildSiteWith({ ...inp, extensions: [ext] }, localRunner);
-    assert.deepEqual(done.errors, [], `${manifest.name}: ${JSON.stringify(done.errors)}`);
-    assert.notDeepEqual(done.files, buildSite(await input()).files, `${manifest.name} changes something`);
-    const rec = JSON.parse(done.files['extension-outputs.json']);
-    const again = buildSite({ ...inp, extensions: [ext], outputs: rec.outputs });
-    assert.deepEqual(again.errors, [], manifest.name);
-    assert.deepEqual(again.files, done.files, `${manifest.name}: regenerating from recorded outputs runs nothing and matches`);
-    const lic = JSON.parse(done.files['licences.json']);
-    assert.ok(lic.dependencies.some((d) => d.kind === 'extension' && d.name === manifest.name && d.licence === 'MIT'));
-  }
-});
-
-test('built in extensions: all together, in the order a blog would list them', { skip: skipExts }, async () => {
-  const order = ['smart-typography', 'heading-anchors', 'table-of-contents', 'image-captions', 'reading-time', 'archive-by-year'];
-  const packs = await Promise.all(order.map((f) => pinExt(f)));
-  const inp = await input({ extensions: packs.map((p) => p.pin) });
-  const done = await buildSiteWith({ ...inp, extensions: packs.map((p) => p.ext) }, localRunner);
-  assert.deepEqual(done.errors, [], JSON.stringify(done.errors));
-  const page = done.files['rich-post/index.html'];
-
-  assert.match(page, /\u201cQuotes\u201d \u2013 and the end\u2026 It\u2019s 1990\u20132000\./, 'smart-typography');
-  assert.match(page, /<code>code with &quot;quotes&quot;<\/code>/, 'smart-typography leaves inline code alone');
-  assert.match(page, /const s = &quot;not smart&quot;;/, 'and fenced code');
-  assert.match(page, /<h2 id="first">First <a class="anchor" href="#first"/, 'heading-anchors');
-  assert.match(page, /<h2 id="first-2">/, 'duplicate headings get distinct ids');
-  assert.match(page, /<div class="toc" role="navigation" aria-label="Contents"><p class="toc-title">Contents<\/p><ul><li><a href="#first">First<\/a>/, 'table-of-contents');
-  assert.ok(!/<div class="toc"[\s\S]*?<\/div>/.exec(page)[0].includes('class="anchor"'), 'the contents list carries no "#" anchor links');
-  assert.match(page, /<figure class="image"><img [^>]*alt="A diagram of it"[^>]*><figcaption>A diagram of it<\/figcaption><\/figure>/, 'image-captions');
-  assert.match(page, /<p class="reading-time">1 min read<\/p>/, 'reading-time');
-
-  const index = done.files['index.html'];
-  assert.equal([...index.matchAll(/<h2 class="year">(\d{4})<\/h2>/g)].map((m) => m[1]).join(), '2026,2025', 'archive-by-year');
-
-  // every output was sanitized and recorded; nothing leaked into the post sources
-  const rec = JSON.parse(done.files['extension-outputs.json']);
-  assert.ok(Object.keys(rec.outputs).length >= 10);
-  assert.ok(!/<script\b|\son\w+=/i.test(stripData(page + index)));
-  const again = buildSite({ ...inp, extensions: packs.map((p) => p.ext), outputs: rec.outputs });
-  assert.deepEqual(again.files, done.files, 'regenerates identically from the recorded outputs');
-});
-
-test('built in extensions: the wordpress-classic contract is left alone by the two that need the v1 markup', { skip: skipExts || skipCorpus }, async () => {
-  const t = await pinTheme('wp/twentytwentyone', 'v1.0.0', CORPUS);
-  const packs = await Promise.all(['archive-by-year', 'image-captions'].map((f) => pinExt(f)));
-  const plain = buildSite({ ...(await input({ theme: t.pin })), theme: t.theme });
-  const inp = await input({ theme: t.pin, extensions: packs.map((p) => p.pin) });
-  const done = await buildSiteWith({ ...inp, theme: t.theme, extensions: packs.map((p) => p.ext) }, localRunner);
-  assert.deepEqual(done.errors, []);
-  const bare = (h) => h.replace(/<!--[\s\S]*?-->/, '').trim(); // the licence comment lists the extensions
-  assert.equal(bare(done.files['index.html']), bare(plain.files['index.html']), 'the index is unchanged');
-  assert.equal(bare(done.files['markdown-is-the-format/index.html']).includes('<figure class="image">'), false);
 });

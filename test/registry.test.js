@@ -45,7 +45,6 @@ test('R7: no registry field reaches the DOM unvalidated: markup, script addresse
   ];
   for (const patch of bad) assert.equal(validateEntry('themes', { ...good, ...patch }).ok, false, JSON.stringify(patch));
   for (const x of [null, 'str', 7, [], undefined]) assert.equal(validateEntry('themes', x).ok, false);
-  assert.equal(validateEntry('extensions', { ...good, screenshot: 'javascript:1' }).entry.screenshot, undefined, 'an extension has no screenshot field at all');
 });
 
 test('R7: a bad entry is dropped alone and named; a bad file shape is refused whole', () => {
@@ -53,7 +52,7 @@ test('R7: a bad entry is dropped alone and named; a bad file shape is refused wh
   assert.deepEqual(entries.map((e) => e.name), ['Essay', 'B']);
   assert.deepEqual(rejected.map((r) => r.index), [1, 2]);
   assert.match(rejected[1].why, /listed twice/);
-  for (const bad of ['not json', '[]', 'null', '{}', JSON.stringify({ version: 2, themes: [] }), JSON.stringify({ version: 1, themes: 'x' }), JSON.stringify(file('extensions', good))]) {
+  for (const bad of ['not json', '[]', 'null', '{}', JSON.stringify({ version: 2, themes: [] }), JSON.stringify({ version: 1, themes: 'x' }), JSON.stringify(file('other', good))]) {
     assert.throws(() => parseRegistry('themes', bad), undefined, bad);
   }
   assert.throws(() => parseRegistry('themes', file('themes', ...Array.from({ length: 201 }, (_, i) => ({ ...good, repo: `me/t/t${i}` })))), /most read/);
@@ -75,7 +74,7 @@ test('R6: unreachable, missing, not JSON, wrong shape or not configured: the bun
     ['404', reply('nope', 404), /HTTP 404/],
     ['not json', reply('<html>'), /not JSON/],
     ['wrong version', reply({ version: 9, themes: [] }), /version/],
-    ['wrong list', reply(file('extensions', good)), /no "themes" list/],
+    ['wrong list', reply(file('other', good)), /no "themes" list/],
   ];
   for (const [name, fetchImpl, why] of cases) {
     const res = await loadRegistry('themes', { url: 'https://reg.example/', snapshot, fetchImpl });
@@ -83,9 +82,9 @@ test('R6: unreachable, missing, not JSON, wrong shape or not configured: the bun
     assert.match(res.why, why, name);
     assert.equal(res.entries.length, snapshot.themes.length, name);
   }
-  const none = await loadRegistry('extensions', { snapshot });
+  const none = await loadRegistry('themes', { snapshot });
   assert.equal(none.source, 'snapshot');
-  assert.equal(none.entries.length, snapshot.extensions.length);
+  assert.equal(none.entries.length, snapshot.themes.length);
 });
 
 test('R6: the app is configured with a registry address; changing it is the only thing running your own takes', () => {
@@ -94,10 +93,10 @@ test('R6: the app is configured with a registry address; changing it is the only
 });
 
 test('R6: the bundled snapshot is valid, and every entry in it is data the app accepts as is', () => {
-  for (const kind of ['themes', 'extensions']) {
+  for (const kind of ['themes']) {
     const { entries, rejected } = parseRegistry(kind, { version: snapshot.version, [kind]: snapshot[kind] });
     assert.deepEqual(rejected, [], kind);
-    assert.ok(entries.length >= (kind === 'themes' ? 4 : 5), kind); // four starters are listed; the fifth, the default, is built in
+    assert.ok(entries.length >= 4, kind); // four starters are listed; the fifth, the default, is built in
     assert.deepEqual(entries, snapshot[kind], `${kind}: the snapshot is already in validated form`);
   }
 });
@@ -109,9 +108,8 @@ test('R6: the registry repository is scaffolded with its own validator; the snap
     assert.ok(['README.md', 'validate.mjs', 'registry.js', 'LICENSE', '.github/workflows/validate.yml'].every((f) => written.includes(f)));
     assert.equal(await fs.readFile(path.join(dir, 'registry.js'), 'utf8'), await fs.readFile(path.join(root, 'lib', 'registry.js'), 'utf8'), 'the repository validates with the app\'s own file');
     await fs.writeFile(path.join(dir, 'themes.json'), JSON.stringify(file('themes', good)));
-    await fs.writeFile(path.join(dir, 'extensions.json'), JSON.stringify(file('extensions', { ...good, repo: 'me/e/e' })));
     const { registry } = await readRegistry(dir);
-    assert.equal(snapshotText(registry), snapshotText({ themes: [{ ...good }], extensions: [{ name: 'Essay', repo: 'me/e/e', ref: 'v1.0.0', licence: 'MIT', blurb: 'A serif face.' }] }));
+    assert.equal(snapshotText(registry), snapshotText({ themes: [{ ...good }] }));
     await fs.writeFile(path.join(dir, 'themes.json'), JSON.stringify(file('themes', { ...good, screenshot: 'javascript:1' })));
     await assert.rejects(readRegistry(dir), /screenshot/);
   } finally {
@@ -126,7 +124,7 @@ test('R6: lib/registry.js is MIT and imports nothing, so the registry repository
 
 test('R8: the registry is not consulted by the pin: a theme in no list resolves by its address (packs-app X9), and the app has no list of its own', async () => {
   const src = await fs.readFile(path.join(root, 'app', 'site.js'), 'utf8');
-  assert.doesNotMatch(src, /registry/i, 'planTheme and planExtension never read the registry');
+  assert.doesNotMatch(src, /registry/i, 'planTheme never reads the registry');
 });
 
 test('F: an entry records its origin; a generated one also records what it looked at, how it relates, who wrote it and when', () => {
@@ -139,5 +137,4 @@ test('F: an entry records its origin; a generated one also records what it looke
   assert.equal(validateEntry('themes', { ...base, origin: 'invented' }).ok, false);
   assert.equal(validateEntry('themes', { ...base, origin: 'imported', agent: 'x' }).ok, false);
   assert.equal(validateEntry('themes', base).ok, true); // an entry from before the field still reads
-  assert.equal(validateEntry('extensions', { ...base, origin: 'generated' }).entry.origin, undefined); // themes only
 });

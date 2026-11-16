@@ -1,5 +1,5 @@
 // Reading a blog from GitHub: the blog.json, the index, a post. Read-only and free of anything that
-// publishes, fetches themes, or runs extensions, so the /blog/ reader can import it (gate X1 checks that).
+// publishes or fetches themes, so the /blog/ reader can import it (gate X1 checks that).
 import { Refusal } from '../lib/errors.js';
 import { parsePost, validateBlog } from '../lib/blog.js';
 import { SLUG_RE, parseMeta, splitFile } from '../lib/frontmatter.js';

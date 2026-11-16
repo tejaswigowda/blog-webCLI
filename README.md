@@ -17,7 +17,7 @@ A permissive runtime means publishing a blog with this tool never makes the blog
 costs no one anything, because no one redistributes it. The split is held by a test: the scripts a blog ships are built only from the
 runtime directories (`test/licence.test.js`). Third-party files and their licences are in
 [licences-inventory.json](licences-inventory.json), generated and checked in CI (see [Dependencies and licences](#dependencies-and-licences)).
-Themes and extensions are separate repositories with their own licences (the built-in ones are MIT) and are not affected. The pages the
+Themes are separate repositories with their own licences (the built-in ones are MIT) and are not affected. The pages the
 app generates carry its built-in default theme, which is part of the runtime (MIT), and say so in their licence comment and in `licences.json`.
 
 ```
@@ -98,6 +98,20 @@ Quill is a *view* over the markdown. Nothing but markdown is ever stored.
 
 ### Canonical markdown
 
+This is the **blog-webCLI Markdown dialect**, not plain CommonMark:
+
+| Syntax | Origin / portability |
+| --- | --- |
+| Paragraphs, headings, emphasis, links, lists, quotes, code fences | CommonMark; strikethrough and pipe tables are GFM extensions, not core CommonMark |
+| `![alt](asset:…){.medium}` | Pandoc-compatible image-attribute convention; the size names belong to this app |
+| `{.lead}` / `{.small}` paragraph prefixes | This app's own syntax; literal text in other readers |
+| `asset:` and `video:` references | This app's own logical references, deliberately independent of providers |
+| HTML blocks | HTML, restricted to this app's allowlist |
+
+Pandoc's fenced-div block form was considered and rejected for paragraph styles: it is
+heavier for one lead paragraph and would require migrating existing posts. The
+`{.lead}` / `{.small}` syntax is unchanged.
+
 The editor toolbar offers only what markdown can express, and a post must be in the
 form the converter would write, so `md → Delta → md` is byte-identical:
 
@@ -160,6 +174,11 @@ To add a slideshow without writing HTML:
 
 1. Open a post or page and put the cursor where the slideshow belongs.
 2. Choose **Insert a slideshow** in the Quill toolbar. The form accepts 2-10 slides.
+   Each slide has a collapsible section labelled with its number and heading (or alternative text).
+   The first slide starts open; opening another closes the previous one. Added and moved slides
+   stay expanded, and collapsing a slide never discards its fields.
+   Image, heading, caption and link-label fields sit beside their animation selectors.
+   **Apply** and **Cancel** stay at the top right while the overlay scrolls.
 3. For each slide, use **Choose from Media…** to select an existing image, or **Upload a new image…**
    in the picker. You can also enter an `asset:images/...` reference or an HTTPS image address.
    Every slide needs alternative text.
@@ -198,7 +217,76 @@ for example `[data-page=home] .webcli-slideshow`. Keep the slideshow's structura
 Hand-edited HTML that the slideshow form cannot represent losslessly opens with **Edit HTML**
 instead of **Edit slideshow**, so reopening the form cannot silently discard custom markup.
 
+### Widgets and automatic navigation
+
+Choose **Insert a widget** in Quill, select a type, fill its fields, then **Apply**.
+FAQ questions, columns, steps and definitions can be added, removed and reordered.
+Figures and comparisons use the existing Media picker, including staged uploads.
+Reopen with **Edit widget**; **Edit HTML** is always available for rich content.
+Forms use plain text (blank lines separate paragraphs), preserve relative links such as
+`./products/`, validate immediately, and prove the Markdown/Delta round-trip before applying.
+Hand-edited HTML that a form cannot reproduce byte-identically stays in the source editor.
+An insertion or edit is one undo operation. The existing HTML block blot stores the markup;
+there is no new Markdown syntax or executable authored widget code.
+
+The reserved `wc-` prefix is a closed content contract:
+
+| Widget | Required structure | With scripting off |
+| --- | --- | --- |
+| FAQ | `div.wc-faq` containing native `details`; each starts with one nonempty `summary`, then an answer; optional `open` | Native disclosure, keyboard-operable |
+| Note | Nonempty `aside.wc-note` with exactly one additional class: `note`, `warning`, `tip` | Same note |
+| Columns | `div.wc-columns` containing at least two nonempty `div.wc-col` children, and nothing else | Columns; stacked on phones |
+| Figure | `figure.wc-figure`: one `img` with alt text, then `figcaption` containing `small.wc-credit` | Image, caption and credit |
+| Button link | Nonempty `a.wc-button` with `href`, not a button element | Ordinary navigable link |
+| Quote | `blockquote.wc-quote` containing paragraphs and an optional final `cite` | Same quotation |
+| Steps | `ol.wc-steps` of nonempty `li`; a `div.wc-steps` wrapping one such unclassed `ol` is also accepted | Numbered steps |
+| Comparison | `div.wc-compare` containing exactly two figures, each with an image, alt text and caption | Side-by-side images; stacked on phones |
+| Definitions | Native `dl` / `dt` / `dd`, no reserved class needed | Native definition list |
+
+Unknown `wc-*` classes are refused as `bad-widget`, naming the file, offending class and
+nearest known spelling. Malformed structures are refused, not stripped or silently rendered.
+Other author classes, such as `testimonial` and `order-step`, are unchanged. `wc-col` and
+`wc-credit` are reserved structural parts, not standalone widgets.
+
+First-party baseline CSS ships with every generated stylesheet **after the theme CSS**,
+including themes measured from sites that know nothing about widgets. Protected structural
+rules keep grids, image sizing and native disclosures usable; themes restyle the visual
+tokens `--wc-accent`, `--wc-surface`, `--wc-border`, `--wc-radius` and `--wc-gap`
+(also `--wc-warning` / `--wc-tip`). The default, Essay, Terminal, Wide and Cards starters
+each provide their own treatment. Widget CSS belongs to the runtime baseline and theme,
+not per-post CSS. `theme-check --classes` lists the complete reserved inventory;
+`wp-gap` recognizes these names as first-party content rather than WooCommerce.
+The [layout corpus](test/layout/widgets.md) exercises the whole contract at desktop and phone widths.
+
+Content headings (`h1` through `h6`) automatically receive deterministic, collision-safe
+IDs derived from their text, with a permalink link inside each heading. Duplicates take
+`-2`, `-3`, in document order; inserting an unrelated heading above does not change existing
+anchors. **Known limit:** deleting the first of two identically titled headings promotes
+the second to the unsuffixed ID, changing its anchor. Authored IDs are kept.
+
+Set **`contents: true`** in post or page frontmatter to add a contents list, or set
+`"contents": true` in `blog.json` as the site default; a post's explicit `false` overrides
+that default. It is off when neither says. Only **h2 and h3** count, and fewer than **three**
+qualifying headings produce no contents block. The list is at the top of the body, below
+the cover, in document order, linking the same heading anchors. Both features work without
+JavaScript in the reader and published HTML and never rewrite the source Markdown.
+
+FAQ accordions are supported now using native HTML, with no scripting or invented ARIA.
+The attribute allowlist is unchanged: authored roles and ARIA state are not accepted.
+Comparisons are **not dragging sliders**. Forms, inputs and contact/newsletter widgets
+belong to site configuration (`subscribe`), not post content. Use the existing sandboxed
+embed / `video:` path for embedded media; no iframe is added to the HTML allowlist.
+Inline SVG remains excluded because it can carry scripts and `foreignObject`: use image
+diagrams and the existing icon set. A `<button>` is not a link and is not allowlisted.
+Charts, lightboxes, code-copy controls, table enhancements and tabs are deferred, not shipped.
+Their eventual no-script contracts are respectively the real table, plain image, absent
+copy button, plain table, and every panel visible.
+
 ### HTML blocks
+
+HTML source is syntax-highlighted both inside Quill and in **Edit HTML**. Tags, attributes,
+values, entities and comments have distinct colours; the source remains inert text.
+Highlighting does not change validation or the saved Markdown.
 
 Use **Insert an HTML block** in the Quill toolbar for custom structures such as notices,
 details panels, or grouped content:
@@ -271,9 +359,17 @@ HTML block stored directly in Markdown, for example:
 ```
 
 Formatting, links (including relative addresses), and logical image references are preserved.
-The group is now shown as HTML source, not editable rich text: use **Edit HTML** to change its
-content, wrapper classes, or classes on individual elements. Undo restores the original rich-text
-blocks; cancelling the class dialog leaves the document unchanged.
+The group is now shown as HTML source, not editable rich text. Its header has a **Classes** input:
+edit the space-separated wrapper classes and click **Apply classes** (or press **Enter**).
+Clearing the input removes the wrapper's class attribute. Content, nested classes, links and
+formatting stay unchanged; invalid classes are reported inline and are not applied. Each applied
+change is one undo step. Save or publish to persist it.
+
+This header control is available on ordinary HTML blocks with one outer element, including
+class groups. For multiple top-level elements, use **Edit HTML** to add a wrapper first.
+Use **Edit HTML** to change content or classes on individual nested elements; slideshows and
+widgets retain their dedicated editors and reserved structural classes. Undoing the original
+grouping restores rich text; cancelling the class dialog leaves the document unchanged.
 
 For a border and shadow around each entire testimonial:
 
@@ -426,7 +522,7 @@ on the last step (it is on by default; the command line takes `--add`). The blog
 theme and customisation are untouched, and nothing it already has is replaced: an imported post or page at an address the blog already uses is
 left out and said, an imported old address the blog already uses is dropped and said, and a picture the blog already has pinned is not sent
 again. The whole site is regenerated with the new posts (the index, tags, feed and so on change), only the files that differ are sent, and
-the pre-flight says what was left out. A blog that uses extensions is refused (they run only in the editor's sandbox when a post is published).
+the pre-flight says what was left out.
 
 **Keeping every address.** The importer reads each post's old link. When most published posts sit at `/{year}/{month}/{slug}/` (or with the
 day) it sets `permalink` in `blog.json` and writes each post at its old path, which is better than a redirect: the URLs are byte-identical and no
@@ -535,15 +631,14 @@ setting lives in exactly one place:
 
 | Where | What it configures | Written by |
 |---|---|---|
-| [`blog.json`](#blogjson) | the blog: identity, address, media, theme, extensions, live copy, styling | you, or **Settings** in the editor |
+| [`blog.json`](#blogjson) | the blog: identity, address, media, theme, contents default, live copy, styling | you, or **Settings** in the editor |
 | [post frontmatter](#post-frontmatter) (`posts/<slug>.md`, `pages/<slug>.md`) | one post or standalone page | you, or the editor |
 | `order.json` (or the file `order.list` names) | the sequence of posts, when the blog is [ordered by hand](#order) | you (the one authored file beside `blog.json`) |
 | `assets.lock.json` | the commit each `asset:` reference is pinned to | the editor / `blog-webcli pin` (never by hand) |
-| `extension-outputs.json` | what each extension returned at publish | the editor's sandbox (never by hand) |
 | `index/posts.json`, `feed.xml`, `sitemap.xml`, `robots.txt`, `search.json`, `theme.css`, `licences.json`, `404.html`, `webcli-live.js`, `webcli-search.js`, every page, and the folders `tags/`, `authors/`, `archive/`, `page/`, `search/`, `sitemaps/` | generated from the above | the generator; CI diffs them |
 | the reader's URL hash | one view of a blog (`/blog/#repo=…&ref=…&images=…`, see [the reader](#the-blog-reader)) | the link |
 | GitHub Pages settings | where the blog is served (branch, custom domain, HTTPS) | GitHub; the app reads it, it does not store it |
-| `themes.json`, `extensions.json` in the **registry repository** (`registry` in [app/config.js](app/config.js)) | the lists in the theme and extension pickers (a convenience: any repository works by address); [app/registry-snapshot.json](app/registry-snapshot.json) is the bundled fallback | pull request against the registry repository |
+| `themes.json` in the **registry repository** (`registry` in [app/config.js](app/config.js)) | the theme picker (a convenience: any theme repository works by address); [app/registry-snapshot.json](app/registry-snapshot.json) is the bundled fallback | pull request against the registry repository |
 
 Nothing is ever configured by writing a hostname into a post. A post names things logically
 (`asset:images/x.png`, `video:videos/clip@v2`); `blog.json` says where they live.
@@ -575,10 +670,7 @@ four keys are required, and the real file is plain JSON (no comments):
     "base": "https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}",
     "ref": "HEAD"
   },
-  "extensions": [
-    { "repo": "me/reading-time", "ref": "v1.0.0", "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "name": "Reading time", "version": "1.0.0", "licence": "MIT", "kind": "build", "hooks": ["post:html"] }
-  ],
+  "contents": true,
   "customize": {
     "colors": { "accent": "#0b7a5f", "dark": { "accent": "#5fd3a8" } },
     "font": "serif",
@@ -600,7 +692,7 @@ four keys are required, and the real file is plain JSON (no comments):
 | `domain` | yes | an absolute `http(s)://` URL the blog is served at, with its folder if any (`https://me.github.io/blog`). Used for canonical links, `og:url` and the feed. A trailing `/` is dropped. The editor does not let you type it: it reads GitHub Pages (a custom domain included) and writes what GitHub says; in the CLI you write it | refused |
 | `repo` | no | where the blog lives: `owner/name` or `owner/name/folder`. Needed for the defaults below, for `content`, and for "Suggest a correction" links. A blog that omits it still builds | media defaults and `content` are unavailable |
 | `theme` | no | `"default"`, or a [pinned theme](#pinning) object | `"default"` |
-| `extensions` | no | up to 8 [pinned extensions](#pinning), no repository twice | none |
+| `contents` | no | boolean default for post/page contents lists; frontmatter overrides it; requires at least three h2/h3 | `false` |
 | `cover` | no | an `asset:` reference: the share image of the index, and of any post with no `cover` of its own | no `og:image` unless a post has one (a build warning says so) |
 | `assets` | no | binaries (images, audio): [below](#assets) | an `images/` folder of `repo` |
 | `video` | no | video releases: [below](#video) | a `videos/` folder of `repo` |
@@ -884,15 +976,13 @@ fields your provider asks for. The feed (`feed.xml`) is always there as the othe
 
 In Settings these are the *Readers*, *Search engines* and *Comments and analytics* sections.
 
-#### Pinned themes and extensions
+#### Pinned themes
 
-A theme or extension is `{ repo, ref, sha256, name, version, licence }` where `ref` is a release tag or a
+A theme is `{ repo, ref, sha256, name, version, licence }` where `ref` is a release tag or a
 commit (a branch is refused) and `sha256` covers its files. A theme may also carry `contract`
 (`blog-webcli-v1` or `wordpress-classic`: which markup it styles) and `base` (an `https` template with `{ref}` and
-`{path}` to fetch from; default `https://cdn.jsdelivr.net/gh/{owner}/{repo}@{ref}/{path}`). An extension may
-carry `kind` (`build`, or `embed` which frames only the pinned assets it declares) and `hooks`
-(`post:markdown`, `post:html`, `index:html`). Use the Themes and Extensions screens or
-`blog-webcli theme pin` / `ext add` rather than writing these by hand: they compute the hash. See
+`{path}` to fetch from; default `https://cdn.jsdelivr.net/gh/{owner}/{repo}@{ref}/{path}`). Use the Theme screen or
+`blog-webcli theme pin` rather than writing these by hand: they compute the hash. See
 [Pinning](#pinning).
 
 #### Defaults
@@ -912,7 +1002,7 @@ enters nothing keeps a `blog.json` that says nothing, and an author who writes a
 
 * **In the editor:** *Settings* edits the title, description, author, media repositories and their URL templates,
   `content`, `order`, the reader features (`search`, `pagination`, `subscribe`, `seo`, `comments`, `analytics`) and `customize`.
-  `domain` is shown read-only, the theme and extensions have their own screens, and
+  `domain` is shown read-only, the theme has its own screen, and
   `repo`, `cover` and any key it does not know are edited by hand (they are carried through untouched). *Save settings…* shows the usual pre-flight and commits `blog.json` together with every
   regenerated page, in one commit. Keys the form does not know are carried through; blank fields are removed.
 * **By hand or in CI:** edit the file, then `node cli/blog.js build` and commit; `check` fails the build when the
@@ -944,6 +1034,7 @@ description: Optional; defaults to the first paragraph.
 | `tags` | no | a list of non-empty text, `[a, b]` or one `- item` per line. Each tag of a published post has a page |
 | `aliases` | no | old addresses this page used to have, as paths below the blog's root: `[2020/05/old-post, legacy.html]`. Each gets a [redirect page](#old-addresses-redirects) |
 | `cover` | no | an `asset:` reference, or `auto` (first image, else first video's poster, else the blog `cover`) |
+| `contents` | no | `true` or `false`, overriding `blog.json`'s default; contents require at least three h2/h3 and appear below the cover |
 | `description` | no | text; the first paragraph if left out. Also the `<meta name="description">` and `og:description` |
 | `seo_title` | no | text; the page `<title>` and `og:title`, instead of `Title · Blog` |
 | `image` | no | an `asset:` reference: the share image (`og:image`), when it should differ from the cover |
@@ -1013,9 +1104,8 @@ publish_at: 2026-11-08T09:00
   when GitHub's `schedule` is most delayed), and `blog-webcli publish-due` flips every due post, regenerates **once**, and commits **once**.
   With nothing due it commits nothing. If a due post cannot be published, it stays scheduled, nothing is written, and the workflow
   **fails**, so a refusal is never mistaken for an empty run.
-* **Extensions.** They run only in the editor's sandbox, so scheduling a post runs them **then** and commits `extension-outputs.json`
-  with it (the pre-flight says so). The workflow runs none; a scheduled post whose output was never recorded is refused, loudly, at go-live.
-  Scheduling also pins the post's images and videos now, like publishing.
+* **Media.** Scheduling pins the post's images and videos now, like publishing.
+  At go-live the workflow runs the ordinary generator, with no precomputed-output requirement.
 * **The guarantee** is *not before `publish_at`, and normally within the hour*: bounded by the cron interval and by Actions' own delay,
   which is not yours to control. It is not "published at 09:00".
 * **Limits.** GitHub disables scheduled workflows in a public repository after **60 days** with no repository activity, so a post scheduled
@@ -1206,18 +1296,41 @@ variables). A theme's own margins, colours and layout are left alone, and your `
 `THEME_RESPONSIVE` in [lib/theme.js](lib/theme.js). Under the classic contract the generated tag, archive and search pages use the markup
 a classic theme styles (`page-header alignwide`, `page-title`, `entry-content`, `navigation pagination`), so they take the theme's look.
 
-## Themes and extensions
+## Themes
 
-A **theme is a repository** of CSS. An **extension is a repository** of code. There is no package
-manager, no build step and no registry service: both are named by address and pinned.
+### Extension retirement audit (2026-11-15)
 
-> **Extensions run at publish, not at read. Their output is committed.**
+Before removing extension support, all 343 repositories owned by `tejaswigowda` were
+checked at their default-branch root for `blog.json`, with a cross-repository filename
+search and recursive-tree checks for nested blogs in the known site repositories.
+`dealsinaz`, `deals2026`, and `blogtest` (the Swim Platform migration), plus
+`blogtest/test`, `blog-webCLI/my-blog`, and `blog-webCLI/examples/blog`, all have
+no `extensions` key. `webcli.app` and `tejaswigowda.github.io` have no `blog.json`
+anywhere in their trees. No active extension output needs baking; no blog content
+or deployment configuration was changed by this audit.
+
+The authoritative `blog-registry/extensions.json` contained **six**, not two, entries.
+Every entry has a disposition:
+
+| Entry | Disposition | Replacement |
+| --- | --- | --- |
+| Heading anchors | promote | First-party heading links derived from heading text |
+| Table of contents | promote | First-party `contents` frontmatter/blog setting |
+| Reading time | content | An author may write a reading-time note; no new feature |
+| Smart typography | content | Write the desired punctuation in the post |
+| Archive by year | drop | Unused; existing first-party archive generation remains |
+| Image captions | content | Authored `figure`/`figcaption` or the figure widget |
+
+Gates **X2** (Worker isolation) and **N3** (scheduled output coverage) are retired;
+there is no third-party execution path or coverage artifact to constrain.
+
+A **theme is a repository** of CSS and data, named by address and pinned. There is no package
+manager or registry service.
 
 The published static HTML depends on no third-party JavaScript at read time by default. Font Awesome's
 pinned CDN stylesheet and fonts are the shared icon dependency. A theme's CSS is baked into
-every page; an extension's effect lands in the committed output, where it is diffed, reviewed and
-reverted like any other change. No theme or extension code executes while reading. Something that must run in a reader's
-browser is not an extension: it is a *sandboxed embed* (below).
+every page. Themes execute no code. Reader-side embeds remain a separate, sandboxed category
+(below), and declared hash-pinned comments and analytics scripts remain opt-in.
 
 ### Pinning
 
@@ -1225,9 +1338,7 @@ browser is not an extension: it is a *sandboxed embed* (below).
 
 ```json
 "theme": { "repo": "me/my-theme", "ref": "v1.2.0", "sha256": "…", "name": "My Theme", "version": "1.2.0",
-           "licence": "MIT", "contract": "blog-webcli-v1" },
-"extensions": [ { "repo": "me/reading-time", "ref": "v1.0.0", "sha256": "…", "name": "Reading time",
-                  "version": "1.0.0", "licence": "MIT", "kind": "build", "hooks": ["post:html"] } ]
+           "licence": "MIT", "contract": "blog-webcli-v1" }
 ```
 
 * `ref` is a **release tag** (`v1.2.0`) **or a commit sha. A branch is refused** (`unpinned-ref`): it
@@ -1412,64 +1523,18 @@ stay in their own repositories and neither infects the other. *Tried for real* o
 recorded as dropped, and all 25 core classes its CSS styles are emitted by the generator, so the
 unmodified theme styles a generated page.
 
-### An extension repository
+### Sandboxed embeds
 
-```
-owner/ext-name[/folder]
-├── extension.json
-├── index.mjs
-└── LICENSE
-```
-
-```json
-{ "name": "Reading time", "version": "1.0.0", "licence": "MIT", "kind": "build",
-  "hooks": ["post:html"], "capabilities": [], "pinned_assets": [] }
-```
-
-```js
-// index.mjs — a pure function over data
-export const hooks = {
-  'post:html'(html, ctx) { return `<p class="reading-time">…</p>${html}`; },   // ctx: { slug, title, date, tags }
-};
-```
-
-Hooks are `post:markdown` (markdown → markdown), `post:html` (the post body's HTML) and
-`index:html` (the post list). There are **no capabilities**: `capabilities` must be empty, because
-none is defined, so none can be granted. An example is in [examples/ext-reading-time/](examples/ext-reading-time).
-
-**Build extensions** run in a sandbox at publish:
-
-* a **Web Worker** (no DOM),
-* inside an iframe with **`sandbox="allow-scripts"` and no `allow-same-origin`** (an opaque origin:
-  no storage, no cookies, no reach into the editor or its token),
-* under a CSP with **`connect-src 'none'`** that the Worker inherits (no network), *and* with every
-  network and storage API removed from the Worker's global scope and prototype chain (two
-  independent layers; each is tested alone),
-* handed only `{ source, hook, input, ctx }` as data, never a token or a URL,
-* with a **hard time limit**: an extension that does not return is destroyed, not waited for.
-
-**Output is data.** The sandbox's result is committed as `extension-outputs.json`, keyed by the
-extension's digest, the hook, the post context and the input. The generator, the CLI and CI
-regenerate from that file alone and **never execute extension code**. If an output is missing (a
-post changed, an extension was added) the build refuses with `extension-output-missing`; publish
-from the editor, which runs only what is new. HTML output is rebuilt from an allow-list before it
-reaches a page: `<script>`, event handlers, `javascript:` URLs, `<style>`, forms and unknown iframes
-are *refused* (`unsafe-extension-output`), not silently stripped. Our own video embeds are hidden
-from extensions behind placeholders.
-
-**Embeds.** A reader-side widget is not an extension; it is a **sandboxed embed**. An extension
-with `"kind": "embed"` declares the pages it may frame under `pinned_assets` (`{ url, sha256 }`; the
-URL must name a tag or commit, never a branch, and its hash is checked when the extension is
-pinned). It may emit only `<iframe src="<a pinned asset>" sandbox="allow-scripts">`, and
-`allow-same-origin` (or any other sandbox token) is refused. With `allow-scripts` alone the frame
-has an opaque origin: no access to the parent's storage, cookies or token; communication would be
-`postMessage` over an API the embed documents, or nothing. This is the same reasoning that made
-`/blog/` a separate token-free reader. Our own video embed uses the same attribute; the real hls
-player was checked to run unchanged under it.
+Embeds remain separate from authored post HTML: the first-party video renderer emits
+an iframe with `sandbox="allow-scripts"` and no `allow-same-origin`. The frame has an
+opaque origin and cannot access the parent's cookies, storage or editor token.
+The video release and player configuration are unchanged; `iframe` is still not an
+authored HTML-block tag. Declared comments and analytics scripts are configuration,
+not content blocks, and keep their integrity-pinning requirements.
 
 ### Licences
 
-* **No declared licence is a refusal**, not a warning, for themes, extensions and the pins in
+* **No declared licence is a refusal**, not a warning, for themes and the pins in
   `blog.json` (`no-licence`; an unusable value such as `none` or `proprietary` is `bad-licence`).
 * Licences are recorded in `blog.json`, in `licences.json` (generated), as a comment in every
   generated page, and shown in the app (**Settings → Licences**, and in the pre-flight of every
@@ -1477,8 +1542,8 @@ player was checked to run unchanged under it.
 
 ### The registry
 
-The lists the **Theme** and **Extensions** screens show live in their own data repository (`blog-registry`), not in this one:
-`themes.json` and `extensions.json`, static files. **Adding a theme is a pull request against a JSON file**: no release of this app, no
+The list the **Theme** screen shows lives in its own data repository (`blog-registry`), not in this one:
+`themes.json`, a static file. **Adding a theme is a pull request against a JSON file**: no release of this app, no
 review by this app's maintainer. The list can be forked, and running your own registry is changing one address, `registry` in
 [app/config.js](app/config.js).
 
@@ -1503,25 +1568,22 @@ The registry repository is prepared beside this one (`~/Downloads/blog-registry`
 repository's tooling; until it is pushed to the address in `app/config.js`, the screens use the snapshot. Tests:
 [test/registry.test.js](test/registry.test.js).
 
-**The list** is what the two companion repositories publish. Each folder is a complete theme or
-extension, pinned by the hash of its own files, and every registry entry names the tag `v1.0.0`:
+**The list** is what the companion theme repository publishes. Each folder is a complete theme,
+pinned by the hash of its own files, and every registry entry names the tag `v1.0.0`:
 
 | Repository | Folders |
 |---|---|
 | [blog-webCLI-themes](https://github.com/tejaswigowda/blog-webCLI-themes) | `essay`, `terminal`, `paper`, `cards` (MIT, `blog-webcli-v1`) and `wp/twentytwentyone` (GPL-2.0-or-later, `wordpress-classic`) |
-| [blog-webCLI-extensions](https://github.com/tejaswigowda/blog-webCLI-extensions) | `reading-time`, `heading-anchors`, `table-of-contents`, `smart-typography`, `archive-by-year`, `image-captions` (MIT, all build extensions with no capabilities) |
 
 ```
 node cli/blog.js theme pin tejaswigowda/blog-webCLI-themes/essay@v1.0.0
-node cli/blog.js ext add   tejaswigowda/blog-webCLI-extensions/heading-anchors@v1.0.0
 ```
 
 [test/builtin.test.js](test/builtin.test.js) checks the real folders against this app: each theme
-and extension loads and pins under these rules and builds a real blog; every folder is listed (in the bundled snapshot) and
+loads and pins under these rules and builds a real blog; every folder is listed (in the bundled snapshot) and
 every entry matches its manifest, its licence and a tag that exists; every class a `blog-webcli-v1`
-theme styles is one the generator emits; the extensions run together, deterministically and from
-their recorded outputs. It looks for the repositories next to this one (set `BLOG_WEBCLI_THEMES`
-and `BLOG_WEBCLI_EXTENSIONS` to point elsewhere) and skips when they are absent.
+theme styles is one the generator emits. It looks for the repository next to this one
+(set `BLOG_WEBCLI_THEMES` to point elsewhere) and skips when it is absent.
 
 ## Dependencies and licences
 
@@ -1786,8 +1848,8 @@ there is one implementation, not two.
 
 * **A post that exists** (`lib/live.js`, *checkPage*): the page asks the live copy for its own markdown, hashes it
   and compares. Equal: nothing happens. Different: the page is rebuilt in place, silently, with the same code
-  the next build runs (a test holds the two byte-identical for every post in the corpus, with a pinned theme and
-  an extension too). One file request, no API, no credentials, once per page per session.
+  the next build runs (a test holds the two byte-identical for every post in the corpus, including
+  a pinned theme). One file request, no API, no credentials, once per page per session.
 * **A post that has no page yet** (`404.html`): GitHub Pages answers an unknown path with the site's own 404 page
   and its script runs. It reads the live `index/posts.json`; a slug that is published there and whose file
   says `status: published` is fetched and drawn at its address, with `<meta name="robots" content="noindex">`
@@ -1817,8 +1879,7 @@ What this does not do: link previews (Slack, iMessage, social cards) and search 
 with no JavaScript, so they wait for the build; the editor says so. The *index* page is not refreshed
 (a new post is reachable by its own address, not yet listed). A blog in a **folder** of a repository gets the
 checks but no `404.html` (the repository's 404 page is not the folder's to write), so a brand-new post still
-waits for the build there. A blog that uses an *embed* extension keeps its pages as built (the frames it may
-show are not recorded in `blog.json`). A page has no `x-source-commit`: it is committed together with its source,
+waits for the build there. A page has no `x-source-commit`: it is committed together with its source,
 so the commit that holds it cannot be named inside it.
 
 ## CLI
@@ -1833,8 +1894,6 @@ node cli/blog.js pin   [dir]   pin unpinned asset: references, verify video: rel
 node cli/blog.js theme pin owner/repo[/folder]@ref [dir]   pin a theme (a tag or commit; a branch is refused)
 node cli/blog.js theme clear [dir]                         back to the default theme
 node cli/blog.js theme import <wordpress-slug> [outdir]    ingest a wordpress.org directory theme
-node cli/blog.js ext add owner/repo[/folder]@ref [dir]     pin an extension (fetched as data and hashed; never run)
-node cli/blog.js ext remove owner/repo [dir]
 node cli/blog.js licences [dir]                            every licence the blog depends on
 node cli/blog.js import wp <export.xml | https://site> [dir] --repo owner/name[/folder]   a WordPress blog as files (see Importing from WordPress)
 node cli/serve.js [dir] [port] static server for local preview
@@ -1842,9 +1901,10 @@ node cli/serve.js [dir] [port] static server for local preview
 
 `build` and `check` read `order.json` (the file `blog.json`'s `order.list` names) when the blog is ordered by hand, and print
 the build's warnings, including the posts that are in no list. They read `posts/` and `pages/`, and `build` removes what a feature
-that is now off left behind (`check` lists it as `stale`). They fetch a pinned theme (as data) to regenerate; they **never execute extension
-code**, they use the recorded `extension-outputs.json`. `node cli/build-live.js` rebuilds the two scripts a page can load
-(`lib/live-source.js`, `lib/search-source.js`) after any change under `lib/`; CI runs it with `--check`.
+that is now off left behind (`check` lists it as `stale`). They fetch a pinned theme as data and
+regenerate any valid blog without precomputed hook output or a coverage precondition.
+`node cli/build-live.js` rebuilds the first-party live, search and slideshow scripts
+after changes under `lib/`; CI runs it with `--check`.
 
 CI: copy [templates/blog-check.yml](templates/blog-check.yml) into the blog repo; for [scheduled posts](#scheduled-publishing) also [templates/schedule.yml](templates/schedule.yml).
 Serve generated pages by enabling GitHub Pages on the blog repo (root of the default
@@ -1922,7 +1982,8 @@ upload, and nothing is uploaded until you confirm.
   The Posts tab has **New post**, **Show drafts** (drafts and scheduled posts, opened above the list), a **Sort** control and a
   **Search posts** box. Search filters as you type, matching every word against a post's title, excerpt and tags (not the full text), and works
   with any sort order; it is for you alone: nothing is written and the address does not change. The Pages tab lists the standalone pages
-  (read when the tab is first opened, a request each) with **New page**.
+  (read when the tab is first opened, a request each) with **New page**. Its selection is kept in
+  the address (`&tab=pages`), so browser Back restores it; **Back** from a page editor also returns to Pages.
 * The page has a strict CSP (scripts only from this origin; it may read `https:` addresses only so the WordPress import can fetch
   pictures, see [Importing from WordPress](#importing-from-wordpress)) and never inserts blog content except through the escaping
   renderer, because blog content is untrusted and shares an origin with the token.
@@ -1931,7 +1992,7 @@ upload, and nothing is uploaded until you confirm.
   states the act — *4 files, 1.2 MB, to github.com/me/blog (main)* — and a receipt with the
   commit follows. Images are uploaded to their own repo first; that commit becomes the pin.
 * **Progress and results**: work that takes longer than a moment (building the pre-flight,
-  committing, running an extension, listing videos) shows a spinner at the top of the page and
+  committing, preparing a theme, listing videos) shows a spinner at the top of the page and
   marks the button you pressed. Outcomes arrive as toasts at the bottom right: a success toast
   links the commit or pull request; "nothing to change" is a quiet note; an error names the
   refusal code (or "Something went wrong") and stays until you dismiss it. While a dialog is
@@ -1961,9 +2022,9 @@ upload, and nothing is uploaded until you confirm.
 
 `no-blog-json` · `bad-blog-json` · `missing-frontmatter` · `bad-frontmatter` · `slug-mismatch` ·
 `slug-collision` · `unresolved-asset` · `provider-url` · `unsafe-url` · `lossy-round-trip` ·
-`draft-in-publish` · `classic-token` · `unpinned-ref` · `pin-mismatch` · `bad-theme` · `bad-extension` ·
-`no-licence` · `bad-licence` · `not-in-directory` · `extension-output-missing` · `extension-failed` ·
-`unsafe-extension-output` · `bad-release` · `unknown-slug-in-order` · `duplicate-slug-in-order` · `bad-order-list` ·
+`draft-in-publish` · `classic-token` · `unpinned-ref` · `pin-mismatch` · `bad-theme` ·
+`no-licence` · `bad-licence` · `not-in-directory` ·
+`bad-release` · `unknown-slug-in-order` · `duplicate-slug-in-order` · `bad-order-list` ·
 `missing-order-field` · `mixed-order-field-types` · `bad-order-field` · `bad-html` · `bad-alias` · `alias-collision` · `stale-app` · `missing-source` · `bad-wp-export` · `bad-wp-site` · `import-refused`. A build that is refused writes nothing.
 
 ## Gates
@@ -1983,10 +2044,9 @@ upload, and nothing is uploaded until you confirm.
 | B9 drafts in no index, page or feed | `test/gates.test.js`, `test/app.test.js` |
 | B10 renaming a title does not change the URL | `test/gates.test.js` |
 | B11 ledger reads zero uploaded after render-and-browse | `test/app.test.js` |
-| X1 no third-party code executes when reading a published blog | `test/x1.test.js`, `test/live.test.js` (a page has no executable script, event handler or foreign stylesheet other than the SRI-pinned Font Awesome CSS; JSON-LD is data and is the one script type allowed besides the one same-origin module the live script and the search page add; import-graph scan of the reader and generator for evaluators, Workers and dynamic import; CSPs), `test/e2e/themes.e2e.mjs` (the reader contacts neither the theme nor the extension repository). The opt-in comments and analytics scripts are the stated exception, off by default |
-| X2 build extensions run in a Worker with no DOM, no network, no credentials | `test/e2e/sandbox.e2e.mjs` (real Chrome: hostile extensions, an attacker server that must see nothing, the frame CSP alone, a runaway loop killed) |
-| X3 embeds are `sandbox="allow-scripts"` without `allow-same-origin` | `test/packs.test.js` (sanitizer), `test/packs-app.test.js`, `test/x1.test.js` |
-| X4 themes and extensions pinned by ref and hash; a branch is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/cli-packs.test.js` |
+| X1 published-page code is built from `lib/`, plus any declared hash-pinned script | `test/x1.test.js`, `test/live.test.js`, `test/features.test.js`, `test/e2e/themes.e2e.mjs`: no evaluators or Workers, no theme code; declared integrity-pinned comments and analytics scripts remain the opt-in exception |
+| X3 embeds are `sandbox="allow-scripts"` without `allow-same-origin` | `test/packs.test.js`, `test/video-embed.test.js`, `test/x1.test.js` |
+| X4 themes pinned by ref and hash; a branch is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/cli-packs.test.js` |
 | X5 no declared licence is refused | `test/packs.test.js`, `test/packs-app.test.js`, `test/wp-import.test.js` |
 | X6 WordPress ingestion: directory only; records source, licence, what was dropped | `test/wp-import.test.js` (and a real import of `twentytwentyone`) |
 | X7 `class_contract` changes the emitted markup; a classic theme styles a generated page unmodified | `test/packs.test.js`, `test/packs-app.test.js` |
@@ -2068,7 +2128,6 @@ upload, and nothing is uploaded until you confirm.
 | K12 a blog of more than 500 posts keeps its archive by year and its sitemap as an index of yearly sitemaps (every post in the archive page and the sitemap of its year, every address in exactly one sitemap); 500 or fewer is unchanged; the reader makes the same pages; publishing or deleting changes one year, equals a full build, and removes the files of a year that is gone | `test/split.test.js` |
 | N1 `scheduled` is invisible everywhere `draft` is: index, feed, sitemap, search, listings, prev/next, aliases (a build with it equals a build without it) | `test/schedule.test.js` |
 | N2 a scheduled post never soft-renders: not at its URL, not via `404.html` (the draft rule, for both values) | `test/schedule.test.js` |
-| N3 scheduling computes and commits extension outputs; the go-live step refuses and leaves the post scheduled if one is missing, and fails the run | `test/schedule.test.js` |
 | N4 `publish_at` is read in `blog.json`'s `timezone`; with none it is UTC | `test/schedule.test.js` |
 | N5 `publish_at` never sets `date`, and is removed from the file when the post publishes | `test/schedule.test.js` |
 | N6 the workflow step makes no commit when nothing is due; it flips every due post, builds once, and is idempotent | `test/schedule.test.js` |
@@ -2121,7 +2180,7 @@ listing shifts by one (a larger `pageSize` does not help: the pages together sta
 [stable page addresses](#search-pagination-seo) it is **12 files (4.7 MB)**: the archive and the sitemap (each one file), the search shard,
 the feed, and the index's manifest and one shard.
 It is **declined**, and the whole blog built as before, when it cannot be sure of the answer: the committed index was written by another
-version of the generator, the blog uses extensions, a hand-kept or field order, a small blog (under 300 posts), a search index not in shards,
+version of the generator, a hand-kept or field order, a small blog (under 300 posts), a search index not in shards,
 a standalone page, or a change that alters the header of every page (the first tag in the blog, a second author). A test holds it equal:
 [test/incremental.test.js](test/incremental.test.js) applies each kind of edit, and 24 random edits one on another, to a blog with
 pagination, tags, authors, cards, search shards, a sitemap and old addresses, and requires the files to be exactly a full build's; the same
@@ -2181,16 +2240,10 @@ fast and the send is patient. A repository over what a browser can hold in memor
   an audio file is reachable as a pinned link, `[Listen](asset:audio/ep1.mp3)`.
 * An invalid `customize` section refuses the build, and the reader falls back to the static site
   link rather than rendering with half of it.
-* The `/blog/` reader shows a themed blog (its committed `theme.css`, the same markup) but does not
-  apply extension output: it never fetches or evaluates extension repositories, and it applies no
-  recorded outputs, so extension effects appear on the static pages only.
-* Extensions run only in the editor's sandbox. A blog with extensions cannot be regenerated by the
-  CLI or CI unless `extension-outputs.json` already covers every post (it is committed, so normally
-  it does); otherwise they refuse and say to publish from the editor.
+* The `/blog/` reader shows the committed theme CSS with the same first-party content generation
+  as the static build, including heading anchors and optional contents.
 * The split-licensing check is a conservative text heuristic over `style.css` and the readme, not a
   legal judgement; it refuses on a match and cannot see licence terms written elsewhere.
-* An embed's pinned assets can be verified by the editor only on jsDelivr or GitHub raw (the hosts
-  its CSP lets it read); the CLI can fetch any https host.
 * A WordPress theme's stylesheets are taken (`style.css`, the extra ones it names, and the CSS its demo page enqueues or generates), not
   its PHP or scripts, and for a block theme only its design tokens, not its `theme.json` styles or templates.
 * The `wordpress-classic` contract covers what a blog has (no comments, widgets or sidebar); a theme's CSS for those simply matches

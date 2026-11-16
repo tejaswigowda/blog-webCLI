@@ -1,13 +1,10 @@
-// Fetching a theme or extension from its repository, at a pinned ref, and verifying it.
+// Fetching a theme from its repository, at a pinned ref, and verifying it.
 // Works with any client that has readBytes / tagExists / branchExists (the app's GitHub class,
-// which the CLI also uses). Extension code is fetched as DATA to be hashed; it is never run here.
+// which the CLI also uses). Themes contain CSS and data, never executable code.
 import { Refusal } from '../lib/errors.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { SHA_RE, validatePin } from '../lib/pin.js';
 import { loadTheme, pinFor, themeDigest, themeFilePaths, validateThemeManifest } from '../lib/theme-pack.js';
-import { extensionFilePaths, loadExtension, pinForExtension, validateExtensionManifest } from '../lib/extensions.js';
-import { filesDigest } from '../lib/pin.js';
-import { sha256Bytes } from '../lib/sha256.js';
 
 const dec = new TextDecoder();
 const cache = new Map();
@@ -35,7 +32,6 @@ async function readFiles(gh, where, ref, paths, bad) {
 }
 
 const badTheme = (m) => new Refusal('bad-theme', m);
-const badExt = (m) => new Refusal('bad-extension', m);
 
 async function manifestOf(gh, where, ref, file, bad, validate) {
   const { repo, folder } = parseRepoRef(where);
@@ -73,31 +69,6 @@ export async function readThemeToPin(gh, where, ref, { base, expect } = {}) {
   return { pin, theme, manifest };
 }
 
-export async function readExtensionToPin(gh, where, ref, opts = {}) {
-  const { expect } = opts;
-  const r = parseRepoRef(where);
-  await assertRefKind(gh, r.repo, ref, 'extension');
-  const { manifest, bytes } = await manifestOf(gh, where, ref, 'extension.json', badExt, validateExtensionManifest);
-  const files = { 'extension.json': bytes, ...(await readFiles(gh, where, ref, extensionFilePaths(manifest).filter((p) => p !== 'extension.json'), badExt)) };
-  const digest = filesDigest(files, extensionFilePaths(manifest), badExt);
-  const pin = pinForExtension(r.ref, ref, manifest, digest);
-  checkRegistryClaim(expect, pin);
-  const ext = loadExtension(pin, files);
-  await verifyPinnedAssets(opts.fetchAsset, manifest);
-  return { pin, ext, manifest };
-}
-
-// An embed's pinned assets are fetched once, at pin time, and hashed against what the extension declares.
-export async function verifyPinnedAssets(fetchAsset, manifest) {
-  for (const a of manifest.pinned_assets || []) {
-    if (!fetchAsset) throw badExt(`${manifest.name}: cannot verify pinned asset ${a.url} here`);
-    const bytes = await fetchAsset(a.url);
-    if (bytes === null) throw badExt(`${manifest.name}: pinned asset ${a.url} could not be fetched`);
-    const got = sha256Bytes(bytes);
-    if (got !== a.sha256) throw new Refusal('pin-mismatch', `${manifest.name}: pinned asset ${a.url} hashes to ${got}, not the ${a.sha256} the extension declares`);
-  }
-}
-
 // ---- loading what a blog.json already pins ----
 
 export async function loadPinnedTheme(gh, pin) {
@@ -112,23 +83,9 @@ export async function loadPinnedTheme(gh, pin) {
   return theme;
 }
 
-export async function loadPinnedExtension(gh, pin) {
-  validatePin(pin, 'extension');
-  const key = `e:${pin.repo}@${pin.ref}:${pin.sha256}`;
-  if (cache.has(key)) return cache.get(key);
-  await assertRefKind(gh, parseRepoRef(pin.repo).repo, pin.ref, 'extension');
-  const { manifest, bytes } = await manifestOf(gh, pin.repo, pin.ref, 'extension.json', badExt, validateExtensionManifest);
-  const files = { 'extension.json': bytes, ...(await readFiles(gh, pin.repo, pin.ref, extensionFilePaths(manifest).filter((p) => p !== 'extension.json'), badExt)) };
-  const ext = loadExtension(pin, files);
-  cache.set(key, ext);
-  return ext;
-}
-
 export async function loadPacks(gh, blog) {
   const theme = blog.theme && typeof blog.theme === 'object' ? await loadPinnedTheme(gh, blog.theme) : null;
-  const extensions = [];
-  for (const pin of blog.extensions || []) extensions.push(await loadPinnedExtension(gh, pin));
-  return { theme, extensions };
+  return { theme };
 }
 
 export const clearPackCache = () => cache.clear();

@@ -1,5 +1,4 @@
-// Scheduled publishing (gates N1–N8): `scheduled` is a draft with a time, invisible everywhere a draft is, with its extension runs
-// recorded when it is scheduled, and a CLI step (run by a workflow) that publishes what is due, once, or refuses and says so.
+// Scheduled publishing: invisible until due, then regenerated and published in one workflow step.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -8,9 +7,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { buildSite, parsePost, renderPost, validateBlog } from '../lib/blog.js';
-import { buildSiteWith } from '../lib/build-async.js';
-import { loadExtension, extensionFilePaths, parseOutputsFile, pinForExtension } from '../lib/extensions.js';
-import { filesDigest } from '../lib/pin.js';
 import { renderFromSite, loadSite } from '../lib/live-render.js';
 import { daysUntil, dueOf, instantOf, publishText, SCHEDULE_WARN_DAYS } from '../lib/schedule.js';
 import { splitFile, parseMeta } from '../lib/frontmatter.js';
@@ -20,7 +16,7 @@ import { GitHub } from '../app/github.js';
 import { executePlan, planChange } from '../app/site.js';
 import { fakeGitHub } from './fake-github.js';
 import { Refusal } from '../lib/errors.js';
-import { EX, localRunner, readDirFiles } from './helpers.js';
+import { EX, readDirFiles } from './helpers.js';
 
 const run = promisify(execFile);
 const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -96,35 +92,6 @@ test('N2: a scheduled post never renders, at its address or from the live copy',
   });
 });
 
-async function pinnedExt() {
-  const files = await readDirFiles(path.join(EX, 'ext-reading-time'));
-  const manifest = JSON.parse(new TextDecoder().decode(files['extension.json']));
-  const pin = pinForExtension('me/ext', 'v1.0.0', manifest, filesDigest(files, extensionFilePaths(manifest), (m) => new Error(m)));
-  return { pin, ext: loadExtension(pin, files) };
-}
-
-test('N3: scheduling records the extension runs now, so publishing later needs none', async () => {
-  const e = await pinnedExt();
-  const blog = JSON.stringify({ ...BLOG, extensions: [e.pin] });
-  const posts = [post('live'), post('soon', { status: 'scheduled', publish_at: '2026-11-08T09:00' })];
-  const bare = buildSite({ blog, posts, lock: {}, extensions: [e.ext] });
-  assert.ok(bare.errors.some(code('extension-output-missing')), 'without a recorded output the build says so');
-  const scheduled = await buildSiteWith({ blog, posts, lock: {}, extensions: [e.ext] }, localRunner);
-  assert.deepEqual(scheduled.errors, []);
-  assert.ok(!('soon/index.html' in scheduled.files), 'still no page for it');
-  const recorded = parseOutputsFile(scheduled.files['extension-outputs.json']);
-  const withoutScheduled = parseOutputsFile((await buildSiteWith({ blog, posts: [posts[0]], lock: {}, extensions: [e.ext] }, localRunner)).files['extension-outputs.json']);
-  assert.ok(Object.keys(recorded).length > Object.keys(withoutScheduled).length, "the scheduled post's runs are in the file");
-  // go-live: flipped, built with the recorded outputs and no runner, as the workflow does
-  const flipped = [posts[0], { ...posts[1], text: publishText(posts[1].text, posts[1].path) }];
-  const live = buildSite({ blog, posts: flipped, lock: {}, extensions: [e.ext], outputs: recorded });
-  assert.deepEqual(live.errors.map((x) => x.code), [], 'nothing is missing at go-live');
-  assert.ok('soon/index.html' in live.files);
-  // an output that was never recorded refuses at go-live (the CLI leaves the post scheduled and fails)
-  const unrecorded = buildSite({ blog, posts: flipped, lock: {}, extensions: [e.ext], outputs: {} });
-  assert.ok(unrecorded.errors.some(code('extension-output-missing')));
-});
-
 async function blogDir(extra = {}) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sched-'));
   await fs.cp(path.join(EX, 'blog'), dir, { recursive: true });
@@ -160,7 +127,7 @@ test('N6: the workflow step commits nothing when nothing is due, and flips every
   assert.match(again.stdout, /nothing is due/, 'idempotent');
 });
 
-test('N3/N6: a refusal leaves the due post scheduled, writes nothing, and fails the run', async () => {
+test('N6: a refusal leaves the due post scheduled, writes nothing, and fails the run', async () => {
   const dir = await blogDir();
   await fs.writeFile(path.join(dir, 'posts/soon.md'), '---\nslug: soon\ntitle: soon\ndate: 2026-11-09\nstatus: scheduled\npublish_at: 2026-11-08T09:00\n---\n\n![x](asset:images/never-pinned.png)\n');
   assert.equal((await cli(['build', dir])).code, 0, 'a scheduled post may carry a reference that does not resolve yet');

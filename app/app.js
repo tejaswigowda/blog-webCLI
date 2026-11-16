@@ -1,7 +1,6 @@
 import { createNet, fmtBytes } from './net.js';
 import { BULK_AT, GitHub, assertToken } from './github.js';
-import { NotFound, describePlan, detectAddress, executeMedia, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planExtension, planInit, planSettings, planLook, planThemeFile, planMedia, planTheme } from './site.js';
-import { createSandbox } from './sandbox.js';
+import { NotFound, describePlan, detectAddress, executeMedia, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planInit, planSettings, planLook, planThemeFile, planMedia, planTheme } from './site.js';
 import { describeRelease, executeRelease, listReleaseFolders, planTagRelease, videoRepositories } from './release.js';
 import { insertionPoint } from '../lib/selection.js';
 import { licenceRecords } from '../lib/licences.js';
@@ -45,9 +44,6 @@ import { authorizeUrl, canRefresh, exchangeCode, installUrl, needsRefresh, newSt
 import { createImportView } from './import-view.js';
 
 const net = createNet();
-// Extensions run only here, at publish, in a sandbox that has no DOM, no network and no token.
-let sandbox = null;
-const runner = (job) => (sandbox ||= createSandbox()).runner(job);
 const KEY = 'blog.webcli.token';
 const gh = new GitHub(net, { token: sessionStorage.getItem(KEY) || localStorage.getItem(KEY), store: localStorage });
 let login = null;
@@ -347,10 +343,10 @@ function errBox(e) {
 
 const parseHash = () => {
   const p = new URLSearchParams(location.hash.slice(1));
-  const mode = p.has('import') ? 'import' : p.has('themes') ? 'themes' : p.has('extensions') ? 'extensions' : p.has('licences') ? 'licences' : p.has('settings') ? 'settings' : p.has('media') ? 'media' : p.has('new') || p.has('newpage') ? 'new' : p.has('correct') || p.has('correctpage') ? 'correct' : p.has('edit') || p.has('editpage') ? 'edit' : null;
+  const mode = p.has('import') ? 'import' : p.has('themes') ? 'themes' : p.has('licences') ? 'licences' : p.has('settings') ? 'settings' : p.has('media') ? 'media' : p.has('new') || p.has('newpage') ? 'new' : p.has('correct') || p.has('correctpage') ? 'correct' : p.has('edit') || p.has('editpage') ? 'edit' : null;
   // a standalone page (pages/<slug>.md) is edited, or corrected by pull request, with the same editor as a post
   const kind = p.has('newpage') || p.has('editpage') || p.has('correctpage') ? 'page' : 'post';
-  return { repo: p.get('repo'), post: p.get('post') || p.get('edit') || p.get('editpage') || p.get('correct') || p.get('correctpage'), ref: p.get('ref') || undefined, mode, kind };
+  return { repo: p.get('repo'), post: p.get('post') || p.get('edit') || p.get('editpage') || p.get('correct') || p.get('correctpage'), ref: p.get('ref') || undefined, tab: p.get('tab'), mode, kind };
 };
 const link = (repo, extra = '') => `#repo=${repo}${extra}`;
 
@@ -483,7 +479,6 @@ async function route() {
     if (mine !== seq) return;
     let node;
     if (r.mode === 'themes') node = await themesView(repo, r);
-    else if (r.mode === 'extensions') node = await extensionsView(repo, r);
     else if (r.mode === 'licences') node = licencesView(repo, r);
     else if (r.mode === 'settings') node = await settingsView(repo, r);
     else if (r.mode === 'media') node = await mediaView(repo, r);
@@ -584,7 +579,7 @@ async function createBlogView(repo, r) {
     go.disabled = true;
     try {
       const fields = Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.value]));
-      const plan = await heavy('Preparing the blog…', () => planInit(gh, { repo, branch, fields, runner }), { button: go });
+      const plan = await heavy('Preparing the blog…', () => planInit(gh, { repo, branch, fields }), { button: go });
       if (!(await confirmPlan(plan))) return;
       const receipt = await heavy('Committing…', () => executePlan(gh, plan), { button: go });
       sent(receipt, { title: 'Blog created', action: { label: 'Open the blog', onClick: () => { cache = null; route(); } } });
@@ -779,7 +774,7 @@ async function settingsView(repo, r) {
   save.addEventListener('click', async () => {
     save.disabled = true;
     try {
-      const plan = await heavy('Preparing the changes…', () => planSettings(gh, { repo, branch, form: collect(), runner }), { button: save });
+      const plan = await heavy('Preparing the changes…', () => planSettings(gh, { repo, branch, form: collect() }), { button: save });
       if (plan.unchanged) {
         noted('Nothing to save: the repository already has these settings.');
         return;
@@ -820,7 +815,7 @@ async function settingsView(repo, r) {
       importBtn.disabled = true;
       try {
         const text = await file.text();
-        const plan = await heavy('Preparing the theme…', () => planThemeFile(gh, { repo, branch, text, runner }), { button: importBtn });
+        const plan = await heavy('Preparing the theme…', () => planThemeFile(gh, { repo, branch, text }), { button: importBtn });
         await commitPlan(plan, repo, r, importBtn);
         route();
       } catch (e) {
@@ -831,8 +826,8 @@ async function settingsView(repo, r) {
     });
     input.click();
   });
-  const themeBox = section('Theme, extensions and licences',
-      h('p', {}, `Theme: ${current.theme && typeof current.theme === 'object' ? `${current.theme.name} ${current.theme.version} (${current.theme.licence})` : 'default'} · Extensions: ${(current.extensions || []).length ? current.extensions.map((e) => `${e.name} ${e.version}`).join(', ') : 'none'}`),
+  const themeBox = section('Theme and licences',
+      h('p', {}, `Theme: ${current.theme && typeof current.theme === 'object' ? `${current.theme.name} ${current.theme.version} (${current.theme.licence})` : 'default'}`),
       h('div', { class: 'actions' }, nav('Choose a theme', link(repo, '&themes'), { icon: 'droplet' }), nav('Licences', link(repo, '&licences'), { icon: 'shield' })), h('div', { class: 'actions' }, exportBtn, importBtn), h('div', { class: 'hint' }, 'The theme file is the saved theme and customization (colours, fonts, width, custom CSS, list layout, header, footer, top bar). The logo and link icons are pictures in this blog\'s images repository and are not included; the blog you import into keeps its own.'));
 
   const node = h(
@@ -848,14 +843,14 @@ async function settingsView(repo, r) {
   return node;
 }
 
-// ---------- themes, extensions, licences ----------
+// ---------- themes and licences ----------
 
-// The lists of themes and extensions come from the registry (a data repository, address in app/config.js), with a bundled
+// The theme list comes from the registry (a data repository, address in app/config.js), with a bundled
 // snapshot as the fallback. A listed entry is convenience only: a repository works by its address whether or not it is listed,
 // and the registry's own fields never decide what is pinned (see lib/registry.js).
 let snapshotPromise = null;
 async function readList(kind) {
-  snapshotPromise ||= fetch(new URL('./registry-snapshot.json', import.meta.url), { cache: 'no-cache' }).then((r) => r.json()).catch(() => ({ version: 1, themes: [], extensions: [] }));
+  snapshotPromise ||= fetch(new URL('./registry-snapshot.json', import.meta.url), { cache: 'no-cache' }).then((r) => r.json()).catch(() => ({ version: 1, themes: [] }));
   const snapshot = await snapshotPromise;
   return loadRegistry(kind, { url: config.registry, snapshot });
 }
@@ -869,7 +864,7 @@ const listNote = (res) => (res.source === 'snapshot'
 function parseAddress(text) {
   const t = text.trim();
   const i = t.lastIndexOf('@');
-  if (i < 1 || i === t.length - 1) throw new Refusal('unpinned-ref', 'Write it as owner/repo@v1.0.0: a theme or extension is always pinned to a tag or a commit.');
+  if (i < 1 || i === t.length - 1) throw new Refusal('unpinned-ref', 'Write it as owner/repo@v1.0.0: a theme is always pinned to a tag or a commit.');
   parseRepoRef(t.slice(0, i));
   return { where: parseRepoRef(t.slice(0, i)).ref, ref: t.slice(i + 1).trim() };
 }
@@ -1002,7 +997,7 @@ async function themesView(repo, r) {
   const use = async (spec, btn) => {
     btn.disabled = true;
     try {
-      const plan = await heavy('Preparing the theme…', () => planTheme(gh, { repo, branch, use: spec, fresh: looks && freshBox.checked, runner }), { button: btn });
+      const plan = await heavy('Preparing the theme…', () => planTheme(gh, { repo, branch, use: spec, fresh: looks && freshBox.checked }), { button: btn });
       await commitPlan(plan, repo, r, btn);
     } catch (e) {
       fail(e);
@@ -1022,7 +1017,7 @@ async function themesView(repo, r) {
     lookBtn.disabled = true;
     try {
       const look = lookFromText(lookBox.value);
-      const plan = await heavy('Preparing the look…', () => planLook(gh, { repo, branch, look, runner }), { button: lookBtn });
+      const plan = await heavy('Preparing the look…', () => planLook(gh, { repo, branch, look }), { button: lookBtn });
       await commitPlan(plan, repo, r, lookBtn);
     } catch (e) {
       fail(e);
@@ -1057,49 +1052,6 @@ async function themesView(repo, r) {
   );
 }
 
-async function extensionsView(repo, r) {
-  if (!gh.token) return needSignIn('extensions');
-  const { blog } = cache;
-  const { branch, canPush } = await packContext(repo, r);
-  const registry = await readList('extensions');
-  const listed = registry.entries;
-  const act = async (args, btn) => {
-    btn.disabled = true;
-    try {
-      const plan = await heavy('Running the extension in the sandbox…', () => planExtension(gh, { repo, branch, ...args, runner }), { button: btn });
-      await commitPlan(plan, repo, r, btn);
-    } catch (e) {
-      fail(e);
-    } finally {
-      btn.disabled = !canPush;
-    }
-  };
-  const input = h('input', { placeholder: 'owner/extension-repo@v1.0.0', style: 'width:100%' });
-  const add = h('button', { class: 'primary', icon: 'plus' }, 'Add this extension…');
-  add.disabled = !canPush;
-  add.addEventListener('click', () => { try { act({ add: parseAddress(input.value) }, add); } catch (e) { fail(e); } });
-  const current = blog.extensions || [];
-  return h(
-    'div',
-    {},
-    h('p', {}, nav('Settings', link(repo, '&settings'), { icon: 'arrow-left' })),
-    h('h1', {}, 'Extensions'),
-    h('p', { class: 'hint' }, 'An extension is code, so it runs only when you publish, in a sandbox with no DOM, no network and no access to your token. What it returns is committed with your pages; the published blog contains no extension code, and readers run none.'),
-    h('h3', {}, 'In use'),
-    current.length
-      ? h('ul', { class: 'posts' }, current.map((e) => { const b = h('button', { icon: 'x' }, 'Remove…'); b.disabled = !canPush; b.addEventListener('click', () => act({ remove: e.repo }, b)); return h('li', {}, h('h3', {}, `${e.name} ${e.version}`), h('div', { class: 'muted' }, `${e.licence} · ${e.repo}@${e.ref}${e.hooks ? ` · ${e.hooks.join(', ')}` : ''}`), b); }))
-      : h('p', { class: 'muted' }, 'None.'),
-    h('h3', {}, 'By address'),
-    input,
-    h('div', { class: 'actions' }, add),
-    h('h3', {}, 'Listed'),
-    listNote(registry),
-    listed.length
-      ? h('ul', { class: 'posts' }, listed.map((e) => { const b = h('button', { icon: 'plus' }, 'Add…'); b.disabled = !canPush; b.addEventListener('click', () => { try { act({ add: { ...parseAddress(`${e.repo}@${e.ref}`), expect: { sha256: e.sha256, licence: e.licence } } }, b); } catch (err) { fail(err); } }); return h('li', {}, h('h3', {}, e.name), h('div', { class: 'muted' }, `${e.licence || 'licence not stated'} · ${e.repo}@${e.ref}`), e.blurb ? h('p', {}, e.blurb) : null, b); }))
-      :       h('p', { class: 'muted' }, 'The list could not be read. Any extension repository still works by its address.'),
-  );
-}
-
 function licencesView(repo, r) {
   const { blog } = cache;
   const rows = licenceRecords(blog);
@@ -1109,9 +1061,9 @@ function licencesView(repo, r) {
     h('p', {}, nav('Settings', link(repo, '&settings'), { icon: 'arrow-left' })),
     h('h1', {}, 'What is in this site'),
     h('p', { class: 'hint' }, nav('Licences of the tool itself', '#licences')),
-    h('p', { class: 'muted' }, 'Every theme and extension this blog depends on, with its licence. Recorded in blog.json, written to licences.json, and stamped into each generated page as a comment.'),
+    h('p', { class: 'muted' }, 'The theme this blog depends on, with its licence. Recorded in blog.json, written to licences.json, and stamped into each generated page as a comment.'),
     h('table', { style: 'width:100%;border-collapse:collapse' }, h('thead', {}, h('tr', {}, ['Kind', 'Name', 'Version', 'Licence', 'Pinned to'].map((t) => h('th', { style: 'text-align:left;border-bottom:1px solid var(--rule);padding:.3rem' }, t)))), h('tbody', {}, rows.map((x) => h('tr', {}, [x.kind, x.name, x.version || '', x.licence, x.repo ? `${x.repo}@${x.ref}` : 'built in'].map((t) => h('td', { style: 'padding:.3rem;border-bottom:1px solid var(--rule)' }, String(t))))))),
-    h('p', { class: 'hint' }, `The generator, ${blog.theme && typeof blog.theme === 'object' ? 'your pinned theme' : 'the default theme'} and any extensions are the only code or style that shapes the pages. Posts and images are your own content.`),
+    h('p', { class: 'hint' }, `The first-party generator and ${blog.theme && typeof blog.theme === 'object' ? 'your pinned theme' : 'the default theme'} shape the pages. Posts and images are your own content. Declared, hash-pinned comments and analytics scripts remain opt-in.`),
   );
 }
 
@@ -1174,7 +1126,7 @@ async function mediaView(repo, r) {
   const upload = (uploads, btn) => async () => {
     btn.disabled = true;
     try {
-      const plan = await heavy('Preparing…', () => planMedia(gh, { repo, branch, uploads, runner }), { button: btn });
+      const plan = await heavy('Preparing…', () => planMedia(gh, { repo, branch, uploads }), { button: btn });
       await commitPlan(plan, repo, r, btn);
     } catch (e) {
       fail(e);
@@ -1287,6 +1239,7 @@ async function listView(repo, r) {
   const tabs = [['posts', 'Posts', postsPanel], ['pages', 'Pages', pagesPanel]];
   const buttons = tabs.map(([key, label]) => h('button', { type: 'button', role: 'tab', 'aria-controls': `tab-${key}`, onclick: () => select(key) }, label));
   const select = (key) => {
+    history.replaceState(null, '', link(repo, `${r.ref ? `&ref=${r.ref}` : ''}${key === 'pages' ? '&tab=pages' : ''}`));
     tabs.forEach(([k, , panel], i) => {
       panel.hidden = k !== key;
       buttons[i].setAttribute('aria-selected', String(k === key));
@@ -1305,7 +1258,7 @@ async function listView(repo, r) {
     select(tabs[next][0]);
     buttons[next].focus();
   });
-  select('posts');
+  select(r.tab === 'pages' ? 'pages' : 'posts');
   // the buttons sit above the tabs; once the bar sticks they move to its right, level with the tabs
   const bar = h('div', { class: 'stickybar' }, globalActions, tablist);
   const sentinel = h('div', { class: 'sticky-sentinel', 'aria-hidden': 'true' });
@@ -1428,7 +1381,7 @@ async function deleteContent(repo, { slug, kind, ref, button }) {
   const { repo: plainRepo } = parseRepoRef(repo);
   const branch = ref || (await gh.repoInfo(plainRepo)).default_branch;
   try {
-    const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, kind, remove: true, runner }), { button });
+    const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, kind, remove: true }), { button });
     if (!(await confirmPlan(plan))) return false;
     const receipt = await heavy('Committing…', () => executePlan(gh, plan), { button });
     sent(receipt, { title: kind === 'page' ? 'Page deleted' : 'Post deleted' });
@@ -1549,7 +1502,7 @@ async function editorView(repo, r) {
   const node = h(
     'div',
     {},
-    h('p', {}, nav('Back', existing && !isPageKind ? link(repo, `&post=${existing.post.slug}`) : link(repo), { icon: 'arrow-left' })),
+    h('p', {}, nav('Back', existing && !isPageKind ? link(repo, `&post=${existing.post.slug}`) : link(repo, isPageKind ? '&tab=pages' : ''), { icon: 'arrow-left' })),
     h('h1', {}, correcting ? `Correct: ${m.title}` : isNew ? `New ${word}` : `Edit: ${m.title}`),
     h('div', { class: 'cols' },
       h('div', {},
@@ -1726,7 +1679,7 @@ async function editorView(repo, r) {
       const creating = isNew;
       const { slug, text, md } = buildText();
       const used = new Set(collectAssetRefs(quill.getContents(), readFields()));
-      const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, kind, staged: [...staged.values()].filter((s) => used.has(`asset:${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew, runner }), { button: go });
+      const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, kind, staged: [...staged.values()].filter((s) => used.has(`asset:${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew }), { button: go });
       if (!plan.changes.length && !plan.assetGroups.length) {
         noted('Nothing to publish: the repository already matches.');
         return;
@@ -2041,7 +1994,6 @@ function scheduleNote(s) {
   return [
     `Scheduled for ${s.at.replace('T', ' ')} ${s.zone || 'UTC (set a time zone in Settings to use yours)'}. It goes live not before then, and normally within the hour: the workflow runs hourly and GitHub may delay it.`,
     'Its source is public in a public repository until then: scheduled hides it from the site, not from GitHub.',
-    s.extensionsRun ? 'Extensions are being run now and their output recorded, because the workflow that publishes it runs none.' : '',
     s.days > SCHEDULE_WARN_DAYS ? `That is ${Math.floor(s.days)} days away. GitHub turns scheduled workflows off after 60 days without activity in a public repository, so it may never publish unless the repository is touched before then.` : '',
     'Needs the schedule workflow (templates/schedule.yml) in the repository.',
   ].filter(Boolean).join(' ');

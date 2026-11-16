@@ -42,49 +42,5 @@
       "origin": "authored",
       "sha256": "6e5681af66932976541ec1c6321c013b40010afb42071803fb3546c18c7311aa"
     }
-  ],
-  "extensions": [
-    {
-      "name": "Reading time",
-      "repo": "tejaswigowda/blog-webCLI-extensions/reading-time",
-      "ref": "v1.0.0",
-      "licence": "MIT",
-      "blurb": "Adds an estimated reading time above each post."
-    },
-    {
-      "name": "Heading anchors",
-      "repo": "tejaswigowda/blog-webCLI-extensions/heading-anchors",
-      "ref": "v1.0.0",
-      "licence": "MIT",
-      "blurb": "Gives every heading a stable id and a # link, so a section can be linked to."
-    },
-    {
-      "name": "Table of contents",
-      "repo": "tejaswigowda/blog-webCLI-extensions/table-of-contents",
-      "ref": "v1.0.0",
-      "licence": "MIT",
-      "blurb": "Adds a contents list of the h2 and h3 headings to a post that has three or more."
-    },
-    {
-      "name": "Smart typography",
-      "repo": "tejaswigowda/blog-webCLI-extensions/smart-typography",
-      "ref": "v1.0.0",
-      "licence": "MIT",
-      "blurb": "Curly quotes, dashes and ellipses in the rendered post. Code, links and URLs are left alone; the markdown source is never changed."
-    },
-    {
-      "name": "Archive by year",
-      "repo": "tejaswigowda/blog-webCLI-extensions/archive-by-year",
-      "ref": "v1.0.0",
-      "licence": "MIT",
-      "blurb": "Groups the post list under a heading for each year. Needs dates shown in the list; uses the blog-webcli-v1 markup."
-    },
-    {
-      "name": "Image captions",
-      "repo": "tejaswigowda/blog-webCLI-extensions/image-captions",
-      "ref": "v1.0.0",
-      "licence": "MIT",
-      "blurb": "Shows an image's alt text as a visible caption (a figure with a figcaption). Uses the blog-webcli-v1 markup."
-    }
   ]
 }

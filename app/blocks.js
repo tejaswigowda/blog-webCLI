@@ -3,22 +3,14 @@
 // value: the table is made with DOM calls and textContent, and an HTML block is shown as its source, so what a post says
 // cannot run in the editor, which holds the token. Editing happens in a dialog, because a table or a block is not typed into.
 import { canonCell, deltaToMarkdownChecked, parseInline } from '../lib/markdown.js';
-import { MAX_BLOCK, canonHtml, tokenizeHtml, ALLOWED_TAGS } from '../lib/rawhtml.js';
+import { MAX_BLOCK, canonHtml, tokenizeHtml, ALLOWED_TAGS, htmlBlockClasses, withHtmlBlockClasses } from '../lib/rawhtml.js';
+import { Refusal } from '../lib/errors.js';
 import { slideshowHtml } from '../lib/slideshow.js';
 import { DEFAULT_SLIDE_ANIMATION, SLIDE_ANIMATIONS } from '../lib/animations.js';
 import { deltaToHtmlGroup } from '../lib/html.js';
-
-const el = (tag, attrs = {}, ...kids) => {
-  const n = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') n.className = v;
-    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
-    else if (v === true) n.setAttribute(k, '');
-    else if (v !== false && v != null) n.setAttribute(k, v);
-  }
-  n.append(...kids.flat().filter((k) => k != null && k !== false));
-  return n;
-};
+import { el, dialog } from './block-dialog.js';
+import { editWidget, readWidget, widgetLabel } from './widgets.js';
+import { highlightedTextarea, paintHtmlSource } from './highlight.js';
 
 export const NEW_TABLE = () => ({ head: ['Column 1', 'Column 2'], align: ['', ''], rows: [['', ''], ['', '']] });
 
@@ -45,7 +37,27 @@ export function paintTable(node, t) {
 
 export function paintHtml(node, src) {
   const slides = readSlideshow(src);
-  node.replaceChildren(el('div', { class: 'blk-bar', contenteditable: 'false' }, el('span', {}, slides ? `Slideshow · ${slides.length} slides` : 'HTML block'), el('button', { type: 'button', class: 'blk-edit' }, slides ? 'Edit slideshow' : 'Edit HTML')), el('pre', {}, src));
+  const widget = !slides && readWidget(src);
+  let classes;
+  if (!slides && !widget) {
+    let names;
+    let problem = 'Classes: use Edit HTML to add one outer wrapper first.';
+    try {
+      names = htmlBlockClasses(src);
+    } catch (e) {
+      if (!(e instanceof Refusal)) throw e;
+      problem = `Class editing unavailable: ${e.detail}`;
+    }
+    classes = names == null ? el('span', { class: 'blk-class-help' }, problem) : el('form', {
+      class: 'blk-classes',
+      onkeydown: (e) => e.stopPropagation(),
+    }, el('label', {}, 'Classes', el('input', { value: names, 'aria-label': 'HTML block CSS classes', placeholder: 'testimonial featured' })),
+    el('button', { type: 'submit' }, 'Apply classes'),
+    el('span', { class: 'blk-class-error', role: 'alert' }));
+  }
+  const source = el('pre');
+  paintHtmlSource(source, src);
+  node.replaceChildren(el('div', { class: 'blk-bar', contenteditable: 'false' }, el('span', {}, slides ? `Slideshow · ${slides.length} slides` : widget ? widgetLabel(widget.type) : 'HTML block'), classes, el('button', { type: 'button', class: 'blk-edit' }, slides ? 'Edit slideshow' : widget ? 'Edit widget' : 'Edit HTML'), widget && el('button', { type: 'button', class: 'blk-source' }, 'Edit HTML')), source);
 }
 
 function readSlideshow(src) {
@@ -71,46 +83,6 @@ function readSlideshow(src) {
   } catch {
     return null;
   }
-}
-
-// ---------- dialogs ----------
-function dialog(title, body, { apply, applyLabel = 'Apply', check }) {
-  return new Promise((resolve) => {
-    const dlg = el('dialog', { class: 'blk-dialog' });
-    const msg = el('p', { class: 'blk-msg', role: 'alert' });
-    const ok = el('button', { type: 'button', class: 'primary' }, applyLabel);
-    const cancel = el('button', { type: 'button' }, 'Cancel');
-    let settled = false;
-    const done = (v) => {
-      if (settled) return;
-      settled = true;
-      dlg.close();
-      dlg.remove();
-      resolve(v);
-    };
-    const refresh = () => {
-      let problem = '';
-      try {
-        check();
-      } catch (e) {
-        problem = e && (e.detail || e.message) ? e.detail || e.message : String(e);
-      }
-      msg.textContent = problem;
-      ok.disabled = !!problem;
-    };
-    ok.addEventListener('click', () => {
-      refresh();
-      if (!ok.disabled) done(apply());
-    });
-    cancel.addEventListener('click', () => done(null));
-    dlg.addEventListener('cancel', () => done(null));
-    dlg.addEventListener('input', refresh);
-    dlg.addEventListener('change', refresh);
-    dlg.append(el('h2', {}, title), body, msg, el('div', { class: 'actions' }, ok, cancel));
-    document.body.append(dlg);
-    refresh();
-    dlg.showModal();
-  });
 }
 
 const fixed = (t) => ({ head: t.head.map(canonCell), align: t.align.map((a) => a || ''), rows: t.rows.map((r) => r.map(canonCell)) });
@@ -171,7 +143,8 @@ export function editTable(initial = NEW_TABLE()) {
 export function editHtml(initial = '') {
   const area = el('textarea', { rows: 12, class: 'mono', spellcheck: 'false', 'aria-label': 'HTML', placeholder: '<div class="note">\n  <p>Some <b>HTML</b></p>\n</div>' });
   area.value = initial;
-  const body = el('div', {}, el('p', { class: 'hint' }, `A block of HTML, shown as written. Allowed tags: ${ALLOWED_TAGS.join(' ')}. No scripts, styles, frames, forms or event handlers; addresses are http(s), mailto, relative or asset: references. Blank lines end a block, so they are removed.`), area);
+  const source = highlightedTextarea(area, area.ownerDocument, (pre, html, doc) => paintHtmlSource(pre, `${html}\n`, doc));
+  const body = el('div', {}, el('p', { class: 'hint' }, `A block of HTML, shown as written. Allowed tags: ${ALLOWED_TAGS.join(' ')}. No scripts, styles, frames, forms or event handlers; addresses are http(s), mailto, relative or asset: references. Blank lines end a block, so they are removed.`), source);
   const read = () => {
     const src = canonHtml(area.value);
     if (!src) throw new Error('Write some HTML.');
@@ -195,37 +168,46 @@ const blankSlide = () => ({ image: '', alt: '', title: '', text: '', label: '', 
 
 export function editSlideshow(initial = [blankSlide(), blankSlide()], chooseImage) {
   const slides = initial.map((slide) => ({ ...slide }));
+  let expanded = slides[0];
   const rows = el('div');
-  const body = el('div', {}, el('p', { class: 'hint' }, '2-10 slides. Choose an image from Media, upload a new image from the picker, or enter an asset: reference or https:// image address. New images upload only when you publish or save the draft. Choose effects for the whole slide and its image, heading, caption and link label. Set the whole slide to None to animate only individual elements. Use relative link addresses such as ./products/ for nearby pages. Slides rotate every 6 seconds. Reduced motion disables animation and starts paused. Without JavaScript, every slide stays visible.'), rows);
+  const body = el('div', {}, el('p', { class: 'hint' }, '2-10 slides. Expand a slide to edit its content and animations. New slides open automatically.'),
+    el('details', { class: 'more' }, el('summary', {}, 'Images, links and animations'), el('p', { class: 'hint' }, 'Choose an image from Media, upload a new image from the picker, or enter an asset: reference or https:// image address. New images upload only when you publish or save the draft. Choose effects for the whole slide and its image, heading, caption and link label. Set the whole slide to None to animate only individual elements. Use relative link addresses such as ./products/ for nearby pages. Slides rotate every 6 seconds. Reduced motion disables animation and starts paused. Without JavaScript, every slide stays visible.')), rows);
   const draw = () => {
     rows.replaceChildren(...slides.map((slide, i) => {
+      const labelText = () => `Slide ${i + 1}${slide.title || slide.alt ? `: ${slide.title || slide.alt}` : ''}`;
+      const summary = el('summary', {}, labelText());
       const animation = (key, title, fallback) => el('label', {}, title, el('select', { 'aria-label': `Slide ${i + 1} ${title.toLowerCase()}`, onchange: (e) => { slide[key] = e.target.value; } },
         SLIDE_ANIMATIONS.map((name) => el('option', { value: name, selected: (slide[key] ?? fallback) === name }, name === 'none' ? 'None' : name.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()))),
       ));
       const fields = [['image', 'Image', 'asset:images/photo.jpg'], ['alt', 'Alternative text', 'Describe the picture'], ['title', 'Heading', 'Optional'], ['text', 'Caption', 'Optional'], ['label', 'Link label', 'Optional'], ['url', 'Link address', './products/']].map(([key, title, placeholder]) => {
-        const input = el('input', { value: slide[key], placeholder, 'aria-label': `Slide ${i + 1} ${title.toLowerCase()}`, oninput: (e) => { slide[key] = e.target.value; } });
+        const input = el('input', { value: slide[key], placeholder, 'aria-label': `Slide ${i + 1} ${title.toLowerCase()}`, oninput: (e) => { slide[key] = e.target.value; summary.textContent = labelText(); } });
         const label = el('label', {}, title, input);
-        if (['title', 'text', 'label'].includes(key)) return el('div', {}, label, animation(`${key}Animation`, `${title} animation`, 'none'));
+        if (['title', 'text', 'label'].includes(key)) return el('div', { class: 'blk-slide-row' }, label, animation(`${key}Animation`, `${title} animation`, 'none'));
         if (key !== 'image') return label;
-        return el('div', {}, label, el('button', { type: 'button', 'aria-label': `Choose image for slide ${i + 1}`, onclick: () => chooseImage((ref) => {
+        return el('div', {}, el('div', { class: 'blk-slide-row' }, label, animation('imageAnimation', 'Image animation', 'none')), el('button', { type: 'button', class: 'blk-slide-media', 'aria-label': `Choose image for slide ${i + 1}`, onclick: () => chooseImage((ref) => {
           input.value = ref;
           input.dispatchEvent(new Event('input', { bubbles: true }));
-        }) }, 'Choose from Media…'), animation('imageAnimation', 'Image animation', 'none'));
+        }) }, 'Choose from Media…'));
       });
       const move = (offset) => {
         [slides[i], slides[i + offset]] = [slides[i + offset], slides[i]];
+        expanded = slide;
         draw();
       };
-      return el('fieldset', {}, el('legend', {}, `Slide ${i + 1}`), ...fields, animation('animation', 'Animation', DEFAULT_SLIDE_ANIMATION), el('div', { class: 'actions' },
+      return el('details', { class: 'blk-slide', name: 'blk-slides', open: slide === expanded, ontoggle: (e) => {
+        if (!e.currentTarget.isConnected) return;
+        if (e.currentTarget.open) expanded = slide;
+        else if (expanded === slide) expanded = null;
+      } }, summary, el('div', { class: 'blk-slide-fields' }, ...fields, animation('animation', 'Animation', DEFAULT_SLIDE_ANIMATION), el('div', { class: 'actions' },
         el('button', { type: 'button', disabled: i === 0, onclick: () => move(-1), 'aria-label': `Move slide ${i + 1} up` }, 'Move up'),
         el('button', { type: 'button', disabled: i === slides.length - 1, onclick: () => move(1), 'aria-label': `Move slide ${i + 1} down` }, 'Move down'),
-        el('button', { type: 'button', disabled: slides.length <= 2, onclick: () => { slides.splice(i, 1); draw(); }, 'aria-label': `Remove slide ${i + 1}` }, 'Remove'),
-      ));
+        el('button', { type: 'button', disabled: slides.length <= 2, onclick: () => { if (expanded === slide) expanded = slides[i + 1] || slides[i - 1]; slides.splice(i, 1); draw(); }, 'aria-label': `Remove slide ${i + 1}` }, 'Remove'),
+      )));
     }));
     add.disabled = slides.length >= 10;
     body.dispatchEvent(new Event('change', { bubbles: true }));
   };
-  const add = el('button', { type: 'button', onclick: () => { slides.push(blankSlide()); draw(); } }, '+ Slide');
+  const add = el('button', { type: 'button', onclick: () => { expanded = blankSlide(); slides.push(expanded); draw(); } }, '+ Slide');
   body.append(add);
   draw();
   const read = () => slideshowHtml(slides);
@@ -238,6 +220,7 @@ const ICONS = {
   htmlblock: '<svg viewBox="0 0 18 18"><polyline class="ql-even ql-stroke" points="5 5 2 9 5 13"/><polyline class="ql-even ql-stroke" points="13 5 16 9 13 13"/><line class="ql-stroke" x1="10" x2="8" y1="4" y2="14"/></svg>',
   slideshow: '<svg viewBox="0 0 18 18"><rect class="ql-stroke" x="2" y="2" width="14" height="11" fill="none"/><polyline class="ql-stroke" points="4 10 7 6 10 9 12 7 14 10" fill="none"/><circle class="ql-fill" cx="6" cy="16" r="1"/><circle class="ql-fill" cx="9" cy="16" r="1"/><circle class="ql-fill" cx="12" cy="16" r="1"/></svg>',
   cssclasses: '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M6 2H3v14h3M12 2h3v14h-3M8 5v8M11 5v8M6 7h7M6 11h7"/></svg>',
+  widget: '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M2 2h6v6H2zM11 2h5v6h-5zM2 11h6v5H2zM11 11h5v5h-5z"/></svg>',
 };
 
 // Register the two block embeds with Quill.
@@ -282,6 +265,7 @@ export function registerBlocks(Quill) {
   icons.htmlblock = ICONS.htmlblock;
   icons.slideshow = ICONS.slideshow;
   icons.cssclasses = ICONS.cssclasses;
+  icons.widget = ICONS.widget;
 }
 
 // Insert and edit from the toolbar and by clicking a block's Edit button.
@@ -295,12 +279,16 @@ export function wireBlocks(quill, Quill, { chooseImage }) {
     const index = cursor();
     const v = await edit();
     if (!v) return;
+    const history = quill.getModule('history');
+    history.cutoff();
     quill.insertEmbed(index, kind, v, 'user');
+    history.cutoff();
     quill.setSelection(index + 1, 0, 'silent');
   };
   const tableHandler = () => insert('mdtable', () => editTable());
   const htmlHandler = () => insert('htmlblock', () => editHtml());
   const slideshowHandler = () => insert('htmlblock', () => editSlideshow(undefined, chooseImage));
+  const widgetHandler = () => insert('htmlblock', () => editWidget(undefined, chooseImage));
   const classesHandler = async () => {
     const range = quill.getSelection(true) || { index: Math.max(0, quill.getLength() - 1), length: 0 };
     const [first] = quill.getLine(range.index);
@@ -317,8 +305,36 @@ export function wireBlocks(quill, Quill, { chooseImage }) {
     }
     quill.setSelection(next ? start + 1 : range.index, next ? 0 : range.length, 'silent');
   };
+  quill.root.addEventListener('submit', (e) => {
+    const form = e.target.closest('.blk-classes');
+    if (!form) return;
+    e.preventDefault();
+    const node = form.closest('.ql-htmlblock');
+    const src = node.getAttribute('data-htmlblock');
+    let next;
+    try {
+      next = withHtmlBlockClasses(src, form.querySelector('input').value);
+    } catch (error) {
+      if (!(error instanceof Refusal)) throw error;
+      form.querySelector('.blk-class-error').textContent = error.detail;
+      form.querySelector('input').setAttribute('aria-invalid', 'true');
+      return;
+    }
+    if (next === src) {
+      form.querySelector('.blk-class-error').textContent = '';
+      form.querySelector('input').removeAttribute('aria-invalid');
+      return;
+    }
+    const index = quill.getIndex(Quill.find(node));
+    const Delta = Quill.import('delta');
+    const history = quill.getModule('history');
+    history.cutoff();
+    quill.updateContents(new Delta().retain(index).delete(1).insert({ htmlblock: next }), 'user');
+    history.cutoff();
+    quill.setSelection(index + 1, 0, 'silent');
+  });
   quill.root.addEventListener('click', async (e) => {
-    const button = e.target.closest && e.target.closest('.blk-edit');
+    const button = e.target.closest && e.target.closest('.blk-edit, .blk-source');
     const node = button && button.closest('.ql-mdtable, .ql-htmlblock');
     if (!node) return;
     e.preventDefault();
@@ -327,10 +343,14 @@ export function wireBlocks(quill, Quill, { chooseImage }) {
     const isTable = node.classList.contains('ql-mdtable');
     const src = node.getAttribute('data-htmlblock');
     const slides = !isTable && readSlideshow(src);
-    const next = isTable ? await editTable(JSON.parse(node.getAttribute('data-mdtable'))) : slides ? await editSlideshow(slides, chooseImage) : await editHtml(src);
+    const widget = !isTable && !slides && readWidget(src);
+    const next = isTable ? await editTable(JSON.parse(node.getAttribute('data-mdtable'))) : slides ? await editSlideshow(slides, chooseImage) : widget && !button.classList.contains('blk-source') ? await editWidget(widget, chooseImage) : await editHtml(src);
     if (!next) return;
-    quill.deleteText(index, 1, 'user');
-    quill.insertEmbed(index, isTable ? 'mdtable' : 'htmlblock', next, 'user');
+    const Delta = Quill.import('delta');
+    const history = quill.getModule('history');
+    history.cutoff();
+    quill.updateContents(new Delta().retain(index).delete(1).insert({ [isTable ? 'mdtable' : 'htmlblock']: next }), 'user');
+    history.cutoff();
   });
-  return { mdtable: tableHandler, htmlblock: htmlHandler, slideshow: slideshowHandler, cssclasses: classesHandler };
+  return { mdtable: tableHandler, htmlblock: htmlHandler, slideshow: slideshowHandler, cssclasses: classesHandler, widget: widgetHandler };
 }

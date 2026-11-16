@@ -114,10 +114,10 @@ test('design: tag and author pages show the same cover thumbnails as the index, 
 test('design: the page with the slug "home" is the front of the index, in place of the title, on the first page only', () => {
   const r = build(blogJson({ customize: { list: { layout: 'cards' } }, pagination: { size: 1 } }));
   const index = r.files['index.html'];
-  assert.ok(index.includes('<section class="home">\n<h2>Arizona Deals</h2>'));
+  assert.ok(index.includes('<section class="home">\n<h2 id="arizona-deals">Arizona Deals'));
   assert.ok(!index.includes('<h1>Deals</h1>'), 'it replaces the title and description');
   assert.ok(!r.files['page/2/index.html'].includes('class="home"'), 'later pages are lists');
-  assert.equal(JSON.parse(r.files['index/posts.json']).home.startsWith('<h2>Arizona Deals</h2>'), true);
+  assert.equal(JSON.parse(r.files['index/posts.json']).home.startsWith('<h2 id="arizona-deals">Arizona Deals'), true);
   assert.ok(r.files['home/index.html'], 'and it is still a page of its own');
   // `home-after` is the same, under the list
   assert.ok(index.indexOf('<section class="home-after">\n<p>Under the list.</p>') > index.indexOf('<ul class="posts'), 'under the posts');

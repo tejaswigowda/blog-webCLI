@@ -194,12 +194,24 @@ test('editor: a standalone page is written and published; a post has search and 
     assert.ok(!JSON.parse(after['index/posts.json']).posts.some((p) => p.slug === 'about'));
     assert.equal(await page.evaluate('location.hash'), '#repo=example/blog&editpage=about', 'it reopens as a page');
 
-    // the page list
-    await page.evaluate("location.hash = '#repo=example/blog'; 0");
-    await until(page, "[...document.querySelectorAll('#view button')].some((b) => b.textContent.trim() === 'Pages')");
-    await clickText(page, '#view button', 'Pages');
+    // Both the editor's Back link and browser Back return to Pages, including a direct editor URL.
+    await clickText(page, '#view button', 'Back');
+    await until(page, "document.querySelector('#tab-pages') && !document.querySelector('#tab-pages').hidden");
+    assert.equal(await page.evaluate("document.querySelector('[aria-selected=true]').textContent"), 'Pages');
     await until(page, "[...document.querySelectorAll('#view h3')].some((h) => h.textContent.trim() === 'About')");
     assert.ok((await page.evaluate("document.querySelector('#view').innerText")).includes('In the menu, position 1'));
+    await clickText(page, '#tab-pages button', 'About');
+    await until(page, "document.querySelector('.ql-editor') && document.querySelector('#view h1').textContent === 'Edit: About'");
+    await page.evaluate('history.back()');
+    await until(page, "document.querySelector('#tab-pages') && !document.querySelector('#tab-pages').hidden");
+    assert.equal(await page.evaluate("document.querySelector('[aria-selected=true]').textContent"), 'Pages');
+    await clickText(page, '#tab-pages button', 'New page');
+    await until(page, "document.querySelector('.ql-editor') && document.querySelector('#view h1').textContent === 'New page'");
+    await clickText(page, '#view button', 'Back');
+    await until(page, "document.querySelector('#tab-pages') && !document.querySelector('#tab-pages').hidden");
+    await clickText(page, '#view [role=tab]', 'Posts');
+    assert.equal(await page.evaluate("document.querySelector('#tab-posts').hidden"), false, 'Posts remains selectable');
+    assert.equal(await page.evaluate('location.hash'), '#repo=example/blog', 'switching back to Posts clears the Pages selection');
 
     // settings: the new sections, and turning search and pagination on
     await page.evaluate("location.hash = '#repo=example/blog&settings'; 0");

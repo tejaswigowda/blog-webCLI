@@ -12,10 +12,7 @@ import { parsePost } from '../lib/blog.js';
 import { sha256 } from '../lib/sha256.js';
 import { GENERATOR_ID } from '../lib/page.js';
 import { loadTheme, pinFor, themeDigest, themeFilePaths } from '../lib/theme-pack.js';
-import { filesDigest } from '../lib/pin.js';
-import { extensionFilePaths, loadExtension, pinForExtension } from '../lib/extensions.js';
-import { buildSiteWith } from '../lib/build-async.js';
-import { EX, corpus, localRunner, readDirFiles, stripData } from './helpers.js';
+import { EX, corpus, readDirFiles, stripData } from './helpers.js';
 
 const enc = new TextEncoder();
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -144,11 +141,6 @@ test('a blog in a folder of a repository gets the script but not a 404 page: the
   assert.match(r.files['index.html'], /x-content-base" content="https:\/\/content\.test\/example\/site\/HEAD\/notes\/"/);
 });
 
-test('an embed extension keeps the pages exactly as the build wrote them: its frames are not recorded in blog.json', async () => {
-  assert.equal(liveEnabled({ repo: 'a/b', content: { base: 'https://c/{owner}/{repo}/{path}' }, extensions: [{ kind: 'embed', hooks: ['post:html'] }] }), false);
-  assert.equal(liveEnabled({ repo: 'a/b', content: { base: 'https://c/{owner}/{repo}/{path}' }, extensions: [{ kind: 'build', hooks: ['post:html'] }] }), true);
-});
-
 test('the script a blog ships is the one the sources build to, and the version is one number', async () => {
   const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
   assert.equal(VERSION, pkg.version);
@@ -178,29 +170,26 @@ test('L5: for every published post in the corpus, rebuilding it from the live fi
   }
 });
 
-test('L5: the same with a pinned theme and a build extension: licence comment, markup contract, css and recorded outputs', async () => {
+test('L5: a pinned theme regenerates with its licence comment, contract and CSS, including new edits', async () => {
   const themeFiles = await readDirFiles(path.join(EX, 'theme-classic'));
   const tm = JSON.parse(new TextDecoder().decode(themeFiles['theme.json']));
   const themePin = pinFor('me/theme', 'v1.0.0', tm, themeDigest(themeFiles, themeFilePaths(tm)));
-  const extFiles = await readDirFiles(path.join(EX, 'ext-reading-time'));
-  const em = JSON.parse(new TextDecoder().decode(extFiles['extension.json']));
-  const extPin = pinForExtension('me/ext', 'v1.0.0', em, filesDigest(extFiles, extensionFilePaths(em), (m) => new Error(m)));
   const theme = loadTheme(themePin, themeFiles);
-  const extension = loadExtension(extPin, extFiles);
 
-  const { blog, posts, lock } = await inputs({ theme: themePin, extensions: [extPin] });
-  const r = await buildSiteWith({ blog, posts, lock, theme, extensions: [extension], outputs: {} }, localRunner);
+  const { blog, posts, lock } = await inputs({ theme: themePin });
+  const r = buildSite({ blog, posts, lock, theme });
   assert.deepEqual(r.errors, []);
-  assert.ok(r.files['extension-outputs.json'] && r.files['theme.css']);
+  assert.ok(r.files['theme.css']);
   const map = live(blog, posts, lock, r.files);
   const site = await loadSite(getter(map));
   for (const p of posts) {
     const slug = p.path.replace(/^posts\/|\.md$/g, '');
     assert.equal(renderFromSite(site, { slug, text: p.text }).html, r.files[`${slug}/index.html`], slug);
   }
-  // an edit whose extension output was not recorded cannot be rebuilt faithfully: it is refused, not guessed
-  const edited = posts[0].text.replace(/\n\n/, '\n\nAn extra paragraph that no extension has seen.\n\n');
-  assert.throws(() => renderFromSite(site, { slug: posts[0].path.replace(/^posts\/|\.md$/g, ''), text: edited }), (e) => e instanceof CannotRebuild && /extension-output-missing/.test(e.message));
+  const edited = posts[0].text.replace(/\n\n/, '\n\nAn extra paragraph.\n\n');
+  const rebuilt = renderFromSite(site, { slug: posts[0].path.replace(/^posts\/|\.md$/g, ''), text: edited });
+  const later = buildSite({ blog, posts: posts.map((p, i) => i ? p : { ...p, text: edited }), lock, theme });
+  assert.equal(rebuilt.html, later.files[`${rebuilt.slug}/index.html`]);
 });
 
 // ---------- A: a post page that exists ----------

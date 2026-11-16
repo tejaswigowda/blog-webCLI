@@ -1,4 +1,4 @@
-// Validates themes.json and extensions.json with the same rules the app applies when it reads them (registry.js).
+// Validates themes.json with the same rules the app applies when it reads it (registry.js).
 import { readFile } from 'node:fs/promises';
 import { KINDS, parseRegistry } from './registry.js';
 

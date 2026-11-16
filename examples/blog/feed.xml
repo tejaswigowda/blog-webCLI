@@ -19,10 +19,10 @@
     <category term="git"/>
     <summary>HLS is a playlist and a pile of segments. Both are static files, which means git can hold them and a static host can serve them — no streaming server, no…</summary>
     <content type="html">&lt;p&gt;HLS is a playlist and a pile of segments. Both are static files, which means &lt;strong&gt;git can hold them&lt;/strong&gt; and a static host can serve them — no streaming server, no account.&lt;/p&gt;
-&lt;h2&gt;Why it works&lt;/h2&gt;
+&lt;h2 id=&quot;why-it-works&quot;&gt;Why it works &lt;a class=&quot;anchor&quot; href=&quot;#why-it-works&quot; aria-label=&quot;Link to this section&quot;&gt;#&lt;/a&gt;&lt;/h2&gt;
 &lt;p&gt;A playlist is &lt;em&gt;text&lt;/em&gt;. Segments are small, immutable binaries. Together they fit three ideas:&lt;/p&gt;
 &lt;ul&gt;&lt;li&gt;Segments never change once written, so they cache forever.&lt;/li&gt;&lt;li&gt;A playlist is a &lt;del&gt;database&lt;/del&gt; list of names, and lists diff well.&lt;/li&gt;&lt;li&gt;Hosting is a &lt;code&gt;git push&lt;/code&gt; away.&lt;/li&gt;&lt;/ul&gt;
-&lt;h3&gt;The catch&lt;/h3&gt;
+&lt;h3 id=&quot;the-catch&quot;&gt;The catch &lt;a class=&quot;anchor&quot; href=&quot;#the-catch&quot; aria-label=&quot;Link to this section&quot;&gt;#&lt;/a&gt;&lt;/h3&gt;
 &lt;p&gt;Binaries belong in their own repository, because about 46 MB per minute of video would otherwise sit in every contributor&amp;#39;s clone forever.&lt;/p&gt;
 &lt;ol&gt;&lt;li&gt;Keep text in the blog repository.&lt;/li&gt;&lt;li&gt;Keep binaries in an assets repository.&lt;ul&gt;&lt;li&gt;Images in one repository.&lt;/li&gt;&lt;li&gt;Audio in another.&lt;/li&gt;&lt;/ul&gt;&lt;/li&gt;&lt;li&gt;Reference both with a logical &lt;code&gt;asset:&lt;/code&gt; name.&lt;/li&gt;&lt;/ol&gt;
 &lt;blockquote&gt;&lt;p&gt;A reference that names no provider is a reference you can move.&lt;/p&gt;&lt;/blockquote&gt;
@@ -46,9 +46,9 @@ seg-000.ts
     <category term="writing"/>
     <summary>A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.</summary>
     <content type="html">&lt;p&gt;A post stored as Quill Delta is JSON that only Quill can read. A post stored as markdown is a file that every tool in the world can read, diff and review.&lt;/p&gt;
-&lt;h2&gt;What the editor may offer&lt;/h2&gt;
+&lt;h2 id=&quot;what-the-editor-may-offer&quot;&gt;What the editor may offer &lt;a class=&quot;anchor&quot; href=&quot;#what-the-editor-may-offer&quot; aria-label=&quot;Link to this section&quot;&gt;#&lt;/a&gt;&lt;/h2&gt;
 &lt;p&gt;The toolbar offers only what markdown can say: headings, &lt;strong&gt;bold&lt;/strong&gt;, &lt;em&gt;italic&lt;/em&gt;, &lt;code&gt;code&lt;/code&gt;, links, quotes, lists and images. Coloured text would be silently lost on save, so it is not offered.&lt;/p&gt;
-&lt;h2&gt;The test&lt;/h2&gt;
+&lt;h2 id=&quot;the-test&quot;&gt;The test &lt;a class=&quot;anchor&quot; href=&quot;#the-test&quot; aria-label=&quot;Link to this section&quot;&gt;#&lt;/a&gt;&lt;/h2&gt;
 &lt;p&gt;&lt;code&gt;md → Delta → md&lt;/code&gt; must produce identical bytes. If it cannot, the editor refuses to open the file instead of rewriting it.&lt;/p&gt;</content>
   </entry>
 </feed>

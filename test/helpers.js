@@ -10,7 +10,7 @@ export async function corpus() {
   return out;
 }
 
-// ---- theme / extension fixtures ----
+// ---- theme fixtures ----
 export async function readDirFiles(dir) {
   const out = {};
   const walk = async (d) => {
@@ -25,13 +25,6 @@ export async function readDirFiles(dir) {
 }
 
 export const EX = path.join(here, '..', 'examples');
-
-// Test-only: runs a fixture extension in-process. The product never does this: the app's runner
-// is the sandbox (app/sandbox.js), and the CLI and CI run nothing.
-export const localRunner = async ({ extension, hook, ctx, input }) => {
-  const mod = await import('data:text/javascript;base64,' + Buffer.from(extension.source).toString('base64'));
-  return mod.hooks[hook](input, ctx);
-};
 
 // The only <script> a default page carries is JSON-LD, which is data and runs nothing; every gate that says "no
 // script" means no executable one.

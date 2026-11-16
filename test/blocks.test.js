@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { buildSite } from '../lib/blog.js';
 import { deltaToHtml, deltaToHtmlGroup, excerpt, plainLines, wordCount } from '../lib/html.js';
 import { canonCell, deltaToMarkdownChecked, deltaToMd, mdRoundTrips, mdToDelta } from '../lib/markdown.js';
-import { checkHtmlBlock, renderHtmlBlock } from '../lib/rawhtml.js';
+import { checkHtmlBlock, renderHtmlBlock, htmlBlockClasses, withHtmlBlockClasses } from '../lib/rawhtml.js';
 import { collectAssetRefs } from '../lib/assets.js';
 import { Refusal } from '../lib/errors.js';
 import { stripData } from './helpers.js';
@@ -39,6 +39,33 @@ test('CSS groups reuse the HTML allowlist and refuse invalid classes or unrepres
   assert.throws(() => deltaToHtmlGroup({ ops: [{ insert: { video: 'video:clips/demo@v1' } }] }, 'note'), /Videos cannot/);
   const nested = '<div class="existing"><p>Kept</p></div>';
   assert.ok(deltaToHtmlGroup({ ops: [{ insert: { htmlblock: nested } }] }, 'note').includes(nested));
+});
+
+test('HTML header classes change only the outer attribute and preserve source and Markdown', () => {
+  const src = '<!-- <div class="decoy"> -->\n<DIV title=\'class="keep" > other\' CLASS = \'testimonial\' id="card">\n<p class="nested">A &amp; B <a href="./contact/">contact</a></p>\n<img src="asset:images/boat.jpg" alt="Boat">\n</DIV>';
+  assert.equal(htmlBlockClasses(src), 'testimonial');
+  const next = withHtmlBlockClasses(src, ' testimonial   featured ');
+  assert.equal(next, src.replace("CLASS = 'testimonial'", 'class="testimonial featured"'));
+  assert.equal(rt(next + '\n'), next + '\n');
+  const cleared = withHtmlBlockClasses(next, '');
+  assert.equal(cleared, src.replace(" CLASS = 'testimonial'", ''));
+  assert.equal(withHtmlBlockClasses(cleared, 'card'), cleared.replace('<DIV', '<DIV class="card"'));
+  assert.equal(htmlBlockClasses('<img src="x.jpg">'), '');
+  assert.equal(withHtmlBlockClasses('<img src="x.jpg"/>', 'photo'), '<img class="photo" src="x.jpg"/>');
+  assert.equal(htmlBlockClasses('<div class="test&#105;monial"><p>x</p></div>'), 'testimonial');
+});
+
+test('HTML header classes refuse ambiguous roots, invalid classes and invalid widget structures', () => {
+  for (const src of ['<p>First</p><p>Second</p>', '<div>First</div>Tail', 'Text', '<!-- only a comment -->']) {
+    assert.equal(htmlBlockClasses(src), null);
+    assert.throws(() => withHtmlBlockClasses(src, 'card'), /one outer element/);
+  }
+  for (const value of ['.card', 'card" onclick="x', 'card:hover', 'x'.repeat(201)]) {
+    assert.throws(() => withHtmlBlockClasses('<div><p>x</p></div>', value), code('bad-html'));
+  }
+  assert.throws(() => withHtmlBlockClasses('<div><p>x</p></div>', 'wc-colums'), (e) => e.code === 'bad-widget' && /wc-columns/.test(e.detail));
+  assert.throws(() => withHtmlBlockClasses('<div><p>x</p></div>', 'wc-columns'), code('bad-widget'));
+  assert.throws(() => htmlBlockClasses('<div onclick="x">x</div>'), code('bad-html'));
 });
 
 // ---------- tables ----------

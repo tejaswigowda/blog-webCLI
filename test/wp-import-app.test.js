@@ -384,10 +384,11 @@ test('import: into a blog that already exists, posts, pages and pictures are add
   assert.ok(again.skipped.length >= 3);
 });
 
-test('import: into a blog that uses extensions is refused, and a blog with no images repository still gets its pictures in the default one', async () => {
+test('import: legacy blog metadata never imposes an extension execution precondition', async () => {
   const blog = JSON.stringify({ title: 'E', description: 'd', author: 'A', domain: 'https://me.github.io/site', repo: 'me/site', extensions: [{ repo: 'me/ext', ref: 'v1.0.0', sha256: 'a'.repeat(64), name: 'X', version: '1', licence: 'MIT', kind: 'build', hooks: ['post:html'] }] });
   const server = fakeGitHub({ 'me/site': { 'blog.json': blog, 'assets.lock.json': '{}' } });
   await server.ready;
   const gh = new GitHub(createNet(server.fetch), { token: 'github_pat_test' });
-  await assert.rejects(planImport(gh, { where: 'me/site', branch: 'main', blogs: [{ folder: '', fields: { title: 't', description: 'd', author: 'a' }, files: [], assets: [] }], addToExisting: true }), (e) => /uses extensions/.test(e.detail || e.message));
+  const plan = await planImport(gh, { where: 'me/site', branch: 'main', blogs: [{ folder: '', fields: { title: 't', description: 'd', author: 'a' }, files: [], assets: [] }], addToExisting: true });
+  assert.ok(plan);
 });

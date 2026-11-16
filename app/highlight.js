@@ -1,4 +1,4 @@
-// CSS syntax highlighting for the Settings screen's Custom CSS box. No dependency: a small tokenizer, and a transparent <textarea>
+// CSS and HTML source highlighting. No dependency: small tokenizers and a transparent <textarea>
 // laid over a <pre> that holds the same text in colour. The textarea stays the field (its value is what is saved); the <pre> is
 // only a picture of it, built with textContent, so what is typed can never become markup.
 
@@ -125,12 +125,62 @@ function headText(tokens) {
   return parts.join('').trimStart();
 }
 
-const CLASS = { comment: 'cm', string: 'st', atrule: 'at', selector: 'se', property: 'pr', number: 'nu', color: 'co', function: 'fn', important: 'im', punct: 'pu' };
+export function tokenizeHtmlSource(html) {
+  const out = [];
+  const push = (type, text) => {
+    if (!text) return;
+    const last = out.at(-1);
+    if (last?.[0] === type) last[1] += text;
+    else out.push([type, text]);
+  };
+  let i = 0, inTag = false, value = false;
+  while (i < html.length) {
+    const rest = html.slice(i);
+    let m;
+    if (!inTag && rest.startsWith('<!--')) {
+      const end = html.indexOf('-->', i + 4);
+      const stop = end < 0 ? html.length : end + 3;
+      push('comment', html.slice(i, stop));
+      i = stop;
+      continue;
+    }
+    if (!inTag && (m = /^(<\/?)([a-z][\w:-]*)/i.exec(rest))) {
+      push('punct', m[1]);
+      push('tag', m[2]);
+      i += m[0].length;
+      inTag = true;
+      value = false;
+      continue;
+    }
+    if (inTag) {
+      if ((m = /^\s+/.exec(rest))) push('space', m[0]);
+      else if ((m = /^\/?>/.exec(rest))) { push('punct', m[0]); inTag = false; }
+      else if (rest[0] === '=') { m = ['=']; push('punct', '='); value = true; }
+      else if (rest[0] === '"' || rest[0] === "'") {
+        const end = html.indexOf(rest[0], i + 1);
+        m = [html.slice(i, end < 0 ? html.length : end + 1)];
+        push('string', m[0]);
+        value = false;
+      } else if ((m = /^[^\s=/>]+/.exec(rest))) {
+        push(value ? 'string' : 'attribute', m[0]);
+        value = false;
+      } else { m = [rest[0]]; push('punct', m[0]); }
+    } else if ((m = /^&(?:#x[\da-f]+|#\d+|[a-z][\w]*);/i.exec(rest))) push('entity', m[0]);
+    else {
+      m = /^[^<&]+/.exec(rest) || [rest[0]];
+      push('text', m[0]);
+    }
+    i += m[0].length;
+  }
+  return out;
+}
+
+const CLASS = { comment: 'cm', string: 'st', atrule: 'at', selector: 'se', property: 'pr', number: 'nu', color: 'co', function: 'fn', important: 'im', punct: 'pu', tag: 'se', attribute: 'pr', entity: 'nu' };
 
 // Fill `pre` with the coloured text. Only text nodes and spans with fixed class names are created.
-export function paintCss(pre, css, doc = pre.ownerDocument) {
+function paintTokens(pre, tokens, doc) {
   pre.textContent = '';
-  for (const [type, text] of tokenizeCss(css)) {
+  for (const [type, text] of tokens) {
     const cls = CLASS[type];
     if (!cls) {
       pre.append(doc.createTextNode(text));
@@ -141,12 +191,20 @@ export function paintCss(pre, css, doc = pre.ownerDocument) {
     span.textContent = text;
     pre.append(span);
   }
+}
+
+export function paintHtmlSource(pre, html, doc = pre.ownerDocument) {
+  paintTokens(pre, tokenizeHtmlSource(html), doc);
+}
+
+export function paintCss(pre, css, doc = pre.ownerDocument) {
+  paintTokens(pre, tokenizeCss(css), doc);
   // a final newline occupies no line in a <pre> unless something follows it, and the textarea does show that line
   pre.append(doc.createTextNode('\n'));
 }
 
 // Wraps `textarea` (which stays the field: bind it as usual) and returns the element to put on the page.
-export function highlightedTextarea(textarea, doc = textarea.ownerDocument) {
+export function highlightedTextarea(textarea, doc = textarea.ownerDocument, paintSource = paintCss) {
   const wrap = doc.createElement('div');
   wrap.className = 'hl-wrap';
   const pre = doc.createElement('pre');
@@ -154,7 +212,10 @@ export function highlightedTextarea(textarea, doc = textarea.ownerDocument) {
   pre.setAttribute('aria-hidden', 'true');
   textarea.classList.add('hl-input');
   textarea.setAttribute('wrap', 'off');
-  const paint = () => paintCss(pre, textarea.value, doc);
+  const paint = () => {
+    paintSource(pre, textarea.value, doc);
+    sync();
+  };
   const sync = () => {
     pre.scrollTop = textarea.scrollTop;
     pre.scrollLeft = textarea.scrollLeft;

@@ -295,7 +295,6 @@ async function planAddition(gh, { place, prefix, head, whole, b, assetMap, chang
   const repo = parseRepoRef(place).repo;
   const blogText = await gh.readText(repo, `${prefix}blog.json`, head.sha);
   const blog = validateBlog(blogText);
-  if (blog.extensions && blog.extensions.length) throw new Refusal('import-refused', `${place} uses extensions, which run only in the editor's sandbox when a post is published. Add the posts to a blog without extensions, or import into another folder`);
   const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
   const paths = [...tree.keys()].filter((p) => POST_PATH.test(p) || PAGE_PATH.test(p) || COMMENT_PATH.test(p));
   const texts = await gh.readMany(repo, paths.map((p) => ({ path: prefix + p, sha: tree.get(p) })), { ref: head.sha });

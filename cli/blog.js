@@ -8,14 +8,11 @@
 //   theme pin <owner/repo[/folder]@ref> [dir]   pin a theme (a tag or commit; a branch is refused)
 //   theme clear [dir]                           go back to the built-in theme
 //   theme import <wordpress-slug> [outdir]      turn a wordpress.org directory theme into a theme repository
-//   ext add <owner/repo[/folder]@ref> [dir]     pin an extension (fetched as data and hashed; never run here)
-//   ext remove <owner/repo> [dir]
 //   licences [dir]                              every licence the blog depends on
 //   import wp <export.xml | https://site> [dir] --repo owner/name[/folder] [--add]   a WordPress blog's posts, pages and pictures, as files
 //                                               (--add: into a blog that exists, leaving its settings and theme alone)
 //
-// This tool never executes extension code. Extension output is recorded data (extension-outputs.json),
-// written when you publish from the editor, where extensions run in a sandbox.
+// The generator executes only first-party code; themes are verified CSS and data.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Refusal } from '../lib/errors.js';
@@ -24,8 +21,7 @@ import { imageSize } from '../lib/image-size.js';
 import { buildSite, GENERATED_MARK, GENERATED_TREES, OPTIONAL_GENERATED, validateBlog, parsePost } from '../lib/blog.js';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
-import { loadPacks, readExtensionToPin, readThemeToPin } from '../app/packs.js';
-import { parseOutputsFile } from '../lib/extensions.js';
+import { loadPacks, readThemeToPin } from '../app/packs.js';
 import { blogJsonText } from '../lib/init.js';
 import { licenceRecords } from '../lib/licences.js';
 import { importWordPress } from './wp-content-import.js';
@@ -55,8 +51,6 @@ async function load(dir) {
   }
   const lp = path.join(dir, 'assets.lock.json');
   const lock = (await exists(lp)) ? JSON.parse(await fs.readFile(lp, 'utf8')) : {};
-  const op = path.join(dir, 'extension-outputs.json');
-  const outputs = parseOutputsFile((await exists(op)) ? await fs.readFile(op, 'utf8') : null);
   // a manual order is an authored list beside blog.json (blog.json says which file)
   let orderList = null;
   try {
@@ -66,26 +60,26 @@ async function load(dir) {
   } catch {
     /* an invalid blog.json is refused, with its reason, where the site is generated */
   }
-  return { blog, posts, lock, outputs, orderList };
+  return { blog, posts, lock, orderList };
 }
 
-// Anonymous GitHub reads, for fetching a pinned theme or extension as data.
+// Anonymous GitHub reads, for fetching a pinned theme as data.
 const github = () => new GitHub(createNet((...a) => globalThis.fetch(...a)));
 
 async function generate(dir, { instead } = {}) {
   const loaded = await load(dir);
-  const { blog, lock, outputs, orderList } = loaded;
+  const { blog, lock, orderList } = loaded;
   const posts = instead || loaded.posts;
   const validated = validateBlog(blog);
-  let packs = { theme: null, extensions: [] };
-  if ((validated.theme && typeof validated.theme === 'object') || (validated.extensions || []).length) {
-    console.log('fetching the pinned theme and extensions (as data) …');
+  let packs = { theme: null };
+  if (validated.theme && typeof validated.theme === 'object') {
+    console.log('fetching the pinned theme (as data) …');
     packs = await loadPacks(github(), validated);
   }
-  return buildSite({ blog, posts, lock, ...packs, outputs, orderList });
+  return buildSite({ blog, posts, lock, ...packs, orderList });
 }
 
-// Generated files that exist only while a theme, extensions or a feature are in use.
+// Generated files that exist only while a theme or a feature is in use.
 const OPTIONAL = OPTIONAL_GENERATED;
 
 // A page the generator wrote is a folder with an index.html that carries the generator's mark: a post's, a page's, and the
@@ -209,7 +203,7 @@ async function fmt(dir) {
 }
 
 // Flip every due scheduled post to published, then build once. Nothing is written unless the whole site builds with them
-// published: a missing extension output (or any other refusal) leaves the posts scheduled and fails the run, loudly.
+// published: a generation refusal leaves the posts scheduled and fails the run, loudly.
 async function publishDue(dir, args) {
   const i = args.indexOf('--now');
   const now = i >= 0 ? Date.parse(args[i + 1]) : Date.now();
@@ -341,29 +335,6 @@ async function theme(args) {
   return 2;
 }
 
-async function ext(args) {
-  const [sub, a, b] = args;
-  if (sub === 'add') {
-    const { where, ref } = splitAt(a);
-    const { pin, manifest } = await readExtensionToPin(github(), where, ref, { fetchAsset: async (url) => { const r = await fetch(url); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } });
-    await writeBlogJson(b || '.', (blog) => {
-      blog.extensions = [...(blog.extensions || []).filter((e) => e.repo !== pin.repo), pin];
-    });
-    console.log(`pinned extension ${manifest.name} ${manifest.version} (${manifest.licence}, ${manifest.kind}; hooks ${manifest.hooks.join(', ')}) — ${pin.repo}@${pin.ref}\nIt has not been run. Publish from the editor to run it in the sandbox and record its output.`);
-    return 0;
-  }
-  if (sub === 'remove') {
-    await writeBlogJson(b || '.', (blog) => {
-      blog.extensions = (blog.extensions || []).filter((e) => e.repo !== a);
-      if (!blog.extensions.length) delete blog.extensions;
-    });
-    console.log(`removed ${a}; run: blog-webcli build`);
-    return 0;
-  }
-  console.error('usage: blog-webcli ext <add owner/repo@ref [dir] | remove owner/repo [dir]>');
-  return 2;
-}
-
 async function commentsCmd(args) {
   const [sub, dir = '.'] = args;
   if (sub !== 'lift') {
@@ -395,9 +366,9 @@ async function licences(dir) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const commands = { sizes: () => sizes(rest), comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), ext: () => ext(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
+const commands = { sizes: () => sizes(rest), comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
 if (!commands[cmd]) {
-  console.error('usage: blog-webcli <build|check|fmt|publish-due|pin|sizes|comments|theme|ext|licences|import> …');
+  console.error('usage: blog-webcli <build|check|fmt|publish-due|pin|sizes|comments|theme|licences|import> …');
   process.exit(2);
 }
 try {

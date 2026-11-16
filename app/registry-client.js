@@ -4,7 +4,7 @@
 import { KINDS, parseRegistry } from '../lib/registry.js';
 import { varyPath } from '../lib/live.js';
 
-const FILES = { themes: 'themes.json', extensions: 'extensions.json' };
+const FILES = { themes: 'themes.json' };
 
 // -> { entries, rejected, source: 'registry' | 'snapshot', why? }
 export async function loadRegistry(kind, { url, fetchImpl = (...a) => globalThis.fetch(...a), snapshot, now = Date.now, rand } = {}) {

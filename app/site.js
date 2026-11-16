@@ -7,11 +7,9 @@ import { CannotRebuild, loadSite } from '../lib/live-render.js';
 import { prepareIncremental } from '../lib/incremental.js';
 import { readIndex } from '../lib/index-data.js';
 import { joinFile, setMeta, splitFile } from '../lib/frontmatter.js';
-import { PAGE_PATH, POST_PATH, GENERATED_TREES, OPTIONAL_GENERATED, parsePost, validateBlog } from '../lib/blog.js';
-import { buildSiteWith } from '../lib/build-async.js';
+import { PAGE_PATH, POST_PATH, GENERATED_TREES, OPTIONAL_GENERATED, parsePost, validateBlog, buildSite } from '../lib/blog.js';
 import { COMMENT_PATH, parseComments } from '../lib/comments.js';
-import { parseOutputsFile } from '../lib/extensions.js';
-import { loadPacks, readExtensionToPin, readThemeToPin } from './packs.js';
+import { loadPacks, readThemeToPin } from './packs.js';
 import { licenceRecords } from '../lib/licences.js';
 import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
 import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
@@ -71,17 +69,14 @@ export async function listMedia(gh, { blog, lock, index }) {
 
 const sortLock = (lock) => Object.fromEntries(Object.entries(lock).sort(([a], [b]) => (a < b ? -1 : 1)));
 
-// The site for a blog.json and its posts: the pinned theme and extensions are fetched and verified,
-// recorded extension outputs are read from the repository, and any output still missing is
-// produced by `runner` (the sandbox) — or refused when there is none.
-async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner, orderText }) {
+// The site for a blog.json and its posts, with the pinned theme fetched and verified.
+async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, orderText }) {
   const blog = validateBlog(blogText);
   const packs = await loadPacks(gh, blog);
-  const recorded = tree.has('extension-outputs.json') ? await gh.readText(repo, prefix + 'extension-outputs.json', head.sha) : null;
   // a manual order is an authored file (order.json) beside blog.json; the generator reads it, never writes it
   const order = resolveOrder(blog);
   const orderList = orderText !== undefined ? orderText : order.by === 'manual' && tree.has(order.list) ? await gh.readText(repo, prefix + order.list, head.sha) : null;
-  const site = await buildSiteWith({ blog: blogText, posts, lock, ...packs, outputs: parseOutputsFile(recorded), orderList }, runner);
+  const site = buildSite({ blog: blogText, posts, lock, ...packs, orderList });
   if (site.errors.length) {
     const e = new Refusal(site.errors[0].code, site.errors.map((x) => x.detail + (x.where ? ` (${x.where})` : '')).join('\n'));
     e.all = site.errors;
@@ -171,12 +166,12 @@ async function incrementalChanges(gh, ctx) {
 async function computeChanges(gh, ctx) {
   const inc = await incrementalChanges(gh, ctx);
   if (inc) return inc;
-  const { blogText, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head, runner } = ctx;
+  const { blogText, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head } = ctx;
   ctx.others ||= await readPosts(gh, { repo, prefix, head, tree, paths: ctx.otherPaths });
   const others = ctx.others;
   const sidecarPath = `comments/${POST_PATH.exec(newPost.path)?.[1]}.json`;
   const posts = [...(ctx.newComments !== undefined ? others.filter((o) => o.path !== sidecarPath) : others), { path: newPost.path, text: newPost.text }, ...(ctx.newComments ? [{ path: sidecarPath, text: ctx.newComments }] : [])];
-  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner, orderText: ctx.orderText });
+  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, orderText: ctx.orderText });
   const out = { ...site.files, [newPost.path]: newPost.text };
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
   const changes = [];
@@ -206,7 +201,7 @@ async function computeChanges(gh, ctx) {
 // remove: delete posts/<slug>.md (or pages/<slug>.md). It is planned as the post going back to a draft, which already takes a post out of the
 // index, the listings, the feed, the sitemap and search, and removes its generated page and redirects; then the source file goes too.
 // comments: the post's comments/<slug>.json as it will be (text), or null to remove it; undefined leaves them as committed.
-export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, runner, lockPatch = {}, comments }) {
+export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, lockPatch = {}, comments }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -289,7 +284,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
       throw new Refusal('permalink-move', `changing the date moves this post from ${was.path || was.slug}/ to ${to}/; add "${was.path || was.slug}" to its aliases if the move is intended, or keep the date`, target);
     }
   }
-  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, runner, orderText, newComments: comments };
+  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, orderText, newComments: comments };
   const { site, changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
   if (comments !== undefined) {
     const cp = `comments/${slug}.json`;
@@ -331,13 +326,13 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const sizeOf = (f) => f.size;
   summary.push({ repo, folder, branch: mode === 'pr' ? `new branch from ${branch}` : branch, files: changes.length, bytes: changes.reduce((n, f) => n + sizeOf(f), 0) });
 
-  return { repo, folder, branch, mode, slug, kind, path: target, removed: remove, status: newPost.status, schedule: newPost.status === 'scheduled' ? { at: newPost.meta.publish_at, zone: blog.timezone || null, days: daysUntil(newPost.meta, blog), extensionsRun: !!(blog.extensions && blog.extensions.length) } : null, related: rc ? relatedPages : null, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
+  return { repo, folder, branch, mode, slug, kind, path: target, removed: remove, status: newPost.status, schedule: newPost.status === 'scheduled' ? { at: newPost.meta.publish_at, zone: blog.timezone || null, days: daysUntil(newPost.meta, blog) } : null, related: rc ? relatedPages : null, title: newPost.meta.title, existed: tree.has(target), head, changes, assetGroups, summary, ctx, lockPlan, pending, unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
 }
 
 // Commit a (new or changed) blog.json together with the site regenerated from it: every page
 // embeds the blog's styles, header and footer, so a settings change touches them all. Blog-level
 // assets (the header logo) are pinned here; a post that cannot be published as it is refuses the change.
-async function planBlogJson(gh, { where, branch, head, whole, blogText, message, title, existed, runner, extraPosts = [], lockPatch = {} }) {
+async function planBlogJson(gh, { where, branch, head, whole, blogText, message, title, existed, extraPosts = [], lockPatch = {} }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const tree = new Map([...whole].filter(([p]) => p.startsWith(prefix)).map(([p, sha]) => [p.slice(prefix.length), sha]));
@@ -360,7 +355,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
     lockChanged = true;
   }
 
-  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, runner });
+  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock });
   const out = { 'blog.json': blogText, ...site.files };
   for (const x of extraPosts) if (!tree.has(x.path)) out[x.path] = x.text;
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
@@ -376,7 +371,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
 
 // A change that only touches the blog's CSS (colours, fonts, width, size, custom CSS) on a blog whose stylesheet is one shared file: the
 // pages do not carry the CSS, so none of them changes. Only blog.json, style.css and, with a theme, theme.css (what the /blog/ reader
-// applies) are written, and no post is read. Returns null when it is not that kind of change (inline CSS, an extension, a different theme,
+// applies) are written, and no post is read. Returns null when it is not that kind of change (inline CSS, a different theme,
 // any other setting), and the caller regenerates the blog as it always did.
 const CSS_KEYS = ['colors', 'font', 'headingFont', 'width', 'fontSize', 'css'];
 const canon = (v) => (Array.isArray(v) ? v.map(canon) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v);
@@ -394,7 +389,6 @@ async function styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText
   let next;
   try { next = JSON.parse(blogText); } catch { return null; }
   if (oldBlog.stylesheet !== 'linked' || next.stylesheet !== 'linked') return null;
-  if ((oldBlog.extensions && oldBlog.extensions.length) || (next.extensions && next.extensions.length)) return null;
   if (withoutCss(oldBlog) !== withoutCss(next)) return null;
   const blog = validateBlog(blogText);
   const packs = await loadPacks(gh, blog);
@@ -439,7 +433,7 @@ export async function detectAddress(gh, where) {
   return { address: addressFrom(where, url), live, exact: !!url, built, readable, settingsUrl: `https://github.com/${repo}/settings/pages` };
 }
 
-export async function planInit(gh, { repo: where, branch, fields, runner }) {
+export async function planInit(gh, { repo: where, branch, fields }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -452,12 +446,12 @@ export async function planInit(gh, { repo: where, branch, fields, runner }) {
   } catch (e) {
     throw e instanceof Refusal ? e : new Refusal('bad-blog-json', e.message);
   }
-  return planBlogJson(gh, { where, branch, head, whole, blogText, message: `Create blog: ${fields.title.trim()}`, title: fields.title, existed: false, runner });
+  return planBlogJson(gh, { where, branch, head, whole, blogText, message: `Create blog: ${fields.title.trim()}`, title: fields.title, existed: false });
 }
 
 // Change the blog's settings. The form is applied to the blog.json on the branch (unknown keys
 // survive), validated, and every generated page is regenerated from it.
-export async function planSettings(gh, { repo: where, branch, form, runner }) {
+export async function planSettings(gh, { repo: where, branch, form }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -474,12 +468,12 @@ export async function planSettings(gh, { repo: where, branch, form, runner }) {
   } catch (e) {
     throw e instanceof Refusal || e.code ? e : new Refusal('bad-blog-json', e.message);
   }
-  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog: JSON.parse(current), blogText, message: 'Update blog settings', title: form.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message: 'Update blog settings', title: form.title, existed: true, runner }));
+  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog: JSON.parse(current), blogText, message: 'Update blog settings', title: form.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message: 'Update blog settings', title: form.title, existed: true }));
   plan.unchanged = plan.changes.length === 0;
   return plan;
 }
 
-// ---------- themes and extensions ----------
+// ---------- themes ----------
 
 async function currentBlogJson(gh, where, branch) {
   const { repo, folder } = parseRepoRef(where);
@@ -490,18 +484,9 @@ async function currentBlogJson(gh, where, branch) {
   return { head, whole, blog: JSON.parse(text) };
 }
 
-// Embeds' pinned assets are verified once, when the extension is pinned, from the two hosts the
-// editor is allowed to read from.
-const assetFetcher = (gh) => async (url) => {
-  const host = new URL(url).hostname;
-  if (!['cdn.jsdelivr.net', 'raw.githubusercontent.com'].includes(host)) throw new Refusal('bad-extension', `cannot verify a pinned asset on ${host} here; host it on jsDelivr (gh/…@<tag or commit>) or GitHub raw`);
-  const res = await gh.net.request(url);
-  return res.ok ? res.bytes : null;
-};
-
 // Use (or stop using) a theme. `use` is { where: owner/repo[/folder], ref, base? }: found by address, so
 // a theme that is in no list works. Every page is regenerated; the plan lists the licences involved.
-export async function planTheme(gh, { repo: where, branch, use, fresh = false, runner }) {
+export async function planTheme(gh, { repo: where, branch, use, fresh = false }) {
   const { head, whole, blog } = await currentBlogJson(gh, where, branch);
   let message;
   let kit = null;
@@ -528,7 +513,7 @@ export async function planTheme(gh, { repo: where, branch, use, fresh = false, r
     else delete blog.customize;
     message += ', starting fresh (colours, fonts, width, list layout and custom CSS cleared)';
   }
-  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message, title: blog.title, existed: true, runner, extraPosts });
+  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message, title: blog.title, existed: true, extraPosts });
   plan.licences = licenceRecords(validateBlog(blog));
   plan.unchanged = plan.changes.length === 0;
   return plan;
@@ -545,7 +530,7 @@ export const mediaName = (name) => String(name).split(/[\\/]/).pop().toLowerCase
 //          [{ key, bytes, path, replace: true }] a new file for an existing image, under exactly its path.
 // A replaced image keeps its filename, so every post that embeds it keeps working; its pin in assets.lock.json moves to the upload
 // commit, and every page that embeds it is regenerated with the new address (a pinned address never changes under a page: the pin is the point).
-export async function planMedia(gh, { repo: where, branch, uploads, runner }) {
+export async function planMedia(gh, { repo: where, branch, uploads }) {
   if (!uploads || !uploads.length) throw new Error('Choose at least one image.');
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
@@ -602,7 +587,7 @@ export async function planMedia(gh, { repo: where, branch, uploads, runner }) {
   const summary = groups.map((g) => ({ repo: g.repo, branch: g.branch, files: g.files.length, bytes: g.files.reduce((n, f) => n + f.size, 0) }));
   const names = groups.flatMap((g) => g.files.map((f) => f.logical));
   const message = replaced.length && replaced.length === uploads.length ? `Replace image${replaced.length === 1 ? '' : 's'}: ${names.join(', ')}` : `Add ${uploads.length - replaced.length} image${uploads.length - replaced.length === 1 ? '' : 's'}${replaced.length ? `, replace ${replaced.length}` : ''}`;
-  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title: blog.title, message, existed: true, head, changes: [], assetGroups: groups, summary, ctx: null, lockPlan: {}, pending: [], unlisted: [], media: { replaced, refreshed, affected, full }, headline: refreshed.length ? [full ? `${refreshed.length === 1 ? 'This image is' : 'These images are'} used by ${inBlogJson ? 'a blog setting (the logo or a header image), so every page' : `${affected.length} pages, so the whole blog`} is regenerated with the new file.` : affected.length ? `Embedded in ${affected.length} ${affected.length === 1 ? 'page' : 'pages'}: only ${affected.length === 1 ? 'that page is' : 'those pages are'} regenerated, with the new file.` : 'No page embeds it: only the pin in assets.lock.json moves.'] : null, where, runner, unchanged: false };
+  return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title: blog.title, message, existed: true, head, changes: [], assetGroups: groups, summary, ctx: null, lockPlan: {}, pending: [], unlisted: [], media: { replaced, refreshed, affected, full }, headline: refreshed.length ? [full ? `${refreshed.length === 1 ? 'This image is' : 'These images are'} used by ${inBlogJson ? 'a blog setting (the logo or a header image), so every page' : `${affected.length} pages, so the whole blog`} is regenerated with the new file.` : affected.length ? `Embedded in ${affected.length} ${affected.length === 1 ? 'page' : 'pages'}: only ${affected.length === 1 ? 'that page is' : 'those pages are'} regenerated, with the new file.` : 'No page embeds it: only the pin in assets.lock.json moves.'] : null, where, unchanged: false };
 }
 
 // Upload the images (one commit per images repository; the commit is the pin), then, if a replaced image is embedded anywhere,
@@ -629,7 +614,7 @@ export async function executeMedia(gh, plan) {
   if (full) {
     const whole = await gh.tree(plan.repo, parent.treeSha);
     const blogText = await gh.readText(plan.repo, prefix + 'blog.json', parent.sha);
-    const p2 = await planBlogJson(gh, { where: plan.where, branch: plan.branch, head: parent, whole, blogText, message: `Use the replaced image${Object.keys(patch).length === 1 ? '' : 's'}: ${names}`, title: plan.title, existed: true, runner: plan.runner, lockPatch: patch });
+    const p2 = await planBlogJson(gh, { where: plan.where, branch: plan.branch, head: parent, whole, blogText, message: `Use the replaced image${Object.keys(patch).length === 1 ? '' : 's'}: ${names}`, title: plan.title, existed: true, lockPatch: patch });
     receipt.commits.push(...(await executePlan(gh, p2)).commits);
   } else if (!affected.length) {
     // nothing embeds it: the pin moves so that a later use shows the new file, and that is all that is written
@@ -639,7 +624,7 @@ export async function executeMedia(gh, plan) {
   } else {
     // each page that embeds one is saved as it is, with the pin moved: what saving the post would write, and nothing else
     for (const a of affected) {
-      const p2 = await planChange(gh, { repo: plan.where, branch: plan.branch, slug: a.slug, text: a.text, kind: a.kind, runner: plan.runner, lockPatch: patch });
+      const p2 = await planChange(gh, { repo: plan.where, branch: plan.branch, slug: a.slug, text: a.text, kind: a.kind, lockPatch: patch });
       p2.message = `Use the replaced image${Object.keys(patch).length === 1 ? '' : 's'} (${names}) in ${p2.title}`;
       receipt.commits.push(...(await executePlan(gh, p2)).commits);
     }
@@ -650,7 +635,7 @@ export async function executeMedia(gh, plan) {
 // Make the blog look like a site that was measured (node cli/measure.mjs): the colours, fonts, width, size and list layout it measured
 // replace the blog's own look; its header and footer links, logo and top bar are content and stay. `look` is judged here, not trusted:
 // only the enumerable fields, never css (lib/measure.js).
-export async function planLook(gh, { repo: where, branch, look, runner }) {
+export async function planLook(gh, { repo: where, branch, look }) {
   const { head, whole, blog } = await currentBlogJson(gh, where, branch);
   const measured = assertMeasured(look);
   const oldBlog = structuredClone(blog);
@@ -658,7 +643,7 @@ export async function planLook(gh, { repo: where, branch, look, runner }) {
   blog.customize = { ...(bare.customize || {}), ...structuredClone(measured) };
   const message = `Match an existing site: its measured colours, ${measured.font ? measured.font + ' type, ' : ''}width and list layout`;
   const blogText = blogJsonText(blog);
-  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText, message, title: blog.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message, title: blog.title, existed: true, runner }));
+  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText, message, title: blog.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message, title: blog.title, existed: true }));
   plan.unchanged = plan.changes.length === 0;
   return plan;
 }
@@ -666,7 +651,7 @@ export async function planLook(gh, { repo: where, branch, look, runner }) {
 // Import a theme file (lib/theme-export.js): the file's pinned theme is read from its repository and must hash to what the file says, its
 // customize block is judged by the same grammar as the blog's own, and the blog keeps its logo and everything else. A change of CSS alone
 // on a linked-stylesheet blog is written as just the stylesheet (styleOnlyPlan).
-export async function planThemeFile(gh, { repo: where, branch, text, runner }) {
+export async function planThemeFile(gh, { repo: where, branch, text }) {
   const file = parseThemeFile(text);
   const { head, whole, blog } = await currentBlogJson(gh, where, branch);
   const oldBlog = structuredClone(blog);
@@ -679,28 +664,8 @@ export async function planThemeFile(gh, { repo: where, branch, text, runner }) {
   }
   const next = applyThemeFile(blog, file, pin);
   const blogText = blogJsonText(next);
-  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText, message, title: next.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message, title: next.title, existed: true, runner }));
+  const plan = (await styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText, message, title: next.title })) || (await planBlogJson(gh, { where, branch, head, whole, blogText, message, title: next.title, existed: true }));
   plan.licences = licenceRecords(validateBlog(next));
-  plan.unchanged = plan.changes.length === 0;
-  return plan;
-}
-
-// Add (or replace) an extension, or remove one: `add` is { where, ref }, `remove` an owner/repo. The
-// plan includes the sandbox's recorded output (extension-outputs.json); nothing runs outside the sandbox.
-export async function planExtension(gh, { repo: where, branch, add, remove, runner }) {
-  const { head, whole, blog } = await currentBlogJson(gh, where, branch);
-  let message;
-  if (add) {
-    const { pin, manifest } = await readExtensionToPin(gh, add.where, add.ref, { fetchAsset: assetFetcher(gh), expect: add.expect });
-    blog.extensions = [...(blog.extensions || []).filter((e) => e.repo !== pin.repo), pin];
-    message = `Add extension: ${manifest.name} ${manifest.version} (${manifest.licence})`;
-  } else {
-    blog.extensions = (blog.extensions || []).filter((e) => e.repo !== remove);
-    if (!blog.extensions.length) delete blog.extensions;
-    message = `Remove extension: ${remove}`;
-  }
-  const plan = await planBlogJson(gh, { where, branch, head, whole, blogText: blogJsonText(blog), message, title: blog.title, existed: true, runner });
-  plan.licences = licenceRecords(validateBlog(blog));
   plan.unchanged = plan.changes.length === 0;
   return plan;
 }

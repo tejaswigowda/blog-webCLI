@@ -1,7 +1,7 @@
-// The registry of themes and extensions lives in its own repository (blog-registry), as static JSON; the app reads it by URL
+// The theme registry lives in its own repository (blog-registry), as static JSON; the app reads it by URL
 // (app/config.js) and falls back to a bundled snapshot. This is the tooling between the two.
 //   node cli/registry.js scaffold <dir>   write the registry repository's files (README, licence, validator, CI) into <dir>
-//   node cli/registry.js check <dir>      validate <dir>/themes.json and <dir>/extensions.json; any bad entry fails
+//   node cli/registry.js check <dir>      validate <dir>/themes.json; any bad entry fails
 //   node cli/registry.js snapshot <dir>   write app/registry-snapshot.json from <dir> (what the app uses when it cannot reach it)
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -34,7 +34,7 @@ export async function readRegistry(dir, { strict = true } = {}) {
   return { registry: out, problems };
 }
 
-export const snapshotText = (registry) => `${JSON.stringify({ version: 1, $comment: 'The bundled copy of the registry (blog-registry): what the app lists when it cannot reach the registry. Written by `node cli/registry.js snapshot <registry-dir>`; never edit by hand.', themes: registry.themes, extensions: registry.extensions }, null, 2)}\n`;
+export const snapshotText = (registry) => `${JSON.stringify({ version: 1, $comment: 'The bundled copy of the registry (blog-registry): what the app lists when it cannot reach the registry. Written by `node cli/registry.js snapshot <registry-dir>`; never edit by hand.', themes: registry.themes }, null, 2)}\n`;
 
 const template = (f) => fs.readFile(path.join(root, 'templates', 'registry', f), 'utf8');
 
@@ -46,7 +46,7 @@ export async function scaffold(dir) {
     'README.md': await template('README.md'),
     'validate.mjs': await template('validate.mjs'),
     'registry.js': await fs.readFile(path.join(root, 'lib', 'registry.js'), 'utf8'),
-    'LICENSE': `The data files (themes.json, extensions.json) are dedicated to the public domain under CC0-1.0:\nhttps://creativecommons.org/publicdomain/zero/1.0/\n\nregistry.js is blog-webCLI's lib/registry.js, under the MIT licence:\n\n${MIT}`,
+    'LICENSE': `The data file (themes.json) is dedicated to the public domain under CC0-1.0:\nhttps://creativecommons.org/publicdomain/zero/1.0/\n\nregistry.js is blog-webCLI's lib/registry.js, under the MIT licence:\n\n${MIT}`,
     '.github/workflows/validate.yml': await template('validate.yml'),
   };
   for (const [f, text] of Object.entries(files)) await fs.writeFile(path.join(dir, f), text);
@@ -63,12 +63,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (cmd === 'scaffold') console.log(`wrote ${(await scaffold(path.resolve(dir))).join(', ')}`);
     if (cmd === 'check') {
       const { registry } = await readRegistry(path.resolve(dir));
-      console.log(`ok: ${registry.themes.length} themes, ${registry.extensions.length} extensions`);
+      console.log(`ok: ${registry.themes.length} themes`);
     }
     if (cmd === 'snapshot') {
       const { registry } = await readRegistry(path.resolve(dir));
       await fs.writeFile(SNAPSHOT, snapshotText(registry));
-      console.log(`wrote app/registry-snapshot.json (${registry.themes.length} themes, ${registry.extensions.length} extensions)`);
+      console.log(`wrote app/registry-snapshot.json (${registry.themes.length} themes)`);
     }
   } catch (e) {
     console.error(e.problems ? e.problems.join('\n') : e.message);

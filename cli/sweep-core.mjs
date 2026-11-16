@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildSite } from '../lib/blog.js';
 import { EXAMPLE_BLOG } from '../lib/sample.js';
+import { WIDGET_CLASSES } from '../lib/widgets.js';
 
 export const REPO = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 import zlib from 'node:zlib';
@@ -65,7 +66,7 @@ export async function loadCorpus(repo = REPO) {
 
 // The pages every theme is judged on: the index in both layouts, a second page, a tag page, the tag list, the archive, a standalone page,
 // and the posts that stress a layout. (404.html and author pages are not generated yet; see docs/contract-gap.md.)
-export const POSTS = ['markdown-is-the-format', 'wide-table', 'long-code', 'html-block', 'long-title', 'forty-tags', 'rtl', 'cjk', 'no-cover', 'wide-image', 'lists-and-blocks'];
+export const POSTS = ['markdown-is-the-format', 'wide-table', 'long-code', 'html-block', 'widgets', 'long-title', 'forty-tags', 'rtl', 'cjk', 'no-cover', 'wide-image', 'lists-and-blocks'];
 export const PAGES = [['index', 'index.html'], ['index-cards', 'cards:index.html'], ['page2', 'page/2/index.html'], ['tag', 'tags/git/index.html'], ['tags', 'tags/index.html'], ['archive', 'archive/index.html'], ['about', 'about/index.html'], ...POSTS.map((s) => [s, `${s}/index.html`])];
 
 
@@ -199,5 +200,6 @@ export function emittedNames(corpus, contract = 'wordpress-classic-2') {
       for (const m of h.matchAll(/\sid\s*=\s*"([^"]*)"/g)) if (m[1]) ids.add(m[1]);
     }
   }
+  for (const name of WIDGET_CLASSES) if (!classes.has(name)) throw new Error(`layout corpus does not exercise ${name}`);
   return { classes: [...classes].sort(), ids: [...ids].sort() };
 }

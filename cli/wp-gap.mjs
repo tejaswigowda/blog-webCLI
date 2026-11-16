@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { buildSite } from '../lib/blog.js';
 import { loadTheme, pinFor, themeDigest, themeFilePaths } from '../lib/theme-pack.js';
 import { EXAMPLE_BLOG } from '../lib/sample.js';
+import { WIDGET_CLASSES } from '../lib/widgets.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.join(HERE, '..');
@@ -73,6 +74,7 @@ const PLUGIN = /^(woocommerce|wc-|elementor|wpcf7|jetpack|tribe-|bbp-|bp-|wpform
 const BLOCK = /^(wp-block-|wp-|has-|align(left|right|center|wide|full|none)$|screen-reader-text|sr-only|skip-link|alignleft|alignright|aligncenter|size-|attachment-|wp-caption|gallery|blocks-gallery|is-style-|is-layout-)/i;
 const BODY = /^(home|blog|single|single-post|single-[\w-]+|page|page-template[\w-]*|archive|category|tag|date|author|error404|search|search-results|search-no-results|paged|rtl|logged-in|admin-bar|no-sidebar|has-sidebar|hfeed|front-page|page-id-\d+|postid-\d+|wp-singular|wp-theme-[\w-]+|customize-support|no-js|js)$/;
 export function kindOf(name, isId) {
+  if (!isId && WIDGET_CLASSES.includes(name)) return 'block';
   if (BODY.test(name)) return 'body';
   if (REGION.test(name)) return 'region';
   if (STATE.test(name)) return 'state';

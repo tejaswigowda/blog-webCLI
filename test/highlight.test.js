@@ -1,7 +1,7 @@
-// The Custom CSS box's syntax highlighting: the tokenizer is lossless and colours what it says it does; painting makes text, never markup.
+// Source highlighting is lossless; painting creates text and spans, never authored markup.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tokenizeCss } from '../app/highlight.js';
+import { tokenizeCss, tokenizeHtmlSource, paintHtmlSource } from '../app/highlight.js';
 
 const kinds = (css) => tokenizeCss(css).filter(([t]) => t !== 'space').map(([t, s]) => `${t}:${s.trim()}`);
 
@@ -48,4 +48,24 @@ test('painting builds text nodes and spans with fixed classes only: typed markup
     assert.ok(made.some((c) => /<img src=x onerror=alert\(1\)>/.test(c.text || c.textContent)), 'the text is kept, as text');
     assert.equal(made[made.length - 1].text, '\n', 'the last empty line is drawn');
   });
+});
+
+test('HTML highlighting preserves complete and unfinished source byte-for-byte', () => {
+  for (const src of ['', '<', '<div', '<div class=', '<div title="unfinished >', '<!-- unfinished', '<!-- <b>comment</b> -->', '<div class="note" title=\'a > b\'><p>Hi &amp; &#233; 日本語</p></div>\n', '<img src=./photo.jpg alt="A boat">', '<script>alert("<img>")</script>', 'Text & unknown < punctuation', '</div>\r\n']) {
+    assert.equal(tokenizeHtmlSource(src).map(([, text]) => text).join(''), src);
+  }
+  const tokens = tokenizeHtmlSource('<!-- hi --><div class="note" title=\'a > b\' open>Hi &amp;</div>');
+  assert.deepEqual(tokens.filter(([type]) => ['tag', 'attribute', 'string', 'entity', 'comment'].includes(type)), [
+    ['comment', '<!-- hi -->'], ['tag', 'div'], ['attribute', 'class'], ['string', '"note"'],
+    ['attribute', 'title'], ['string', "'a > b'"], ['attribute', 'open'], ['entity', '&amp;'], ['tag', 'div'],
+  ]);
+});
+
+test('HTML painting creates only inert spans and text, without adding bytes to the source', () => {
+  const doc = { createElement: (tag) => ({ tag, className: '', textContent: '' }), createTextNode: (text) => ({ text }) };
+  const pre = { ownerDocument: doc, children: [], set textContent(v) { this.children = []; }, append(n) { this.children.push(n); } };
+  const src = '<img src="x" onerror="alert(1)"><script>bad()</script><!-- kept -->';
+  paintHtmlSource(pre, src);
+  assert.equal(pre.children.map((n) => n.text ?? n.textContent).join(''), src);
+  assert.ok(pre.children.every((n) => n.text !== undefined || (n.tag === 'span' && /^tk-[a-z]+$/.test(n.className))));
 });

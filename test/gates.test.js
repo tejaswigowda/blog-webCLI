@@ -7,7 +7,8 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { buildSite, renderPost, parsePost } from '../lib/blog.js';
+import { buildSite, renderPost, parsePost, validateBlog } from '../lib/blog.js';
+import { loadSite, renderFromSite } from '../lib/live-render.js';
 import { setMeta, parseMeta, splitFile } from '../lib/frontmatter.js';
 import { Refusal } from '../lib/errors.js';
 import { serve } from '../cli/serve.js';
@@ -41,6 +42,31 @@ const exampleInputs = async () => {
   for (const f of await fs.readdir(path.join(EXAMPLE, 'posts'))) posts.push({ path: `posts/${f}`, text: await fs.readFile(path.join(EXAMPLE, 'posts', f), 'utf8') });
   return { blog, lock, posts };
 };
+
+test('contents: blog defaults, frontmatter overrides, cover placement and reader/build parity', async () => {
+  const { blog: raw, lock } = await exampleInputs();
+  const base = JSON.parse(raw);
+  const body = '## First\n\n### Second\n\n## Third\n\n#### Not in contents\n';
+  for (const [defaultValue, override, visible] of [[undefined, undefined, false], [true, undefined, true], [true, false, false], [false, true, true]]) {
+    const blog = { ...base, content: { base: 'https://content.test/{owner}/{repo}/{ref}/{path}' }, ...(defaultValue === undefined ? {} : { contents: defaultValue }) };
+    const text = `---\nslug: navigation\ntitle: Navigation\ndate: 2026-11-15\nstatus: published\ncover: asset:images/diagram.png\n${override === undefined ? '' : `contents: ${override}\n`}---\n\n${body}`;
+    const result = buildSite({ blog, lock, posts: [{ path: 'posts/navigation.md', text }] });
+    assert.deepEqual(result.errors, []);
+    const html = result.files['navigation/index.html'];
+    assert.equal(html.includes('class="toc"'), visible);
+    if (visible) {
+      const cover = html.indexOf('class="cover"');
+      assert.ok(cover >= 0 && cover < html.indexOf('class="toc"'));
+      const toc = /<nav class="toc"[\s\S]*?<\/nav>/.exec(html)[0];
+      assert.equal([...toc.matchAll(/<li>/g)].length, 3);
+      assert.doesNotMatch(toc, /Not in contents/);
+    }
+    const files = { ...result.files, 'blog.json': JSON.stringify(blog), 'assets.lock.json': JSON.stringify(lock) };
+    const site = await loadSite(async (p) => p in files ? new TextEncoder().encode(files[p]) : null, { anyBlog: true });
+    assert.equal(renderFromSite(site, { slug: 'navigation', text }).html, html);
+  }
+  for (const contents of ['true', 1, null]) assert.throws(() => validateBlog({ ...base, contents }), (e) => e.code === 'bad-blog-json');
+});
 
 test('B1: posts are markdown with frontmatter; no Delta is stored', async () => {
   for (const { name, text } of await corpus()) {

@@ -98,6 +98,31 @@ test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsa
     await until(page, "!document.querySelector('dialog.blk-dialog')");
     assert.equal(await page.evaluate("document.querySelector('.ql-editor .ql-htmlblock pre').textContent"), '<div class="note">\n  <p>Hello <b>there</b></p>\n</div>', 'blank lines removed, shown as source');
     assert.equal(await page.evaluate("document.querySelectorAll('.ql-editor .ql-htmlblock b, .ql-editor .ql-htmlblock p').length"), 0, 'an HTML block is shown as its source, never as markup');
+    assert.ok(await page.evaluate("document.querySelectorAll('.ql-htmlblock pre .tk-se').length > 0"), 'HTML tags are highlighted within Quill');
+    assert.ok(await page.evaluate("document.querySelectorAll('.ql-htmlblock pre .tk-pr').length > 0"), 'HTML attribute names are highlighted within Quill');
+    assert.ok(await page.evaluate("document.querySelectorAll('.ql-htmlblock pre .tk-st').length > 0"), 'HTML values are highlighted within Quill');
+    assert.equal(await page.evaluate("new Set(['.tk-se','.tk-pr','.tk-st'].map(s => getComputedStyle(document.querySelector('.ql-htmlblock pre ' + s)).color)).size"), 3, 'tags, attribute names and values have visibly distinct colours');
+    await page.evaluate("document.querySelector('.ql-editor .ql-htmlblock .blk-edit').click()");
+    await until(page, "document.querySelector('dialog.blk-dialog[open] .hl-wrap')");
+    assert.equal(await page.evaluate("document.querySelector('dialog .hl-pre').textContent"), await page.evaluate("document.querySelector('dialog textarea').value + '\\n'"), 'highlighted HTML editing uses the exact textarea value');
+    const scroll = await page.evaluate(`(() => {
+      const area = document.querySelector('dialog textarea');
+      area.value = '<div>\\n' + Array.from({length:40}, (_,i) => '<p title="' + 'x'.repeat(180) + '">Row ' + i + '</p>').join('\\n') + '\\n</div>';
+      area.dispatchEvent(new Event('input',{bubbles:true}));
+      area.scrollTop = 100; area.scrollLeft = 80;
+      area.dispatchEvent(new Event('scroll'));
+      area.value += ' ';
+      area.dispatchEvent(new Event('input',{bubbles:true}));
+      const pre = document.querySelector('dialog .hl-pre');
+      return {top:area.scrollTop,left:area.scrollLeft,mirrorTop:pre.scrollTop,mirrorLeft:pre.scrollLeft,inert:!pre.querySelector('div,p,script,img'),font:getComputedStyle(area).font,mirrorFont:getComputedStyle(pre).font};
+    })()`);
+    assert.ok(scroll.top > 0 && scroll.left > 0, 'long HTML source scrolls on both axes');
+    assert.equal(scroll.top, scroll.mirrorTop, 'vertical highlighting stays aligned after typing');
+    assert.equal(scroll.left, scroll.mirrorLeft, 'horizontal highlighting stays aligned after typing');
+    assert.equal(scroll.font, scroll.mirrorFont, 'textarea and highlighted mirror share font metrics');
+    assert.equal(scroll.inert, true, 'highlighted source never becomes authored elements');
+    await clickText(page, 'dialog.blk-dialog button', 'Cancel');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
 
     // edit the table again from its button
     await page.evaluate("document.querySelector('.ql-editor .ql-mdtable .blk-edit').click(); 0");
@@ -129,6 +154,43 @@ test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsa
 
     await page.evaluate("document.querySelector('.ql-editor').focus(); document.querySelector('button.ql-slideshow').click(); 0");
     await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    assert.equal(await page.evaluate("document.querySelectorAll('dialog .blk-slide').length"), 2, 'one accordion per slide');
+    assert.equal(await page.evaluate("document.querySelectorAll('dialog .blk-slide[open]').length"), 1, 'only the first slide starts expanded');
+    for (const width of [1280, 390]) {
+      await page.send('Emulation.setDeviceMetricsOverride', { width, height: 650, deviceScaleFactor: 1, mobile: false });
+      const layout = await page.evaluate(`(() => {
+        const dlg = document.querySelector('dialog.blk-dialog');
+        dlg.scrollTop = 0;
+        const box = n => {const r = n.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right};};
+        const pairs = ['image','heading','caption','link label'].map(field => ({
+          input:box(dlg.querySelector('input[aria-label="Slide 1 ' + field + '"]')),
+          animation:box(dlg.querySelector('select[aria-label="Slide 1 ' + field + ' animation"]')),
+        }));
+        const actions = [...dlg.querySelectorAll('.blk-dialog-header button')];
+        const before = actions.map(box);
+        dlg.scrollTop = dlg.scrollHeight;
+        return {pairs,before,after:actions.map(box),dialog:box(dlg),scrolled:dlg.scrollTop,overflow:dlg.scrollWidth > dlg.clientWidth + 1};
+      })()`);
+      for (const pair of layout.pairs) {
+        assert.ok(Math.abs(pair.input.top - pair.animation.top) <= 1, `${width}: input and animation share a row`);
+        assert.ok(pair.animation.left >= pair.input.right, `${width}: animation is beside its input`);
+      }
+      assert.equal(layout.overflow, false, `${width}: no horizontal overflow`);
+      assert.ok(layout.scrolled > 0, `${width}: long dialog actually scrolls`);
+      for (const [i, button] of layout.after.entries()) {
+        assert.ok(Math.abs(button.top - layout.before[i].top) <= 1, `${width}: actions stay sticky while scrolling`);
+        assert.ok(button.top >= layout.dialog.top && button.bottom < layout.dialog.bottom, `${width}: actions remain visible`);
+      }
+      assert.ok((layout.after[0].left + layout.after[1].right) / 2 > (layout.dialog.left + layout.dialog.right) / 2, `${width}: action group is right-aligned`);
+      assert.ok(layout.after[0].top < layout.dialog.top + 32, `${width}: Apply stays at the top`);
+      assert.ok(layout.after[1].right > layout.dialog.right - 40, `${width}: Cancel is at the right edge`);
+    }
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+    await page.evaluate("document.querySelector('dialog.blk-dialog').scrollTop = 0");
+    await page.evaluate("document.querySelectorAll('dialog .blk-slide summary')[1].click()");
+    await until(page, "document.querySelectorAll('dialog .blk-slide')[1].open && !document.querySelectorAll('dialog .blk-slide')[0].open");
+    await page.evaluate("document.querySelector('dialog .blk-slide summary').click()");
+    await until(page, "document.querySelector('dialog .blk-slide').open");
     assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog button.primary').disabled"), true);
     assert.equal(await page.evaluate("document.querySelector('select[aria-label=\"Slide 1 animation\"]').value"), 'fadeIn');
     for (const i of [1, 2]) {
@@ -136,6 +198,7 @@ test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsa
       await fill(page, `dialog input[aria-label="Slide ${i} alternative text"]`, `Boat ${i}`);
       await fill(page, `dialog input[aria-label="Slide ${i} heading"]`, `Platform ${i}`);
     }
+    assert.equal(await page.evaluate("document.querySelector('dialog .blk-slide summary').textContent"), 'Slide 1: Platform 1', 'slide summaries update while typing');
     await fill(page, 'dialog input[aria-label="Slide 1 caption"]', '<script>not executable</script>');
     await fill(page, 'dialog input[aria-label="Slide 1 link label"]', 'Products');
     assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog button.primary').disabled"), true, 'a label requires its address');
@@ -143,9 +206,11 @@ test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsa
     await page.evaluate("for (const [i, value] of [[1, 'fadeInUp'], [2, 'none']]) { const select = document.querySelector('select[aria-label=\"Slide ' + i + ' animation\"]'); select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); }");
     await page.evaluate("for (const [field, value] of [['image', 'zoomIn'], ['heading', 'fadeInDown'], ['caption', 'fadeInLeft'], ['link label', 'bounceIn']]) { const select = document.querySelector('select[aria-label=\"Slide 1 ' + field + ' animation\"]'); select.value = value; select.dispatchEvent(new Event('change', { bubbles: true })); }");
     await clickText(page, 'dialog button', '+ Slide');
+    assert.equal(await page.evaluate("document.querySelector('dialog .blk-slide[open] summary').textContent"), 'Slide 3', 'new slides open automatically');
     assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog button.primary').disabled"), true);
     await page.evaluate("document.querySelector('button[aria-label=\"Remove slide 3\"]').click(); document.querySelector('button[aria-label=\"Move slide 2 up\"]').click(); 0");
     assert.equal(await page.evaluate("document.querySelector('input[aria-label=\"Slide 1 heading\"]').value"), 'Platform 2');
+    assert.equal(await page.evaluate("document.querySelector('dialog .blk-slide[open] summary').textContent"), 'Slide 1: Platform 2', 'moved slides stay expanded with their content');
     await clickText(page, 'dialog button', 'Apply');
     await until(page, "!document.querySelector('dialog.blk-dialog')");
     await clickText(page, '.ql-editor button.blk-edit', 'Edit slideshow');
@@ -228,6 +293,31 @@ test('CSS class groups: whole-block selection, cancellation, undo and saved HTML
     assert.deepEqual(await page.evaluate('__q.getContents()'), await page.evaluate('__original'), 'one undo restores rich text and formatting');
     await page.evaluate("__q.getModule('history').redo()");
 
+    assert.equal(await page.evaluate("document.querySelector('.blk-classes input').value"), 'order-step featured');
+    for (const [value, why] of [['bad" onclick="x', /class names/], ['wc-colums', /wc-columns/], ['wc-columns', /wc-col/]]) {
+      await fill(page, '.blk-classes input', value);
+      await clickText(page, '.blk-classes button', 'Apply classes');
+      assert.match(await page.evaluate("document.querySelector('.blk-class-error').textContent"), why);
+      assert.equal(await page.evaluate("document.querySelector('.ql-editor .ql-htmlblock').getAttribute('data-htmlblock')"), src, 'invalid class edit does not touch the document');
+    }
+    await fill(page, '.blk-classes input', 'order-step featured boxed');
+    await page.evaluate(`(() => {
+      window.__classTyping = 0;
+      __q.root.addEventListener('keydown', () => { window.__classTyping++; });
+      const input = document.querySelector('.blk-classes input');
+      input.focus();
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    })()`);
+    assert.equal(await page.evaluate('__classTyping'), 0, 'class field keystrokes do not reach Quill keyboard shortcuts');
+    await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
+    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    const styled = src.replace('order-step featured', 'order-step featured boxed');
+    await until(page, `document.querySelector('.ql-editor .ql-htmlblock').getAttribute('data-htmlblock') === ${JSON.stringify(styled)}`);
+    assert.equal(await page.evaluate("document.querySelector('.ql-editor .ql-htmlblock pre').textContent"), styled);
+    assert.equal(await page.evaluate('__q.getText()'), 'Before.\nAfter.\n');
+    await page.evaluate("__q.getModule('history').undo()");
+    assert.equal(await page.evaluate("document.querySelector('.ql-editor .ql-htmlblock').getAttribute('data-htmlblock')"), src, 'one undo restores the old classes and source');
+
     // At a selection ending exactly at the next block's start, that next block must stay outside.
     await page.evaluate("__q.getModule('history').undo()");
     assert.deepEqual(await page.evaluate('__q.getContents()'), await page.evaluate('__original'));
@@ -249,6 +339,22 @@ test('CSS class groups: whole-block selection, cancellation, undo and saved HTML
     assert.equal(await page.evaluate("document.querySelector('.ql-htmlblock pre').textContent"), '<div class="intro">\n<p>Before.</p>\n</div>');
     await page.evaluate("__q.getModule('history').undo()");
 
+    await fill(page, '.blk-classes input', '');
+    await clickText(page, '.blk-classes button', 'Apply classes');
+    assert.equal(await page.evaluate("document.querySelector('.ql-editor .ql-htmlblock').getAttribute('data-htmlblock')"), src.replace(' class="order-step featured"', ''), 'clearing classes removes only the outer class attribute');
+    await page.evaluate("__q.getModule('history').undo()");
+    await fill(page, '.blk-classes input', 'order-step featured boxed');
+    await clickText(page, '.blk-classes button', 'Apply classes');
+    for (const width of [1280, 390]) {
+      await page.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
+      const bounds = await page.evaluate(`(() => {
+        const bar = document.querySelector('.ql-editor .blk-bar');
+        const rect = bar.getBoundingClientRect();
+        return { width: innerWidth, right: rect.right, input: bar.querySelector('input').getBoundingClientRect().width, scroll: bar.scrollWidth, client: bar.clientWidth };
+      })()`);
+      assert.ok(bounds.input > 60 && bounds.scroll <= bounds.client + 1 && bounds.right <= bounds.width, `${width}: class input fits without horizontal overflow`);
+    }
+
     await fill(page, '#view input[placeholder=Title]', 'Class groups');
     await fill(page, '#view input[placeholder^="set once"]', 'class-groups');
     await clickText(page, '#view button', 'Save draft');
@@ -256,13 +362,14 @@ test('CSS class groups: whole-block selection, cancellation, undo and saved HTML
     await clickText(page, 'dialog button', 'Commit and push');
     await until(page, "document.querySelector('.toast.success')", 30000);
     const saved = (await page.evaluate("window.__fake.files('example/blog')"))['posts/class-groups.md'];
-    assert.ok(saved.includes(`Before.\n\n${src}\n\nAfter.\n`));
+    assert.ok(saved.includes(`Before.\n\n${styled}\n\nAfter.\n`));
     await page.evaluate("location.hash = '#repo=example/blog&edit=class-groups'; 0");
     await until(page, "document.querySelector('.ql-editor .ql-htmlblock')");
-    assert.equal(await page.evaluate("document.querySelector('.ql-htmlblock pre').textContent"), src);
+    assert.equal(await page.evaluate("document.querySelector('.ql-htmlblock pre').textContent"), styled);
+    assert.equal(await page.evaluate("document.querySelector('.blk-classes input').value"), 'order-step featured boxed');
     await clickText(page, '.ql-editor button.blk-edit', 'Edit HTML');
     await until(page, "document.querySelector('dialog.blk-dialog[open] textarea')");
-    assert.equal(await page.evaluate("document.querySelector('dialog textarea').value"), src);
+    assert.equal(await page.evaluate("document.querySelector('dialog textarea').value"), styled);
     await clickText(page, 'dialog.blk-dialog button', 'Cancel');
     assert.deepEqual(await page.evaluate('window.__alerts'), []);
   } finally {

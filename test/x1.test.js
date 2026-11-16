@@ -10,11 +10,8 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSiteWith } from '../lib/build-async.js';
-import { loadExtension } from '../lib/extensions.js';
-import { EX, localRunner, readDirFiles, stripData } from './helpers.js';
-import { pinForExtension, extensionFilePaths } from '../lib/extensions.js';
-import { filesDigest } from '../lib/pin.js';
+import { buildSite } from '../lib/blog.js';
+import { EX, readDirFiles, stripData } from './helpers.js';
 import { loadTheme, pinFor, themeDigest, themeFilePaths } from '../lib/theme-pack.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,10 +27,6 @@ async function configs() {
     const pin = pinFor('me/theme', 'v1.0.0', m, themeDigest(files, themeFilePaths(m)));
     return { pin, theme: loadTheme(pin, files) };
   };
-  const extFiles = await readDirFiles(path.join(EX, 'ext-reading-time'));
-  const extManifest = JSON.parse(new TextDecoder().decode(extFiles['extension.json']));
-  const extPin = pinForExtension('me/ext', 'v1.0.0', extManifest, filesDigest(extFiles, extensionFilePaths(extManifest), (m) => new Error(m)));
-  const ext = loadExtension(extPin, extFiles);
   const plain = await themeOf('theme-plain');
   const classic = await themeOf('theme-classic');
   const base = { lock, posts };
@@ -41,13 +34,12 @@ async function configs() {
     ['default', { ...base, blog: JSON.stringify(blog) }],
     ['native theme', { ...base, blog: JSON.stringify({ ...blog, theme: plain.pin }), theme: plain.theme }],
     ['classic theme', { ...base, blog: JSON.stringify({ ...blog, theme: classic.pin }), theme: classic.theme }],
-    ['classic theme + extension', { ...base, blog: JSON.stringify({ ...blog, theme: classic.pin, extensions: [extPin] }), theme: classic.theme, extensions: [ext] }],
   ];
 }
 
 test('X1: a generated page has no script, no event handler, only the pinned icon stylesheet, and isolated frames', async () => {
   for (const [name, input] of await configs()) {
-    const result = await buildSiteWith(input, localRunner);
+    const result = buildSite(input);
     assert.deepEqual(result.errors, [], name);
     const pages = Object.entries(result.files).filter(([f]) => f.endsWith('.html'));
     assert.ok(pages.length >= 3, name);
@@ -118,7 +110,7 @@ test('X1: nothing reachable from the /blog/ reader can run code it fetched', asy
   const files = await graph('blog/reader.js');
   const rel = [...files.keys()].map((f) => path.relative(root, f)).sort();
   // the doors that lead to third-party code are not even in the graph
-  for (const forbidden of ['app/sandbox.js', 'app/sandbox-frame.js', 'app/packs.js', 'app/editor.js', 'app/app.js']) assert.ok(!rel.includes(forbidden), `${forbidden} is reachable from the reader: ${rel.join(', ')}`);
+  for (const forbidden of ['app/packs.js', 'app/editor.js', 'app/app.js']) assert.ok(!rel.includes(forbidden), `${forbidden} is reachable from the reader: ${rel.join(', ')}`);
   assert.ok(rel.includes('lib/contracts.js') && rel.includes('app/reader-core.js'), 'the graph walk found the reader\'s modules');
   for (const [file, src] of files) {
     // the shipped scripts are string constants the generator hands out, never code that runs here (test/live.test.js and
@@ -142,11 +134,9 @@ test('X1: nothing reachable from the /blog/ reader can run code it fetched', asy
   assert.equal([...html.matchAll(/<script\b[^>]*>/g)].length, 1);
 });
 
-test('X1: the generator and the CLI contain no evaluator and never import the sandbox', async () => {
-  for (const entry of ['lib/blog.js', 'lib/build-async.js', 'cli/blog.js']) {
+test('X1: the generator and the CLI contain no evaluator', async () => {
+  for (const entry of ['lib/blog.js', 'cli/blog.js']) {
     const files = await graph(entry);
-    const rel = [...files.keys()].map((f) => path.relative(root, f));
-    assert.ok(!rel.includes('app/sandbox.js') && !rel.includes('app/sandbox-frame.js'), `${entry} reaches the sandbox`);
     for (const [file, src] of files) {
       const code = stripCommentsAndStrings(src);
       for (const [re, what] of EVALUATORS.filter(([, w]) => w !== 'assigning a src/href (script loading)')) assert.ok(!re.test(code), `${path.relative(root, file)} (from ${entry}) uses ${what}`);
@@ -154,7 +144,7 @@ test('X1: the generator and the CLI contain no evaluator and never import the sa
   }
 });
 
-test('X1: the only place a Worker or a dynamic import exists is the sandbox frame', async () => {
+test('X1: no product module creates a Worker or evaluates code from data', async () => {
   const hits = [];
   const walk = async (dir) => {
     for (const e of await fs.readdir(path.join(root, dir), { withFileTypes: true })) {
@@ -169,26 +159,13 @@ test('X1: the only place a Worker or a dynamic import exists is the sandbox fram
     }
   };
   for (const d of ['lib', 'app', 'blog', 'cli']) await walk(d);
-  assert.deepEqual(hits.sort(), ['app/sandbox-frame.js'], 'Workers are created in exactly one file, inside the sandboxed frame');
+  assert.deepEqual(hits, [], 'no Worker or evaluator remains');
 });
 
 test('X1: the editor and reader pages keep a CSP with no inline script and no eval', async () => {
   const csp = (html) => /Content-Security-Policy" content="([^"]+)"/.exec(html)[1];
   const app = csp(await fs.readFile(path.join(root, 'index.html'), 'utf8'));
   assert.ok(/script-src 'self'(;|$)/.test(app) && !/unsafe-eval/.test(app));
-  const frame = csp(await fs.readFile(path.join(root, 'app', 'sandbox-frame.html'), 'utf8'));
-  for (const piece of ["default-src 'none'", "connect-src 'none'", "worker-src blob:", "frame-src 'none'", "object-src 'none'"]) assert.ok(frame.includes(piece), piece);
-  assert.ok(!/unsafe-eval|unsafe-inline/.test(frame));
-  assert.ok(!/https?:/.test(frame), 'the sandbox frame may load nothing from anywhere');
-});
-
-test('X1: the sandbox is created sandbox="allow-scripts" and is handed data, never a token or a URL', async () => {
-  const src = await fs.readFile(path.join(root, 'app', 'sandbox.js'), 'utf8');
-  assert.match(src, /SANDBOX_ATTRIBUTE = 'allow-scripts'/);
-  assert.ok(!/allow-same-origin/.test(src.replace(/\/\/.*$/gm, '')), 'allow-same-origin is never set');
-  const post = /postMessage\(\{([^}]*)\}/.exec(src)[1];
-  assert.equal(post.replace(/\s/g, ''), "type:'run',id,source,hook,input,ctx", 'the message carries data only');
-  assert.ok(!/token|localStorage|sessionStorage|Authorization/i.test(src.replace(/\/\/.*$/gm, '')), 'the sandbox host never touches credentials');
-  const frame = await fs.readFile(path.join(root, 'app', 'sandbox-frame.js'), 'utf8');
-  assert.ok(!/token|Authorization/i.test(frame.replace(/\/\/.*$/gm, '')));
+  const reader = csp(await fs.readFile(path.join(root, 'blog', 'index.html'), 'utf8'));
+  assert.ok(/script-src 'self'(;|$)/.test(reader) && !/unsafe-eval/.test(reader));
 });

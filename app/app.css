@@ -111,7 +111,7 @@ fieldset legend+*{clear:both}
 label.check{display:block;font-size:.95rem;color:var(--fg);margin:.2rem 0}
 textarea{width:100%}
 textarea.mono{font:.85rem/1.5 ui-monospace,monospace}
-/* syntax-highlighted CSS box: a transparent textarea over a <pre> with the same text in colour; both must share every metric */
+/* Syntax source fields share every metric with their coloured, noninteractive mirror. */
 .hl-wrap{position:relative}
 .hl-pre,textarea.hl-input{margin:0;width:100%;padding:7px 10px;border:1px solid var(--rule);border-radius:6px;font:.85rem/1.5 ui-monospace,monospace;letter-spacing:0;tab-size:2;white-space:pre;overflow:auto;box-sizing:border-box}
 .hl-input{height:10.5rem}
@@ -285,14 +285,39 @@ button.icon-btn{padding:6px;border-radius:7px}
 
 /* tables and HTML blocks in the editor */
 .ql-editor .ql-mdtable,.ql-editor .ql-htmlblock{margin:.7rem 0;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:var(--surface2);font:.85rem/1.4 system-ui,sans-serif}
-.blk-bar{display:flex;justify-content:space-between;align-items:center;gap:.6rem;padding:.3rem .6rem;background:var(--surface3);color:var(--muted);font-size:.75rem}
+.blk-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.6rem;padding:.3rem .6rem;background:var(--surface3);color:var(--muted);font-size:.75rem}
 .blk-bar button{font-size:.75rem;padding:2px 9px}
+.blk-classes{display:flex;flex:1 1 18rem;flex-wrap:wrap;align-items:center;gap:.4rem;min-width:0;margin:0}
+.blk-classes label{display:flex;flex:1 1 10rem;align-items:center;gap:.4rem;min-width:0;margin:0;font:inherit}
+.blk-classes input{flex:1;width:0;min-width:0;padding:2px 6px;font:inherit}
+.blk-class-error{flex-basis:100%;color:var(--warn);overflow-wrap:anywhere}
+.blk-class-error:empty{display:none}
+.blk-class-help{flex:1 1 12rem;overflow-wrap:anywhere}
 .ql-mdtable table{border-collapse:collapse;width:100%;color:var(--fg)}
 .ql-mdtable th,.ql-mdtable td{border:1px solid var(--rule);padding:.3rem .6rem;text-align:left}
 .ql-mdtable th{background:var(--panel)}
-.ql-htmlblock pre{margin:0;padding:.6rem;white-space:pre-wrap;overflow-wrap:anywhere;font:.8rem/1.45 ui-monospace,monospace;color:#7dd3fc;background:var(--code)}
+.ql-htmlblock pre{margin:0;padding:.6rem;white-space:pre-wrap;overflow-wrap:anywhere;font:.8rem/1.45 ui-monospace,monospace;color:var(--fg);background:var(--code)}
 .ql-toolbar button.ql-mdtable,.ql-toolbar button.ql-htmlblock{width:28px;height:24px}
-dialog.blk-dialog{max-width:56rem}
+dialog.blk-dialog{max-width:56rem;max-height:calc(100dvh - 2rem);padding:0;overflow:auto;scroll-padding-top:6rem}
+.blk-dialog-header{position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.8rem 1.25rem;background:var(--panel);border-bottom:1px solid var(--rule)}
+.blk-dialog-heading{min-width:0}
+.blk-dialog-header h2{margin:0;padding:0;border:0}
+.blk-dialog-header .actions{flex:none;flex-wrap:nowrap;margin:0}
+.blk-dialog-header .blk-msg{margin:.4rem 0 0}
+.blk-dialog-header .blk-msg:empty{display:none}
+.blk-dialog-body{padding:1.25rem}
+.blk-dialog textarea.hl-input{height:18rem;min-height:8rem}
+.blk-slide{margin:.65rem 0;border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.blk-slide>summary{margin:0;padding:.65rem .8rem;background:var(--surface2);font-weight:600;overflow-wrap:anywhere}
+.blk-slide>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.blk-slide-fields{padding:.75rem}
+.blk-slide-fields label{min-width:0;margin-bottom:.75rem}
+.blk-slide-fields input,.blk-slide-fields select{display:block;width:100%;min-width:0;margin-top:.25rem}
+.blk-slide-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,14rem);align-items:end;gap:.75rem;margin-bottom:.75rem}
+.blk-slide-row>label{margin:0}
+.blk-slide-row input,.blk-slide-row select{height:2.5rem}
+.blk-slide-media{margin-bottom:.75rem}
+@media(max-width:600px){.blk-slide-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .blk-grid{display:grid;gap:.35rem;align-items:center;margin:.6rem 0;overflow-x:auto}
 .blk-grid input,.blk-grid select{width:100%;min-width:0}
 .blk-grid input.blk-head{font-weight:700}

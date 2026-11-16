@@ -1,8 +1,7 @@
 # Copy to .github/workflows/schedule.yml in your blog repository.
 # Publishes the posts marked `status: scheduled` once their `publish_at` has passed (read in blog.json's "timezone", UTC with none),
 # then regenerates the site and commits once. Not before publish_at, and normally within the hour: GitHub's `schedule` is
-# best-effort, so the time is not exact. With nothing due it commits nothing; if a due post cannot be published (an extension output
-# was never recorded, a reference does not resolve) it stays scheduled and this workflow fails, which is how you find out.
+# best-effort, so the time is not exact. With nothing due it commits nothing; if a due post cannot be published (a reference does not resolve) it stays scheduled and this workflow fails, which is how you find out.
 # GitHub switches scheduled workflows off after 60 days without repository activity in a public repository: a post scheduled
 # further out than that needs a commit (or this workflow re-enabled) before its day. A scheduled post's source is public in a public
 # repository: `scheduled` keeps it off the site, not out of GitHub.
