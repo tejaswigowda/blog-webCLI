@@ -179,6 +179,98 @@ test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsa
   }
 });
 
+test('CSS class groups: whole-block selection, cancellation, undo and saved HTML source', { skip, timeout: 90000 }, async () => {
+  const web = await serve(await site());
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/index.html`);
+    await until(page, "document.querySelector('#top button')");
+    await page.evaluate(`(async () => { ${INSTALL} })()`);
+    await clickText(page, '#top button', 'Sign in');
+    await fill(page, 'dialog input[name=token]', `github_pat_${'b'.repeat(30)}`);
+    await clickText(page, 'dialog button', 'Sign in');
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
+    await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
+    await until(page, "document.querySelector('.ql-editor')");
+    await page.evaluate(`(() => {
+      window.__q = Quill.find(document.querySelector('.ql-container'));
+      __q.setContents({ ops: [
+        { insert: 'Before.\\nStep 1' }, { insert: '\\n', attributes: { header: 3 } },
+        { insert: 'Get ' }, { insert: 'a quote', attributes: { bold: true, link: './contact/' } },
+        { insert: '.\\nAfter.\\n' }
+      ] });
+      __q.getModule('history').clear();
+      window.__original = __q.getContents();
+      __q.setSelection(10, 9);
+      document.querySelector('button.ql-cssclasses').click();
+    })()`);
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    for (const value of ['.order-step', 'bad" onclick="x']) {
+      await fill(page, 'dialog input[aria-label="CSS classes"]', value);
+      assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog button.primary').disabled"), true);
+      assert.match(await page.evaluate("document.querySelector('dialog .blk-msg').textContent"), /class names/);
+    }
+    await fill(page, 'dialog input[aria-label="CSS classes"]', 'order-step featured');
+    await clickText(page, 'dialog.blk-dialog button', 'Cancel');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    assert.deepEqual(await page.evaluate('__q.getContents()'), await page.evaluate('__original'));
+
+    await page.evaluate("document.querySelector('button.ql-cssclasses').click(); 0");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    await fill(page, 'dialog input[aria-label="CSS classes"]', 'order-step featured');
+    await clickText(page, 'dialog button', 'Apply');
+    await until(page, "document.querySelector('.ql-editor .ql-htmlblock')");
+    const src = '<div class="order-step featured">\n<h3>Step 1</h3>\n<p>Get <a href="./contact/"><strong>a quote</strong></a>.</p>\n</div>';
+    assert.equal(await page.evaluate("document.querySelector('.ql-htmlblock pre').textContent"), src, 'partial selection expands to both complete blocks');
+    assert.equal(await page.evaluate("document.querySelectorAll('.ql-editor .order-step').length"), 0, 'group is source, never executed markup');
+    assert.equal(await page.evaluate('__q.getText()'), 'Before.\nAfter.\n', 'surrounding blocks are untouched');
+    await page.evaluate("__q.getModule('history').undo()");
+    assert.deepEqual(await page.evaluate('__q.getContents()'), await page.evaluate('__original'), 'one undo restores rich text and formatting');
+    await page.evaluate("__q.getModule('history').redo()");
+
+    // At a selection ending exactly at the next block's start, that next block must stay outside.
+    await page.evaluate("__q.getModule('history').undo()");
+    assert.deepEqual(await page.evaluate('__q.getContents()'), await page.evaluate('__original'));
+    await page.evaluate("__q.setSelection(8, __q.getText().indexOf('After.') - 8); document.querySelector('button.ql-cssclasses').click(); 0");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    await fill(page, 'dialog input[aria-label="CSS classes"]', 'order-step featured');
+    assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog .blk-msg').textContent"), '');
+    await clickText(page, 'dialog button', 'Apply');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    assert.equal(await page.evaluate("document.querySelector('.ql-htmlblock pre').textContent"), src);
+
+    // A caret (no selection) groups just its current paragraph.
+    await page.evaluate("__q.setSelection(0, 0); 0");
+    assert.deepEqual(await page.evaluate('__q.getSelection()'), { index: 0, length: 0 });
+    await page.evaluate("document.querySelector('button.ql-cssclasses').click(); 0");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    await fill(page, 'dialog input[aria-label="CSS classes"]', 'intro');
+    await clickText(page, 'dialog button', 'Apply');
+    assert.equal(await page.evaluate("document.querySelector('.ql-htmlblock pre').textContent"), '<div class="intro">\n<p>Before.</p>\n</div>');
+    await page.evaluate("__q.getModule('history').undo()");
+
+    await fill(page, '#view input[placeholder=Title]', 'Class groups');
+    await fill(page, '#view input[placeholder^="set once"]', 'class-groups');
+    await clickText(page, '#view button', 'Save draft');
+    await until(page, "document.querySelector('dialog[open] .preflight')");
+    await clickText(page, 'dialog button', 'Commit and push');
+    await until(page, "document.querySelector('.toast.success')", 30000);
+    const saved = (await page.evaluate("window.__fake.files('example/blog')"))['posts/class-groups.md'];
+    assert.ok(saved.includes(`Before.\n\n${src}\n\nAfter.\n`));
+    await page.evaluate("location.hash = '#repo=example/blog&edit=class-groups'; 0");
+    await until(page, "document.querySelector('.ql-editor .ql-htmlblock')");
+    assert.equal(await page.evaluate("document.querySelector('.ql-htmlblock pre').textContent"), src);
+    await clickText(page, '.ql-editor button.blk-edit', 'Edit HTML');
+    await until(page, "document.querySelector('dialog.blk-dialog[open] textarea')");
+    assert.equal(await page.evaluate("document.querySelector('dialog textarea').value"), src);
+    await clickText(page, 'dialog.blk-dialog button', 'Cancel');
+    assert.deepEqual(await page.evaluate('window.__alerts'), []);
+  } finally {
+    chrome.close();
+    web.close();
+  }
+});
+
 test('slideshow player: autoplay, pause, controls, reduced motion and cleanup in a real browser', { skip, timeout: 60000 }, async () => {
   const web = await serve(root);
   const chrome = await launch();

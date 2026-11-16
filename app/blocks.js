@@ -6,6 +6,7 @@ import { canonCell, deltaToMarkdownChecked, parseInline } from '../lib/markdown.
 import { MAX_BLOCK, canonHtml, tokenizeHtml, ALLOWED_TAGS } from '../lib/rawhtml.js';
 import { slideshowHtml } from '../lib/slideshow.js';
 import { DEFAULT_SLIDE_ANIMATION, SLIDE_ANIMATIONS } from '../lib/animations.js';
+import { deltaToHtmlGroup } from '../lib/html.js';
 
 const el = (tag, attrs = {}, ...kids) => {
   const n = document.createElement(tag);
@@ -181,6 +182,15 @@ export function editHtml(initial = '') {
   return dialog('HTML block', body, { check: read, apply: read });
 }
 
+function editClasses(delta) {
+  const input = el('input', { 'aria-label': 'CSS classes', placeholder: 'order-step featured', autocomplete: 'off' });
+  const body = el('div', {},
+    el('p', { class: 'hint' }, 'Complete selected blocks (or the current block) become one <div> HTML group. Formatting, links and images are kept. Afterwards use Edit HTML to change the content or classes. Style the group in Settings > Custom CSS, for example .order-step { border: 2px solid gray; }.'),
+    el('label', {}, 'CSS classes (without dots)', input));
+  const read = () => deltaToHtmlGroup(delta, input.value);
+  return dialog('Group with CSS classes', body, { check: read, apply: read });
+}
+
 const blankSlide = () => ({ image: '', alt: '', title: '', text: '', label: '', url: '', animation: DEFAULT_SLIDE_ANIMATION });
 
 export function editSlideshow(initial = [blankSlide(), blankSlide()], chooseImage) {
@@ -227,6 +237,7 @@ const ICONS = {
   mdtable: '<svg viewBox="0 0 18 18"><rect class="ql-stroke" x="2" y="3" width="14" height="12" fill="none"/><line class="ql-stroke" x1="2" x2="16" y1="7" y2="7"/><line class="ql-stroke" x1="2" x2="16" y1="11" y2="11"/><line class="ql-stroke" x1="9" x2="9" y1="3" y2="15"/></svg>',
   htmlblock: '<svg viewBox="0 0 18 18"><polyline class="ql-even ql-stroke" points="5 5 2 9 5 13"/><polyline class="ql-even ql-stroke" points="13 5 16 9 13 13"/><line class="ql-stroke" x1="10" x2="8" y1="4" y2="14"/></svg>',
   slideshow: '<svg viewBox="0 0 18 18"><rect class="ql-stroke" x="2" y="2" width="14" height="11" fill="none"/><polyline class="ql-stroke" points="4 10 7 6 10 9 12 7 14 10" fill="none"/><circle class="ql-fill" cx="6" cy="16" r="1"/><circle class="ql-fill" cx="9" cy="16" r="1"/><circle class="ql-fill" cx="12" cy="16" r="1"/></svg>',
+  cssclasses: '<svg viewBox="0 0 18 18"><path class="ql-stroke" fill="none" d="M6 2H3v14h3M12 2h3v14h-3M8 5v8M11 5v8M6 7h7M6 11h7"/></svg>',
 };
 
 // Register the two block embeds with Quill.
@@ -270,6 +281,7 @@ export function registerBlocks(Quill) {
   icons.mdtable = ICONS.mdtable;
   icons.htmlblock = ICONS.htmlblock;
   icons.slideshow = ICONS.slideshow;
+  icons.cssclasses = ICONS.cssclasses;
 }
 
 // Insert and edit from the toolbar and by clicking a block's Edit button.
@@ -289,6 +301,22 @@ export function wireBlocks(quill, Quill, { chooseImage }) {
   const tableHandler = () => insert('mdtable', () => editTable());
   const htmlHandler = () => insert('htmlblock', () => editHtml());
   const slideshowHandler = () => insert('htmlblock', () => editSlideshow(undefined, chooseImage));
+  const classesHandler = async () => {
+    const range = quill.getSelection(true) || { index: Math.max(0, quill.getLength() - 1), length: 0 };
+    const [first] = quill.getLine(range.index);
+    const [last] = quill.getLine(range.index + Math.max(0, range.length - 1));
+    const start = quill.getIndex(first);
+    const length = quill.getIndex(last) + last.length() - start;
+    const next = await editClasses(quill.getContents(start, length));
+    if (next) {
+      const Delta = Quill.import('delta');
+      const history = quill.getModule('history');
+      history.cutoff();
+      quill.updateContents(new Delta().retain(start).delete(length).insert({ htmlblock: next }), 'user');
+      history.cutoff();
+    }
+    quill.setSelection(next ? start + 1 : range.index, next ? 0 : range.length, 'silent');
+  };
   quill.root.addEventListener('click', async (e) => {
     const button = e.target.closest && e.target.closest('.blk-edit');
     const node = button && button.closest('.ql-mdtable, .ql-htmlblock');
@@ -304,5 +332,5 @@ export function wireBlocks(quill, Quill, { chooseImage }) {
     quill.deleteText(index, 1, 'user');
     quill.insertEmbed(index, isTable ? 'mdtable' : 'htmlblock', next, 'user');
   });
-  return { mdtable: tableHandler, htmlblock: htmlHandler, slideshow: slideshowHandler };
+  return { mdtable: tableHandler, htmlblock: htmlHandler, slideshow: slideshowHandler, cssclasses: classesHandler };
 }

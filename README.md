@@ -114,8 +114,8 @@ form the converter would write, so `md → Delta → md` is byte-identical:
 | HTML blocks | a line that starts with a tag, to the next blank line: see [HTML blocks](#html-blocks) |
 | escapes | `\* \_ \~ \[ \] \< \`` and a leading `\#`, `\-`, `\>`, `\+`, `1\.` are always escaped |
 
-Not offered, and refused rather than approximated: colour, underline, text alignment, footnotes, embeds other than
-images and video releases, and any HTML that is not on the [allowlist](#html-blocks). If a file is not canonical the editor refuses to open
+Not offered, and refused rather than approximated: toolbar colour, underline, text alignment, footnotes, unsupported
+embed types, and any HTML that is not on the [allowlist](#html-blocks). If a file is not canonical the editor refuses to open
 it (`lossy-round-trip`) instead of rewriting it; `blog-webcli fmt` normalises it.
 
 On save the editor drops empty paragraphs and moves formatting off edge whitespace, then
@@ -156,13 +156,20 @@ Font Awesome's CSS is MIT-licensed and its fonts use SIL OFL 1.1
 
 ### Slideshows
 
-The editor's **Insert a slideshow** button opens a form for 2-10 slides. Each needs an image
-and alternative text. **Choose from Media…** beside each image opens the searchable library;
-**Upload a new image…** in that picker stages a new file for upload when you publish or save
-the draft. Cancelling the slideshow does not upload it. You can also enter an `asset:images/...`
-reference or an HTTPS image address directly. Headings,
-captions and links are optional. A link needs both a label and an address. Add, remove or reorder
-slides in the form, and reopen it with **Edit slideshow**.
+To add a slideshow without writing HTML:
+
+1. Open a post or page and put the cursor where the slideshow belongs.
+2. Choose **Insert a slideshow** in the Quill toolbar. The form accepts 2-10 slides.
+3. For each slide, use **Choose from Media…** to select an existing image, or **Upload a new image…**
+   in the picker. You can also enter an `asset:images/...` reference or an HTTPS image address.
+   Every slide needs alternative text.
+4. Optionally enter a heading, caption and link. A link needs both a label and an address.
+   Use **+ Slide**, **Remove**, **Move up** and **Move down** to arrange the slides.
+5. Choose animations as described below, then **Apply**. Reopen the block with **Edit slideshow**.
+6. Publish or save the draft through the [normal confirmation flow](#publishing-and-shared-styling).
+
+New images are staged in the browser and uploaded only when you publish or save the draft.
+Cancelling the slideshow does not upload them. Slideshow text fields are plain text, not HTML.
 
 Animate.css is bundled locally with every theme (no CDN request). Each slide's **Animation**
 dropdown offers its entrance and attention effects, including Fade In, Fade In Up, Zoom In
@@ -174,6 +181,8 @@ by default). Set the whole-slide **Animation** to **None** to use only these ele
 All selected effects restart together when the slide appears and respect reduced motion.
 Use relative link addresses such as `./products/` where possible; these are preserved as
 written and resolve relative to the displayed page. Keep absolute addresses for external sites.
+For example, `./products/` works from the site root, while a sibling page at `/home/` needs
+`../products/`; a Home page shown at both addresses needs a link valid from both.
 
 Slideshows are saved as allowlisted HTML blocks, not plugin code. Repository images are pinned
 on publish like other images. Published pages and the local reader provide previous/next,
@@ -182,14 +191,35 @@ focus or manual navigation, suspends while hovered or the tab is hidden, and sta
 reduced-motion users, with animations disabled. Without JavaScript, all slides remain readable
 without animation. Animate.css is MIT-licensed; its notice is included in the generated CSS.
 
+For custom styling, use the existing hooks: `.webcli-slideshow` (outer block), `.webcli-slide`
+(each slide), `.webcli-slide > img`, `.webcli-slide > figcaption`, and
+`.webcli-slide-controls` (the published player controls). Scope rules to a page when needed,
+for example `[data-page=home] .webcli-slideshow`. Keep the slideshow's structural classes intact.
+Hand-edited HTML that the slideshow form cannot represent losslessly opens with **Edit HTML**
+instead of **Edit slideshow**, so reopening the form cannot silently discard custom markup.
+
 ### HTML blocks
 
-```
+Use **Insert an HTML block** in the Quill toolbar for custom structures such as notices,
+details panels, or grouped content:
+
+1. Place the cursor at the insertion point and open the HTML dialog.
+2. Write allowlisted HTML. Put styling classes on the elements, not inline `style` attributes.
+   Validation errors appear in the dialog and disable **Apply**.
+3. Choose **Apply**, then publish or save the draft. To change it later, use **Edit HTML** on the block.
+
+For example:
+
+```html
 <details>
 <summary>More</summary>
 <p>Hidden until opened.</p>
 </details>
 ```
+
+Text inside an HTML block uses HTML syntax (`<strong>bold</strong>`), not Markdown (`**bold**`).
+The editor displays the block as source, not a live preview; check its rendered appearance in
+the `/blog/` reader or on the published page. Styling belongs in **Settings → Custom CSS**.
 
 A line that starts with an HTML tag starts a block, which runs to the next blank line: so a block keeps its tags together, and a
 blank line inside `<div>…</div>` is refused as an unclosed tag rather than guessed at. This is the one place a post's own markup
@@ -213,6 +243,87 @@ A block that breaks a rule is **refused at publish** (`bad-html`, naming the fil
 silently. A draft is not checked until it is published. In the editor the **HTML** button opens a dialog that says what is wrong
 as you type and will not apply it; the block is drawn as its **source**, never as markup, and blank lines are removed on apply
 (they would end the block; a `<pre>` that depends on them is refused).
+
+### CSS class groups
+
+Use **Group with CSS classes** to turn existing rich text into a reusable styled component,
+such as an ordering step or a testimonial card:
+
+1. Select all the blocks belonging to **one** component. For a testimonial, include its heading,
+   every quote paragraph, author and location. Repeat separately for each testimonial.
+2. Choose **Group with CSS classes** in the Quill toolbar.
+3. Enter space-separated names **without dots**, such as `testimonial` or `order-step featured`.
+4. Choose **Apply**, then publish or save the draft.
+5. Open **Settings → Custom CSS**, add or update the matching rules, then **Save settings…**
+   and confirm **Commit and push**.
+
+With no selection, the control uses the current block; partial selections expand to whole blocks.
+Classes go on **one wrapper**, not on each selected paragraph. The selection becomes an allowlisted
+HTML block stored directly in Markdown, for example:
+
+```html
+<div class="testimonial">
+<h3>A great addition to our boat</h3>
+<p>We love the extra space for swimming and relaxing.</p>
+<p>A happy customer</p>
+<p>Arizona</p>
+</div>
+```
+
+Formatting, links (including relative addresses), and logical image references are preserved.
+The group is now shown as HTML source, not editable rich text: use **Edit HTML** to change its
+content, wrapper classes, or classes on individual elements. Undo restores the original rich-text
+blocks; cancelling the class dialog leaves the document unchanged.
+
+For a border and shadow around each entire testimonial:
+
+```css
+.testimonial {
+  break-inside: avoid;
+  margin: 0 0 24px;
+  padding: 24px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.08);
+}
+.testimonial > h3 {
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0 0 12px;
+}
+.testimonial > p { font-size: 15px; margin: 0 0 12px; }
+.testimonial > :last-child { margin-bottom: 0; }
+```
+
+`break-inside: avoid` keeps the card together in a multi-column layout; it does not create columns
+itself. An existing responsive page layout can still use three columns on desktop and one on mobile.
+After grouping, a selector such as `[data-page=testimonials] > h3` no longer reaches the nested
+heading: replace it with `.testimonial > h3` (and similarly for paragraphs). Replace obsolete rules
+rather than accumulating overrides; Custom CSS has a **16,000-character limit**. See
+[Customization](#customization) for the CSS allowlist.
+
+Class names start with a letter or underscore and contain letters, digits, underscores or hyphens
+(200 characters total). Videos and code blocks containing blank lines or trailing whitespace cannot
+be grouped; the dialog explains refusals without changing the document.
+
+#### Publishing and shared styling
+
+**Apply** changes the editor document only. Use **Publish** or **Save draft**, where available,
+review the pre-flight list, and choose **Commit and push** to persist content. Settings have their
+own **Save settings…** confirmation. Wait for the success notification before leaving.
+
+No CLI build is needed for this UI workflow: the browser generates the HTML/CSS and commits it to
+GitHub; the configured host serves the resulting files. Generated content and the `/blog/` reader
+use the same rendering and customization rules.
+
+With **Link the stylesheet instead of putting it in every page (for a big blog)** enabled in
+Settings, pages link the shared `style.css` using relative addresses, such as `../style.css`.
+Global rules provide consistent fonts, colors, navigation and footers; reusable classes such as
+`.testimonial` style components, and page hooks such as `[data-page=testimonials]` scope layouts.
+CSS-only settings changes update the shared stylesheet and settings without rewriting every page.
+Without linked stylesheets, the CSS is embedded and affected pages are regenerated on save.
+Check the reader or published site at desktop and mobile widths; hosting and browser caches may
+require a refresh before the newest stylesheet appears.
 
 ## Creating a blog
 
@@ -1027,6 +1138,10 @@ published as it is blocks a settings change, as it would block any publish.
 `blog.json` takes an optional `customize` section (edit it in the Settings screen above, or by hand). The generated static pages and the `/blog/`
 reader build their styles from it with the same code, so they match. Every value is checked against
 a closed set; an unknown setting or an out-of-range value is refused (`bad-blog-json`), never guessed.
+
+For the editor workflow, see [HTML blocks](#html-blocks), [Slideshows](#slideshows), and
+[CSS class groups](#css-class-groups). These provide the content structure; Custom CSS supplies
+its appearance, including reusable bordered or shadowed cards.
 
 ```json
 "customize": {

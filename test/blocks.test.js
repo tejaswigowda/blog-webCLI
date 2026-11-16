@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSite } from '../lib/blog.js';
-import { deltaToHtml, excerpt, plainLines, wordCount } from '../lib/html.js';
+import { deltaToHtml, deltaToHtmlGroup, excerpt, plainLines, wordCount } from '../lib/html.js';
 import { canonCell, deltaToMarkdownChecked, deltaToMd, mdRoundTrips, mdToDelta } from '../lib/markdown.js';
 import { checkHtmlBlock, renderHtmlBlock } from '../lib/rawhtml.js';
 import { collectAssetRefs } from '../lib/assets.js';
@@ -13,6 +13,33 @@ import { stripData } from './helpers.js';
 const rt = (md) => deltaToMd(mdToDelta(md));
 const html = (md, opts = {}) => deltaToHtml(mdToDelta(md), { resolve: (r) => `https://cdn.test/${r.slice(6)}`, resolveVideo: (r) => r, ...opts });
 const code = (c) => (e) => e instanceof Refusal && e.code === c;
+
+test('CSS groups preserve formatting, relative/external links and logical images through Markdown and rendering', () => {
+  const delta = mdToDelta('### Step 1\n\n**Choose** [products](./products/) or [contact](https://example.com/).\n\n![Boat](asset:images/boat.jpg){.small}\n');
+  const src = deltaToHtmlGroup(delta, ' order-step   featured ');
+  assert.match(src, /^<div class="order-step featured">\n<h3>Step 1<\/h3>/);
+  assert.match(src, /<strong>Choose<\/strong> <a href="\.\/products\/">products<\/a>/);
+  assert.match(src, /<img src="asset:images\/boat.jpg" alt="Boat" class="img-small">/);
+  assert.doesNotMatch(src, /rel=|loading=/);
+  const { md, delta: reopened } = deltaToMarkdownChecked({ ops: [{ insert: { htmlblock: src } }, { insert: '\n' }] });
+  assert.equal(md.trim(), src);
+  assert.equal(reopened.ops[0].insert.htmlblock, src);
+  const out = deltaToHtml(reopened, { resolve: () => 'https://cdn.test/boat.jpg' });
+  assert.match(out, /href="https:\/\/example.com\/" rel="noopener noreferrer"/);
+  assert.match(out, /src="https:\/\/cdn.test\/boat.jpg".*loading="lazy"/);
+});
+
+test('CSS groups reuse the HTML allowlist and refuse invalid classes or unrepresentable content', () => {
+  for (const classes of ['', '.note', '1note', 'note" onclick="x', 'note:active', 'a'.repeat(201)]) {
+    assert.throws(() => deltaToHtmlGroup(mdToDelta('Text\n'), classes), code('bad-html'));
+  }
+  assert.throws(() => deltaToHtmlGroup({ ops: [{ insert: { htmlblock: '<p onclick="x">x</p>' } }] }, 'note'), /onclick/);
+  assert.throws(() => deltaToHtmlGroup(mdToDelta('```js\nfirst\n\nlast\n```\n'), 'note'), /blank line/);
+  assert.throws(() => deltaToHtmlGroup(mdToDelta('```js\nfirst  \nlast\n```\n'), 'note'), /whitespace/);
+  assert.throws(() => deltaToHtmlGroup({ ops: [{ insert: { video: 'video:clips/demo@v1' } }] }, 'note'), /Videos cannot/);
+  const nested = '<div class="existing"><p>Kept</p></div>';
+  assert.ok(deltaToHtmlGroup({ ops: [{ insert: { htmlblock: nested } }] }, 'note').includes(nested));
+});
 
 // ---------- tables ----------
 const TABLE = '| Name | Value | Note |\n| --- | ---: | :---: |\n| a | **1** | _x_ |\n| b \\| c | [t](https://e.com) | `k` |\n';
