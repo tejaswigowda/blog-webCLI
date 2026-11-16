@@ -3,6 +3,7 @@ blog-webCLI is licensed per surface, because it has two:
   RUNTIME  lib/            MIT                       lib/LICENSE
            vendor/moment/  MIT (moment.js, upstream) vendor/moment/LICENSE
            vendor/animate/ MIT (Animate.css)         vendor/animate/LICENSE
+           vendor/temml/   MIT (Temml)               vendor/temml/LICENSE
 
      The runtime is the generator and the renderer. A blog's generated pages
      carry a script built from it (webcli-live.js), so it ends up inside other

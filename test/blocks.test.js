@@ -310,7 +310,7 @@ test('fuzz: any table the editor can produce round-trips losslessly or is refuse
     try {
       out = deltaToMarkdownChecked({ ops: [{ insert: { mdtable: t } }, { insert: '\n' }] });
     } catch (e) {
-      assert.ok(e instanceof Refusal && e.code === 'lossy-round-trip', `${JSON.stringify(t)}: ${e.message}`);
+      assert.ok(e instanceof Refusal && ['lossy-round-trip', 'unclosed-math', 'bad-math', 'dollar-math'].includes(e.code), `${JSON.stringify(t)}: ${e.message}`);
       continue;
     }
     kept++;

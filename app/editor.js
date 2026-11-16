@@ -45,6 +45,24 @@ export async function loadQuill() {
         }
       }
       Quill.register('formats/image', AssetImage, true);
+      const Inline = Quill.import('blots/inline');
+      class MathInline extends Inline {
+        static blotName = 'math';
+        static tagName = 'SPAN';
+        static className = 'ql-math';
+        static formats() { return true; }
+      }
+      Quill.register(MathInline, true);
+      const CodeBlock = Quill.import('formats/code-block');
+      class LanguageCodeBlock extends CodeBlock {
+        static create(value) {
+          const node = super.create(value);
+          if (typeof value === 'string' && value !== 'plain') node.setAttribute('data-language', value);
+          return node;
+        }
+        static formats(node) { return node.getAttribute('data-language') || true; }
+      }
+      Quill.register('formats/code-block', LanguageCodeBlock, true);
 
       // The document keeps `video:<key>/<name>@vN`; the iframe shows the player.
       const VideoBlot = Quill.import('formats/video');
@@ -78,7 +96,7 @@ export async function loadQuill() {
 // how a picture sits: the presets lib/delta.js IMAGE_LAYOUTS names, chosen from a small bar that appears on the picture
 export const IMAGE_PRESETS = [['', 'Default'], ['inline', 'Inline'], ['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['full', 'Full width'], ['left', 'Float left'], ['right', 'Float right']];
 
-export const FORMATS = ['header', 'para', 'layout', 'bold', 'italic', 'strike', 'code', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
+export const FORMATS = ['header', 'para', 'layout', 'bold', 'italic', 'strike', 'code', 'math', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
 
 export async function createEditor(el, { onImage, onVideo, chooseImage }) {
   const Quill = await loadQuill();

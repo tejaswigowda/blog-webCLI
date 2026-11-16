@@ -64,6 +64,12 @@
     "lib/live-render.js",
     "lib/live.js",
     "lib/markdown.js",
+    "lib/math-entry.js",
+    "lib/math-lazy.js",
+    "lib/math-renderer.js",
+    "lib/math-state.js",
+    "lib/math-syntax.js",
+    "lib/mathml.js",
     "lib/order.js",
     "lib/page.js",
     "lib/permalink.js",
@@ -90,7 +96,8 @@
     "lib/widgets.js",
     "lib/xml.js",
     "vendor/animate/animate.esm.js",
-    "vendor/moment/moment.esm.js"
+    "vendor/moment/moment.esm.js",
+    "vendor/temml/render.mjs"
   ],
   "items": [
     {
@@ -461,6 +468,19 @@
       ]
     },
     {
+      "name": "acorn",
+      "version": "8.19.0",
+      "licence": "MIT",
+      "upstream": "https://www.npmjs.com/package/acorn",
+      "kind": "npm",
+      "surfaces": [
+        "dev"
+      ],
+      "paths": [
+        "node_modules/acorn/"
+      ]
+    },
+    {
       "name": "esbuild",
       "version": "0.28.2",
       "licence": "MIT",
@@ -512,6 +532,20 @@
       ],
       "paths": [
         "vendor/quill/"
+      ]
+    },
+    {
+      "name": "temml",
+      "version": "0.14.0",
+      "licence": "MIT",
+      "upstream": "https://github.com/ronkok/Temml",
+      "kind": "vendored",
+      "surfaces": [
+        "runtime",
+        "tool"
+      ],
+      "paths": [
+        "vendor/temml/"
       ]
     }
   ]

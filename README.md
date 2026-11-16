@@ -105,6 +105,7 @@ This is the **blog-webCLI Markdown dialect**, not plain CommonMark:
 | Paragraphs, headings, emphasis, links, lists, quotes, code fences | CommonMark; strikethrough and pipe tables are GFM extensions, not core CommonMark |
 | `![alt](asset:…){.medium}` | Pandoc-compatible image-attribute convention; the size names belong to this app |
 | `{.lead}` / `{.small}` paragraph prefixes | This app's own syntax; literal text in other readers |
+| `\(x_1\)` and fenced `math` blocks | LaTeX-native inline delimiters and CommonMark code fences; interpreting them as math is part of this app's dialect |
 | `asset:` and `video:` references | This app's own logical references, deliberately independent of providers |
 | HTML blocks | HTML, restricted to this app's allowlist |
 
@@ -121,6 +122,7 @@ form the converter would write, so `md → Delta → md` is byte-identical:
 | headings | `#` to `####` |
 | paragraph styles | `{.lead} words`, `{.small} words`: [below](#headings-and-paragraph-styles) |
 | inline | `**bold**` `_italic_` `~~strike~~` `` `code` `` `[text](url)` `![alt](asset:key/path)` |
+| math | `\(x_1\)` inline; a fenced `math` block for display math; source stays verbatim ([below](#latex-math)) |
 | picture size and position | `![alt](asset:key/path){.medium}`: one of `inline small medium large full left right` ([below](#headings-and-paragraph-styles)) |
 | lists | `-` bullets and `1.` numbers, nested with 4 spaces; a blank line between lists of different type |
 | quotes, code | `> ` quotes (`>` between paragraphs), fenced code with optional language |
@@ -135,6 +137,68 @@ it (`lossy-round-trip`) instead of rewriting it; `blog-webcli fmt` normalises it
 On save the editor drops empty paragraphs and moves formatting off edge whitespace, then
 **proves** the round trip before anything is sent.
 
+### LaTeX math
+
+Use `\( ... \)` inline, or a code fence whose language is exactly `math` for a display equation:
+
+````markdown
+The ratio is \(\frac{a}{b}\), with subscript \(x_1\).
+
+```math
+\begin{aligned}
+a_{ij} &= \frac{a}{b} \\
+x_1 &= \alpha^*
+\end{aligned}
+```
+````
+
+Inline math is a verbatim Delta format alongside inline code: underscores, backslashes,
+brackets, asterisks and backticks inside it are never Markdown-escaped. Display math keeps
+the ordinary fenced-code representation. Both survive `md → Delta → md` byte-identically;
+the editor preserves the inline format and the fence language when reopening and saving.
+There is no formula toolbar or equation editor.
+
+Write `\\(` in prose for a literal `\(`. Only the literal delimiter `\)` closes inline math;
+`\right)` does not. A literal `\)` *inside* the expression cannot be represented inline:
+use a display fence instead. An unclosed opener is refused as `unclosed-math`. Delimiters
+inside inline code, non-math code fences and authored HTML blocks remain literal text.
+Use `\mid` for a vertical bar in a table-cell equation; table rows still use their usual pipe syntax.
+
+**Dollar-delimited math is refused** (`dollar-math`): dollars are currency, and
+`the $30 item and the $50 one` must stay prose. Use the supported delimiters instead of
+`$x$` or `$$x$$`; show those spellings as inline code when discussing them.
+Math in headings is refused (`math-in-heading`), so heading anchors remain text-derived.
+
+The shared first-party renderer uses vendored **[Temml 0.14.0](https://github.com/ronkok/Temml)**
+(MIT) at publish time, with `trust: false`, strict parsing and errors enabled. It reserializes
+the result through a separate MathML allowlist; authored HTML gains no new allowed tags or
+attributes. Links, URLs, images, custom HTML, equation numbering/references and author-defined
+macros (`\newcommand`, `\def`, `\let` and related commands) are not supported. Macro definitions
+are refused as `math-macro`; unsupported commands or output are `bad-math`, naming the file,
+expression and reason, never a fallback to raw text. CSS-dependent or non-Core MathML constructs
+outside the closed subset are refused too. Expressions are capped at 4,096 characters,
+48 nested groups, 256 commands and 200 macro expansions.
+
+Published equations are native MathML with their exact LaTeX source in
+`<annotation encoding="application/x-tex">`, and math pages record
+`<meta name="x-math" content="Temml@0.14.0">`. They work with JavaScript disabled and add
+**zero scripts, stylesheets or font downloads**. Only necessary, vetted cell alignment/padding
+styles are retained for aligned equations. Desktop (1280 px) and phone (390 px) browser tests
+measure seven visible equations and two aligned rows without overflow, using system math fonts.
+KaTeX `renderToString` is the recorded fallback if native MathML quality proves inadequate;
+switching would require a new measurement and math-page-only CSS/fonts, not a default download.
+
+A live-enabled blog commits a separate `webcli-math.js` bundle so even a newly added math post
+can render before Pages catches up. The existing live script imports it **only when rebuilding
+a post that contains math**; an unchanged math page or a prose-only rebuild does not fetch it.
+Generator and live output use the same renderer, and a recorded renderer-version mismatch
+leaves the deployed page intact with an explicit live-check reason. The optional renderer
+measures about **224 KB raw / 65 KB gzip**; it is not part of `webcli-live.js`.
+
+Math contributes no words to excerpts, word counts or `search.json`, including in table cells.
+The Atom feed replaces each equation with its annotated LaTeX source as escaped text, rather
+than assuming the feed reader supports MathML.
+
 ### Tables
 
 ```
@@ -146,7 +210,7 @@ On save the editor drops empty paragraphs and moves formatting off edge whitespa
 
 A table is one line per row, a single space inside each pipe, and a delimiter row of `---`, `:---`, `---:` or `:---:`
 (left, right, centre; no colon is the browser's default). A cell is **one line of inline markdown**: bold, italic,
-strike, code, links and images (`asset:` references are pinned like any image), and a literal pipe is `\|`. A row with
+strike, code, inline math, links and images (`asset:` references are pinned like any image), and a literal pipe is `\|`. A row with
 fewer cells than the header is padded; one with more is refused (`lossy-round-trip`), not truncated. The generator makes a
 real `<table>` with `<thead>`, the alignment as the cell's `align` attribute (which needs no class and no theme), and, for a
 WordPress-contract theme, WordPress's own `wp-block-table` figure. A table's words are counted and searched, and it is never
@@ -1924,7 +1988,7 @@ node cli/serve.js [dir] [port] static server for local preview
 the build's warnings, including the posts that are in no list. They read `posts/` and `pages/`, and `build` removes what a feature
 that is now off left behind (`check` lists it as `stale`). They fetch a pinned theme as data and
 regenerate any valid blog without precomputed hook output or a coverage precondition.
-`node cli/build-live.js` rebuilds the first-party live, search and slideshow scripts
+`node cli/build-live.js` rebuilds the first-party live, search, slideshow and optional live-math scripts
 after changes under `lib/`; CI runs it with `--check`.
 
 CI: copy [templates/blog-check.yml](templates/blog-check.yml) into the blog repo; for [scheduled posts](#scheduled-publishing) also [templates/schedule.yml](templates/schedule.yml).

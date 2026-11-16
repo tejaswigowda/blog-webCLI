@@ -21,6 +21,7 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "acorn": "8.19.0",
     "esbuild": "0.28.2"
   }
 }
