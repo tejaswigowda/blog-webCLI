@@ -4,6 +4,8 @@ A blog is one or more GitHub repositories. `https://blog.webcli.app/#repo=owner/
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-blog deployment.
 
+[Hands-on tutorials](guides/tutorials/): migrate a WordPress site and rebuild its look step by step, with no AI required.
+
 **Licence, by surface** ([LICENSE](LICENSE)). The repository has two, because what it conveys is of two kinds:
 
 | Surface | Where | Licence | Who receives it |

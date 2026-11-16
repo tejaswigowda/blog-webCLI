@@ -1,0 +1,101 @@
+{
+  "format": "blog-webcli-theme",
+  "version": 1,
+  "exported": "2026-11-15",
+  "from": "tejaswigowda/blogtest",
+  "theme": "default",
+  "stylesheet": "linked",
+  "customize": {
+    "colors": {
+      "accent": "#21759b",
+      "text": "#737373",
+      "background": "#ffffff",
+      "muted": "#ababab",
+      "dark": {
+        "accent": "#21759b",
+        "text": "#737373",
+        "background": "#ffffff",
+        "muted": "#ababab"
+      }
+    },
+    "font": "sans",
+    "headingFont": "sans",
+    "width": "1120px",
+    "fontSize": "16px",
+    "header": {
+      "showTitle": false,
+      "links": [
+        {
+          "label": "Home",
+          "url": "https://tejaswigowda.github.io/blogtest/"
+        },
+        {
+          "label": "Products",
+          "url": "https://tejaswigowda.github.io/blogtest/products/"
+        },
+        {
+          "label": "Testimonials",
+          "url": "https://tejaswigowda.github.io/blogtest/testimonials/"
+        },
+        {
+          "label": "Gallery",
+          "url": "https://tejaswigowda.github.io/blogtest/gallery/"
+        },
+        {
+          "label": "FAQ",
+          "url": "https://tejaswigowda.github.io/blogtest/faq/"
+        },
+        {
+          "label": "About",
+          "url": "https://tejaswigowda.github.io/blogtest/about/"
+        },
+        {
+          "label": "Get a quote",
+          "url": "https://tejaswigowda.github.io/blogtest/request-a-quote/"
+        },
+        {
+          "label": "Shop",
+          "url": "https://shop.swim-platform.com/"
+        }
+      ]
+    },
+    "footer": {
+      "text": "© 2026 Swim Platform. All rights reserved.",
+      "links": [
+        {
+          "label": "Products",
+          "url": "https://tejaswigowda.github.io/blogtest/products/"
+        },
+        {
+          "label": "Gallery",
+          "url": "https://tejaswigowda.github.io/blogtest/gallery/"
+        },
+        {
+          "label": "Testimonials",
+          "url": "https://tejaswigowda.github.io/blogtest/testimonials/"
+        },
+        {
+          "label": "FAQ",
+          "url": "https://tejaswigowda.github.io/blogtest/faq/"
+        },
+        {
+          "label": "About",
+          "url": "https://tejaswigowda.github.io/blogtest/about/"
+        },
+        {
+          "label": "Contact",
+          "url": "https://tejaswigowda.github.io/blogtest/contact/"
+        },
+        {
+          "label": "Request a quote",
+          "url": "https://tejaswigowda.github.io/blogtest/request-a-quote/"
+        }
+      ]
+    },
+    "list": {
+      "layout": "cards"
+    },
+    "css": "\nbody{font-size:16px;line-height:1.6;color:#737373;background:#fff}\n.wrap{max-width:none;padding:0;margin:0}\nheader.site{box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:20px;max-width:1220px;min-height:80px;margin:auto;padding:0 20px;border:0}\nheader.site .brand{flex-shrink:0;color:#4b4b4b;font-size:22px;font-weight:700;text-decoration:none}\nheader.site .logo{display:block;width:170px;height:57px;max-height:57px;object-fit:contain}\nheader.site nav{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 20px}\nheader.site nav a{margin:0;color:#737373;font-size:16px;font-weight:700;line-height:20px;text-decoration:none;white-space:nowrap}\nheader.site nav a:hover,header.site nav a:focus-visible{color:#3aaad4}\nheader.site nav a[href*=\"request-a-quote\"],header.site nav a[href^=\"https://shop.swim-platform.com\"]{border:2px solid #9fd5e6;border-radius:4px;padding:8px 12px;color:#737373}\nh1,h2,h3,h4{font-family:var(--heading-font);color:#4b4b4b;font-weight:700}\nh2{font-size:34px;line-height:1.15;text-align:center;margin:0 0 30px}\nh3{font-size:24px;line-height:1.4;margin:28px 0 10px}\np{margin:0 0 20px}\narticle,section.home{box-sizing:border-box;width:calc(100% - 60px);max-width:1120px;margin:0 auto}\narticle{padding-bottom:50px}\narticle>h1{box-sizing:border-box;max-width:none;margin:0 min(-30px,calc((1120px - 100vw)/2)) 50px;padding:38px max(30px,calc((100vw - 1120px)/2));background:#f7f7f7;color:#4b4b4b;font-size:24px;line-height:44px;font-weight:400;text-align:left}\narticle>h2::after,:is(.home,[data-page=home])>h2::after{content:\"\";display:block;width:44px;height:3px;background:#3aaad4;margin:20px auto 0}\narticle>h2:first-of-type{margin-bottom:20px}\narticle>h2:first-of-type+p{text-align:center;margin-bottom:85px}\narticle img{display:block;max-width:100%;height:auto;border-radius:0}\narticle a{color:#21759b}\n:is(.home,[data-page=home]){display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:auto 150px 106px 197px 150px 106px 197px auto auto auto auto auto auto;gap:20px;align-items:center;text-align:center;padding:0}\n[data-page=home]>h1{display:none}\n:is(.home,[data-page=home])>p{margin:0}\n:is(.home,[data-page=home])>h2{margin:0;align-self:end}\n:is(.home,[data-page=home])>:nth-child(2 of :not(h1)){grid-column:1/4;grid-row:2/5;align-self:start}\n:is(.home,[data-page=home])>:nth-child(3 of :not(h1)){grid-column:4/7;grid-row:2}\n:is(.home,[data-page=home])>:nth-child(4 of :not(h1)){grid-column:4/7;grid-row:3;align-self:start}\n:is(.home,[data-page=home])>:nth-child(5 of :not(h1)){grid-column:4/7;grid-row:4;align-self:start}\n:is(.home,[data-page=home])>:nth-child(6 of :not(h1)){grid-column:1/4;grid-row:5}\n:is(.home,[data-page=home])>:nth-child(7 of :not(h1)){grid-column:1/4;grid-row:6;align-self:start}\n:is(.home,[data-page=home])>:nth-child(8 of :not(h1)){grid-column:1/4;grid-row:7;align-self:start}\n:is(.home,[data-page=home])>:nth-child(9 of :not(h1)){grid-column:4/7;grid-row:5/8;align-self:start}\n:is(.home,[data-page=home])>:nth-child(2 of :not(h1)) img,:is(.home,[data-page=home])>:nth-child(9 of :not(h1)) img{display:block;width:100%;height:auto;border-radius:0}\n:is(.home,[data-page=home])>:nth-child(10 of :not(h1)){grid-column:1/-1;grid-row:8}\n:is(.home,[data-page=home])>:nth-child(11 of :not(h1)){grid-column:1/3;grid-row:9}\n:is(.home,[data-page=home])>:nth-child(12 of :not(h1)){grid-column:1/3;grid-row:10}\n:is(.home,[data-page=home])>:nth-child(13 of :not(h1)){grid-column:3/5;grid-row:9}\n:is(.home,[data-page=home])>:nth-child(14 of :not(h1)){grid-column:3/5;grid-row:10}\n:is(.home,[data-page=home])>:nth-child(15 of :not(h1)){grid-column:5/7;grid-row:9}\n:is(.home,[data-page=home])>:nth-child(16 of :not(h1)){grid-column:5/7;grid-row:10}\n:is(.home,[data-page=home])>:nth-child(17 of :not(h1)){grid-column:1/-1;grid-row:11;margin-top:55px}\n:is(.home,[data-page=home])>:nth-child(18 of :not(h1)){grid-column:1/-1;grid-row:12}\n:is(.home,[data-page=home])>:nth-child(19 of :not(h1)){grid-column:1/-1;grid-row:13;margin:0 0 60px}\n:is(.home,[data-page=home],[data-page=about])>h3{margin:35px 0 0;font-size:24px}\n:is(.home,[data-page=home],[data-page=about])>h3+p{align-self:start;text-align:center}\n:is(.home,[data-page=home])>p>a{display:inline-block;padding:12px 24px;border:0;border-radius:4px;background:linear-gradient(#bce6f3,#9fd5e6);color:#4b4b4b;font-size:15px;line-height:1;font-weight:400;text-decoration:none}\n:is(.home,[data-page=home])>p>a:hover{background:#8acbdf}\n:is(.home,[data-page=home])>.webcli-slideshow{grid-column:1/-1;grid-row:1;width:auto;margin:0 min(-30px,calc((1120px - 100vw)/2)) 100px}\n.webcli-slideshow .webcli-slide{box-sizing:border-box;min-height:0;height:clamp(406px,46.154vw,720px)}\n.webcli-slideshow .webcli-slide>figcaption{box-sizing:border-box;width:100%;max-width:950px;padding:60px max(70px,calc((100vw - 1120px)/2));padding-right:30px;text-align:left}\n.webcli-slideshow .webcli-slide h2{color:#fff;font-size:clamp(34px,4vw,54px);line-height:1.1;text-align:left;margin:0 0 25px}\n.webcli-slideshow .webcli-slide p{max-width:610px;color:#fff;font-size:20px;line-height:1.5;margin:0 0 30px}\n.webcli-slideshow .webcli-slide a{border:2px solid #fff;border-radius:0;padding:13px 25px;font-size:16px;line-height:1.3}\n.webcli-slideshow .webcli-slide-controls{position:absolute;inset:0;gap:8px;align-items:end;padding:0 70px 20px;pointer-events:none}\n.webcli-slideshow .webcli-slide-controls button{pointer-events:auto;background:rgba(0,0,0,.25);border:0;border-radius:50%;min-width:44px;min-height:44px;padding:0;font-size:0}\n.webcli-slideshow .webcli-slide-controls button:nth-child(1),.webcli-slideshow .webcli-slide-controls button:nth-child(3){position:absolute;top:calc(50% - 22px);border-radius:0;background:rgba(0,0,0,.3)}\n.webcli-slideshow .webcli-slide-controls button:nth-child(1){left:10px}\n.webcli-slideshow .webcli-slide-controls button:nth-child(3){right:10px}\n.webcli-slideshow .webcli-slide-controls button:nth-child(1)::before{content:\"‹\" / \"\";font:36px/1 sans-serif}\n.webcli-slideshow .webcli-slide-controls button:nth-child(3)::before{content:\"›\" / \"\";font:36px/1 sans-serif}\n.webcli-slideshow .webcli-slide-controls button:nth-child(2){position:absolute;right:15px;bottom:20px;border:1px solid #fff;border-radius:3px;padding:4px 8px;font-size:0}\n.webcli-slideshow .webcli-slide-controls button[aria-current]::before{content:\"\";display:inline-block;width:10px;height:10px;border:2px solid #fff;border-radius:50%;vertical-align:middle}\n.webcli-slideshow .webcli-slide-controls button[aria-current=true]::before{background:#fff}\n[data-page=products]{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;align-items:center}\n[data-page=products]>h1{grid-column:1/-1}\n[data-page=products]>:nth-child(2){grid-column:1/3;grid-row:2/4;margin:30px 0 80px}\n[data-page=products]>:nth-child(3){grid-column:3/5;grid-row:2;align-self:end;margin:60px 0 0}\n[data-page=products]>:nth-child(4){grid-column:3/5;grid-row:3;align-self:start;text-align:center;margin:0 0 80px}\n[data-page=products]>:nth-child(5){grid-column:1/3;grid-row:4;margin:30px 0 0}\n[data-page=products]>:nth-child(6){grid-column:1/3;grid-row:5;text-align:center}\n[data-page=products]>:nth-child(7){grid-column:1/3;grid-row:6/9;align-self:start;width:max-content;max-width:90%;margin:0 auto}\n[data-page=products]>:nth-child(8){grid-column:3;grid-row:4/6}\n[data-page=products]>:nth-child(9){grid-column:3;grid-row:6}\n[data-page=products]>:nth-child(10){grid-column:4;grid-row:4/6}\n[data-page=products]>:nth-child(11){grid-column:4;grid-row:6}\n[data-page=products]>:nth-child(12){grid-column:3;grid-row:7}\n[data-page=products]>:nth-child(13){grid-column:3;grid-row:8}\n[data-page=products]>:nth-child(14){grid-column:4;grid-row:7}\n[data-page=products]>:nth-child(15){grid-column:4;grid-row:8}\n[data-page=products]>p:has(img){margin:0}\n[data-page=products]>p:has(img)+p{text-align:center;font-size:14px}\n[data-page=products]>:nth-child(16){grid-column:1/-1;margin:110px 0 35px}\n[data-page=products]>h3,[data-page=products]>h3~p{grid-column:1/-1;width:100%;max-width:556px;margin:0 auto;text-align:center}\n[data-page=products]>h3{color:#3aaad4;margin-top:25px}\n[data-page=products]>h3:last-of-type{color:#4b4b4b;max-width:920px;margin-top:100px;text-align:left}\n[data-page=products]>p:last-child{max-width:920px;text-align:left}\n[data-page=gallery]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}\n[data-page=gallery]>h1,[data-page=gallery]>h2,[data-page=gallery]>h3,[data-page=gallery]>p:not(:has(img)){grid-column:1/-1}\n[data-page=gallery]>h3{text-align:center;font-size:29px;margin:60px 0 35px}\n[data-page=gallery]>p:has(img){margin:0}\n[data-page=gallery] img{width:100%;aspect-ratio:4/3;object-fit:cover}\n[data-page=about]{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:20px;text-align:center;align-items:center}\n[data-page=about]>h1{grid-column:1/-1}\n[data-page=about]>:nth-child(2){grid-column:1/4;grid-row:2/4;margin:30px 0 80px}\n[data-page=about]>:nth-child(3){grid-column:4/7;grid-row:2;align-self:end;margin:0}\n[data-page=about]>:nth-child(4){grid-column:4/7;grid-row:3;align-self:start;margin:0 0 80px}\n[data-page=about]>:nth-child(5){grid-column:1/4;grid-row:4;align-self:end;margin:0}\n[data-page=about]>:nth-child(6){grid-column:1/4;grid-row:5;align-self:start}\n[data-page=about]>:nth-child(7){grid-column:4/7;grid-row:4/6;margin:0 0 80px}\n[data-page=about]>:nth-child(8){grid-column:1/-1;grid-row:6;margin:0 0 40px}\n[data-page=about]>:nth-child(9){grid-column:1/3;grid-row:7}\n[data-page=about]>:nth-child(10){grid-column:1/3;grid-row:8;align-self:start}\n[data-page=about]>:nth-child(11){grid-column:3/5;grid-row:7}\n[data-page=about]>:nth-child(12){grid-column:3/5;grid-row:8;align-self:start}\n[data-page=about]>:nth-child(13){grid-column:5/7;grid-row:7}\n[data-page=about]>:nth-child(14){grid-column:5/7;grid-row:8;align-self:start}\n[data-page=faq]>h3,[data-page=faq]>h3~p,[data-page=faq]>table{box-sizing:border-box;max-width:730px;margin-left:auto;margin-right:auto}\n[data-page=faq]>h3{margin-top:60px;margin-bottom:25px}\n[data-page=faq]>p:has(strong){border-top:1px solid #e8e8e8;padding-top:20px;color:#4b4b4b}\n[data-page=faq] table{width:100%;border:0;background:#f7f7f7}\n[data-page=testimonials]{column-count:3;column-gap:40px}\n[data-page=testimonials]>h1,[data-page=testimonials]>h2,[data-page=testimonials]>h2+p{column-span:all}\n[data-page=testimonials]>h3{font-size:20px;line-height:1.4;border-top:1px solid #e8e8e8;padding-top:30px;break-after:avoid;break-inside:avoid}\n[data-page=testimonials]>p{font-size:15px;break-inside:avoid}\n[data-page=testimonials]>p:has(strong){color:#4b4b4b;margin-bottom:30px}\n[data-page=contact],[data-page=request-a-quote]{min-height:650px;text-align:center}\n[data-page=contact]>p,[data-page=request-a-quote]>p{max-width:900px;margin:35px auto}\nfooter.site{box-sizing:border-box;display:grid;grid-template-columns:1fr 1fr;gap:12px 50px;margin:140px 0 0;padding:85px max(30px,calc((100% - 1120px)/2)) 30px;border:0;background:radial-gradient(ellipse 75% 30px at 25% 0,#fff 99%,transparent 100%),linear-gradient(#35aacf 0 34px,#1a1c20 34px);color:#ababab;font-size:0;line-height:1.6}\nfooter.site::before{content:\"Platform Models\";grid-column:1;grid-row:1;font-size:16px;color:#fff;margin-bottom:10px}\nfooter.site::after{content:\"Resources\";grid-column:2;grid-row:1;font-size:16px;color:#fff;margin-bottom:10px}\nfooter.site a{color:#ababab;font-size:13px;text-decoration:none}\nfooter.site a:hover{color:#9fd5e6}\nfooter.site .foot-text{grid-column:1/-1;grid-row:7;font-size:12px;margin-top:35px;padding-top:25px;border-top:1px solid #303236}\n@media(max-width:1100px){header.site{flex-wrap:wrap;justify-content:center;padding:12px 20px}header.site nav{justify-content:center;gap:8px 16px}header.site nav a{font-size:14px}}\n@media(max-width:700px){header.site nav{gap:4px 12px}header.site nav a{font-size:12px;min-height:32px;display:inline-flex;align-items:center}header.site nav a[href*=\"request-a-quote\"],header.site nav a[href^=\"https://shop.swim-platform.com\"]{padding:5px 8px}.webcli-slideshow .webcli-slide{height:406px}.webcli-slideshow .webcli-slide>figcaption{padding:40px 50px}.webcli-slideshow .webcli-slide h2{font-size:34px}.webcli-slideshow .webcli-slide p{font-size:16px}.webcli-slideshow .webcli-slide-controls button:nth-child(1){left:0}.webcli-slideshow .webcli-slide-controls button:nth-child(3){right:0}:is(.home,[data-page=home]),[data-page=products],[data-page=about]{display:block}:is(.home,[data-page=home])>.webcli-slideshow{margin-bottom:65px}:is(.home,[data-page=home])>h2,:is(.home,[data-page=home],[data-page=about])>h3,:is(.home,[data-page=home])>p,[data-page=products]>h2,[data-page=products]>p,[data-page=about]>h2,[data-page=about]>p{margin:25px 0!important}:is(.home,[data-page=home])>h2,[data-page=about]>h2{margin-top:60px!important}:is(.home,[data-page=home],[data-page=about])>h3{margin-top:50px!important}[data-page=gallery]{grid-template-columns:repeat(2,minmax(0,1fr))}[data-page=testimonials]{column-count:1}[data-page=products]>h3~p{margin-bottom:50px!important}footer.site{margin-top:90px;gap:12px 20px}h2{font-size:30px}h3{font-size:24px}article>h1{font-size:22px;padding-top:25px;padding-bottom:25px}}\n:is(.home,[data-page=home],[data-page=about])>h3{text-align:center}\n:is(.home,[data-page=home],[data-page=about])>h3::before{display:block;font-family:\"Font Awesome 6 Free\";font-style:normal;font-weight:900;font-size:2.75rem;line-height:1;color:#35aacf;margin:0 0 .75rem}\n:is(.home,[data-page=home],[data-page=about])>h3:nth-of-type(1)::before{content:\"\" / \"\"}\n:is(.home,[data-page=home],[data-page=about])>h3:nth-of-type(2)::before{content:\"\" / \"\"}\n:is(.home,[data-page=home],[data-page=about])>h3:nth-of-type(3)::before{content:\"\" / \"\"}\n:is(.home,[data-page=home])>p:nth-child(12),:is(.home,[data-page=home])>p:nth-child(14),:is(.home,[data-page=home])>p:nth-child(16){text-align:center;align-self:start}\nheader.site nav a[href*=\"request-a-quote\"]::after,header.site nav a[href^=\"https://shop.swim-platform.com\"]::after{display:inline-block;font-family:\"Font Awesome 6 Free\";font-style:normal;font-weight:900;line-height:1;margin-left:.45em}\nheader.site nav a[href*=\"request-a-quote\"]::after{content:\"\" / \"\";font-weight:400}\nheader.site nav a[href^=\"https://shop.swim-platform.com\"]::after{content:\"\" / \"\"}\nheader.site nav a[href$=\"feed.xml\"]::after{content:\"\" / \"\";display:inline-block;font-family:\"Font Awesome 6 Free\";font-style:normal;font-weight:900;line-height:1;margin-left:.45em}\nheader.site nav a[href$=\"feed.xml\"]{font-size:0;display:inline-flex;align-items:center;justify-content:center;min-width:2.75rem;min-height:2.75rem}\nheader.site nav a[href$=\"feed.xml\"]::after{font-size:.9rem;margin-left:0}\nfooter.site a[href*=\"/products/\"]{grid-column:1;grid-row:2}footer.site a[href*=\"/gallery/\"]{grid-column:1;grid-row:3}footer.site a[href*=\"/testimonials/\"]{grid-column:2;grid-row:2}footer.site a[href*=\"/faq/\"]{grid-column:2;grid-row:3}footer.site a[href*=\"/about/\"]{grid-column:2;grid-row:4}footer.site a[href*=\"/contact/\"]{grid-column:2;grid-row:5}footer.site a[href*=\"/request-a-quote/\"]{grid-column:2;grid-row:6}footer.site a[href*=\"correctpage=\"]{grid-column:1/-1;grid-row:8;font-size:12px}\n\n.webcli-slide-controls button[aria-label$=\"slideshow\"]::after{display:inline-block;font:900 16px/1 \"Font Awesome 6 Free\";content:\"\" / \"\"}\n.webcli-slide-controls button[aria-label=\"Play slideshow\"]::after{content:\"\" / \"\"}"
+  },
+  "note": "A blog.webcli.app theme: the pinned theme and the blog's customization. Import it with Settings, Import theme from JSON. The logo and link icons are not included."
+}
