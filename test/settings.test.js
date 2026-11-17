@@ -17,6 +17,15 @@ const lockOf = async () => JSON.parse(await fs.readFile(path.join(EXAMPLE, 'asse
 const postsOf = async () => Promise.all(['static-hls-in-git', 'markdown-is-the-format'].map(async (s) => ({ path: `posts/${s}.md`, text: await fs.readFile(path.join(EXAMPLE, 'posts', `${s}.md`), 'utf8') })));
 const refused = (fn) => assert.throws(fn, (e) => e.code === 'bad-blog-json');
 
+test('affiliate domains are editable and removed when left blank', async () => {
+  const base = { ...await exampleBlog(), affiliateDomains: ['shop.example', 'partner.example'] };
+  const form = blogToForm(base);
+  assert.equal(form.affiliateDomains, 'shop.example\npartner.example');
+  assert.deepEqual(formToBlog(base, form).affiliateDomains, base.affiliateDomains);
+  assert.ok(!('affiliateDomains' in formToBlog(base, { ...form, affiliateDomains: '' })));
+  refused(() => validateBlog(formToBlog(base, { ...form, affiliateDomains: 'https://shop.example' })));
+});
+
 test('links: "Label | url" per line, and back', () => {
   assert.deepEqual(parseLinks('About | https://a.b/c\n\n  Mail | mailto:me@x.y  \n', 'Header links'), [{ label: 'About', url: 'https://a.b/c' }, { label: 'Mail', url: 'mailto:me@x.y' }]);
   assert.equal(linksToText(parseLinks('A | https://a.b', 'x')), 'A | https://a.b');

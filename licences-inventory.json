@@ -33,6 +33,7 @@
     ]
   },
   "runtimeBuiltFrom": [
+    "lib/affiliate.js",
     "lib/aliases.js",
     "lib/animations.js",
     "lib/archive-aliases.js",

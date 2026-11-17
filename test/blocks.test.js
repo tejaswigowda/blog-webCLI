@@ -6,13 +6,32 @@ import { buildSite } from '../lib/blog.js';
 import { deltaToHtml, deltaToHtmlGroup, excerpt, plainLines, wordCount } from '../lib/html.js';
 import { canonCell, deltaToMarkdownChecked, deltaToMd, mdRoundTrips, mdToDelta } from '../lib/markdown.js';
 import { checkHtmlBlock, renderHtmlBlock, htmlBlockClasses, withHtmlBlockClasses } from '../lib/rawhtml.js';
-import { collectAssetRefs } from '../lib/assets.js';
+import { collectAssetRefs, namesProvider } from '../lib/assets.js';
 import { Refusal } from '../lib/errors.js';
 import { stripData } from './helpers.js';
 
 const rt = (md) => deltaToMd(mdToDelta(md));
 const html = (md, opts = {}) => deltaToHtml(mdToDelta(md), { resolve: (r) => `https://cdn.test/${r.slice(6)}`, resolveVideo: (r) => r, ...opts });
 const code = (c) => (e) => e instanceof Refusal && e.code === c;
+
+test('a same-origin asset base does not classify the site or its subdomains as a provider', () => {
+  const blog = { domain: 'https://webcli.app', assets: { base: 'https://webcli.app/immutable/{sha}/{path}' } };
+  assert.equal(namesProvider('https://ffmpeg.webcli.app/', blog), false);
+  assert.equal(namesProvider('https://webcli.app/about/', blog), false);
+  assert.equal(namesProvider('https://raw.githubusercontent.com/me/repo/main/a', blog), true);
+  assert.equal(namesProvider('https://cdn.example/a', { ...blog, assets: { base: 'https://cdn.example/{sha}/{path}' } }), true);
+});
+
+test('authored link relations survive HTML block editing and are safely combined with external-link protections', () => {
+  const src = '<p>See <a href="https://shop.example/item" rel="sponsored nofollow">the offer</a>.</p>';
+  assert.equal(rt(src + '\n'), src + '\n');
+  assert.match(html(src + '\n'), /rel="sponsored nofollow noopener noreferrer"/);
+  assert.match(renderHtmlBlock('<a href="//shop.example/item" rel="sponsored noreferrer">Offer</a>'), /rel="sponsored noreferrer noopener"/);
+  for (const rel of ['external', 'sponsored sponsored', 'sponsored" onclick="x']) {
+    assert.throws(() => checkHtmlBlock(`<p><a href="https://shop.example/" rel="${rel}">Offer</a></p>`), code('bad-html'));
+  }
+  assert.throws(() => checkHtmlBlock('<p><a href="https://shop.example/" rel="sponsored" rel="nofollow">Offer</a></p>'), code('bad-html'));
+});
 
 test('CSS groups preserve formatting, relative/external links and logical images through Markdown and rendering', () => {
   const delta = mdToDelta('### Step 1\n\n**Choose** [products](./products/) or [contact](https://example.com/).\n\n![Boat](asset:images/boat.jpg){.small}\n');

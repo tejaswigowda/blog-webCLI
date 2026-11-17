@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { widgetHtml } from '../lib/widget-markup.js';
 import { WIDGET_CLASSES } from '../lib/widgets.js';
 import { checkHtmlBlock, tokenizeHtml } from '../lib/rawhtml.js';
-import { deltaToMarkdownChecked, mdToDelta } from '../lib/markdown.js';
+import { deltaToMarkdownChecked, hasMath, mdToDelta } from '../lib/markdown.js';
 import { deltaToHtml } from '../lib/html.js';
 import { buildSite } from '../lib/blog.js';
 import { EXAMPLE_BLOG } from '../lib/sample.js';
@@ -23,6 +23,9 @@ export const examples = [
   { type: 'steps', items: ['First', 'Second\n\nWith more detail.'] },
   { type: 'compare', figures: [image, { ...image, caption: 'After' }] },
   { type: 'definitions', items: [{ term: 'Term', definition: 'Its meaning.' }, { term: 'Other', definition: 'More.\n\nDetails.' }] },
+  { type: 'embed', title: 'Video & sound', url: 'https://player.example/#https://cdn.example/a&present=true' },
+  { type: 'film-cards', cards: [{ image: './poster.jpg', url: './film/', title: 'Film', topic: 'Geometry', duration: '1:00', status: 'demonstration', claim: 'A claim.', scene: 'https://example.org/scene', tutorial: 'https://example.org/tutorial' }] },
+  { type: 'markdown', markdown: '## Heading\n\nA **bold** link to [more](https://example.org/).\n' },
 ];
 
 test('every widget round-trips Markdown → Delta → Markdown byte-identically before publication', () => {
@@ -36,6 +39,36 @@ test('every widget round-trips Markdown → Delta → Markdown byte-identically 
   }
   checkHtmlBlock('<div class="wc-steps"><ol><li>One</li></ol></div>');
   checkHtmlBlock('<div class="author-class"><p>Untouched</p></div>');
+});
+
+test('iframe widget emits only sandboxed HTTPS frames with a fallback and escaped values', () => {
+  const src = widgetHtml({ type: 'embed', title: 'A "video"', url: 'https://player.example/#https://cdn.example/a&present=true' });
+  const rendered = deltaToHtml(mdToDelta(src + '\n'));
+  assert.match(rendered, /<iframe src="https:\/\/player\.example\/#https:\/\/cdn\.example\/a&amp;present=true" title="A &quot;video&quot;" loading="lazy" allow="fullscreen" sandbox="allow-scripts" referrerpolicy="no-referrer"><\/iframe>/);
+  assert.match(rendered, /<a href="https:\/\/player\.example/);
+  for (const url of ['http://example.org/', '//example.org/', 'javascript:alert(1)', 'https://user:pass@example.org/', 'https://example.org\\@evil.org/']) {
+    assert.throws(() => widgetHtml({ type: 'embed', title: 'Test', url }), /embed|scheme/i);
+  }
+  assert.throws(() => checkHtmlBlock('<iframe src="https://example.org/"></iframe>'), /not allowed/);
+  const blog = { ...EXAMPLE_BLOG, video: { player: 'https://player.example/', base: 'https://cdn.example/{tag}/{slug}/', repos: { videos: 'me/videos' } } };
+  const post = { path: 'posts/embed.md', text: `---\nslug: embed\ntitle: Embed\ndate: 2026-01-01\nstatus: published\n---\n\n${src}\n` };
+  assert.deepEqual(buildSite({ blog, posts: [post], lock: {} }).errors, []);
+});
+
+test('Markdown widget preserves source, renders the subset, and checks its asset and provider links', () => {
+  const src = widgetHtml({ type: 'markdown', markdown: '## Heading\n\nA **bold** [link](https://example.org/).\n' });
+  assert.equal(deltaToMarkdownChecked(mdToDelta(src + '\n')).md, src + '\n');
+  assert.match(deltaToHtml(mdToDelta(src + '\n')), /<div class="wc-markdown"><h2>Heading<\/h2>\n<p>A <strong>bold<\/strong>/);
+  assert.throws(() => widgetHtml({ type: 'markdown', markdown: '<script>bad()</script>\n' }), /HTML blocks|not allowed/);
+  assert.throws(() => widgetHtml({ type: 'markdown', markdown: 'not canonical' }), /canonical/);
+  const body = widgetHtml({ type: 'markdown', markdown: '![Poster](asset:images/missing.png)\n' });
+  const post = { path: 'posts/test.md', text: `---\nslug: test\ntitle: Test\ndate: 2026-01-01\nstatus: published\n---\n\n${body}\n` };
+  assert.equal(buildSite({ blog: EXAMPLE_BLOG, posts: [post], lock: {} }).errors[0].code, 'unresolved-asset');
+  const provider = widgetHtml({ type: 'markdown', markdown: '[Provider](https://raw.githubusercontent.com/me/repo/main/a)\n' });
+  assert.equal(buildSite({ blog: EXAMPLE_BLOG, posts: [{ ...post, text: post.text.replace(body, provider) }], lock: {} }).errors[0].code, 'provider-url');
+  const math = widgetHtml({ type: 'markdown', markdown: 'The value is \\(x\\).\n' });
+  assert.equal(hasMath(mdToDelta(math + '\n')), true);
+  assert.match(deltaToHtml(mdToDelta(math + '\n')), /<math/);
 });
 
 test('unknown reserved names and malformed structures are refused, with file and nearest-name diagnostics', () => {

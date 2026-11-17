@@ -61,6 +61,16 @@ const same = (state, want, what) => {
 
 const N = SEARCH_SHARD_OVER + 20;
 
+test('incremental publishing falls back to a full site check when affiliate domains are configured', async () => {
+  const blog = BLOG({ affiliateDomains: ['shop.example'] });
+  const posts = corpus(4);
+  const before = full(blog, posts);
+  const r = await incremental({ blog, before, beforePosts: posts, change: make(0, { body: '[offer](https://shop.example/)' }) });
+  assert.match(r.reason, /affiliate links/);
+  const result = buildSite({ blog, posts: r.afterPosts, lock: LOCK });
+  assert.equal(result.errors[0]?.code, 'affiliate-link');
+});
+
 test('incremental: a post edited in the middle of a big blog: its page, its neighbours, the listings, the feed and one search shard; nothing else', async () => {
   const blog = BLOG();
   const posts = corpus(N);

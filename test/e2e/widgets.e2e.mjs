@@ -207,6 +207,9 @@ test('widget toolbar forms: validation, all types, lossless editing, source fall
       ['steps', { 'Step 1': 'First step' }],
       ['compare', { 'Before image': './before.jpg', 'Before alternative text': 'Before', 'Before caption': 'Old', 'After image': './after.jpg', 'After alternative text': 'After', 'After caption': 'New' }],
       ['definitions', { 'Term 1': 'Widget', 'Definition 1': 'Native markup.' }],
+      ['embed', { 'Embed title': 'Example', 'HTTPS embed address': 'https://example.org/player' }],
+      ['markdown', { 'Markdown source': '## Heading\n\n**Editable** text.\n' }],
+      ['film-cards', { 'Film 1 poster': './poster.jpg', 'Film 1 link': './film/', 'Film 1 title': 'Film', 'Film 1 topic': 'Geometry', 'Film 1 duration': '1:00', 'Film 1 claim': 'A claim.', 'Film 1 scene link': 'https://example.org/scene', 'Film 1 tutorial link': 'https://example.org/tutorial' }],
     ];
     const saved = [];
     for (const [type, values] of cases) {

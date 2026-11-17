@@ -65,3 +65,25 @@ This is a side-by-side comparison, never a dragging slider.
 <dt>Contract</dt><dd><p>A reserved class and its validated inner structure.</p></dd>
 <dt>Baseline</dt><dd><p>First-party styles that also work under an unaware theme.</p></dd>
 </dl>
+
+## Film cards
+
+<ul class="wc-film-cards cards">
+<li><article class="card">
+<a class="card-poster" href="./film/" aria-hidden="true"><img src="asset:images/diagram.png" alt="" width="1280" height="720"></a>
+<div class="card-body">
+<h3><a href="./film/">A film</a></h3>
+<p class="meta"><span>Geometry</span> <span aria-hidden="true">&middot;</span> <span class="duration">1:00</span> <span aria-hidden="true">&middot;</span> <span class="badge badge-demonstration" title="Shows the relationship in particular cases. It does not prove it in general.">Demonstration</span></p>
+<p class="claim">A claim.</p>
+<p class="ships"><span class="ships-label">Ships its own source:</span> <a class="open-scene" href="https://example.org/scene">Open the scene</a> <span aria-hidden="true">&middot;</span> <a href="https://example.org/tutorial">Tutorial</a></p>
+</div>
+</article></li>
+</ul>
+
+## Embed
+
+<div class="wc-embed" title="Example"><a href="https://example.org/embed">Open embed</a></div>
+
+## Markdown widget
+
+<div class="wc-markdown"><pre><code>**Editable** Markdown.&#10;</code></pre></div>

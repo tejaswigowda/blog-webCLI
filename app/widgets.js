@@ -23,6 +23,19 @@ export function readWidget(src) {
   else if (has('wc-quote')) w = { type: 'quote', text: ps(root), citation: root.querySelector('cite')?.textContent || '' };
   else if (has('wc-steps') && root.tagName === 'OL') w = { type: 'steps', items: [...root.children].map(ps) };
   else if (has('wc-compare')) w = { type: 'compare', figures: [...root.children].map(figureOf) };
+  else if (has('wc-embed')) w = { type: 'embed', title: root.getAttribute('title') || '', url: root.querySelector('a')?.getAttribute('href') || '' };
+  else if (has('wc-markdown')) w = { type: 'markdown', markdown: root.querySelector('pre > code')?.textContent || '' };
+  else if (has('wc-film-cards')) w = { type: 'film-cards', id: root.getAttribute('id') || '', cards: [...root.children].map((n) => ({
+    image: n.querySelector('.card-poster img')?.getAttribute('src') || '',
+    url: n.querySelector('.card-poster')?.getAttribute('href') || '',
+    title: n.querySelector('h3 a')?.textContent || '',
+    topic: n.querySelector('.meta span')?.textContent || '',
+    duration: n.querySelector('.duration')?.textContent || '',
+    status: n.querySelector('.badge')?.classList.contains('badge-derivation') ? 'derivation' : 'demonstration',
+    claim: n.querySelector('.claim')?.textContent || '',
+    scene: n.querySelector('.open-scene')?.getAttribute('href') || '',
+    tutorial: n.querySelector('.ships a:last-child')?.getAttribute('href') || '',
+  })) };
   else if (root.tagName === 'DL') w = { type: 'definitions', items: [...root.children].filter((n) => n.tagName === 'DT').map((n) => ({ term: n.textContent, definition: n.nextElementSibling?.tagName === 'DD' ? ps(n.nextElementSibling) : '' })) };
   if (!w) return null;
   // This is a losslessness probe, not validation: unrepresentable source keeps its Edit HTML route.
@@ -34,7 +47,7 @@ export function editWidget(initial, chooseImage) {
   const fields = el('div');
   const select = el('select', { 'aria-label': 'Widget type', onchange: () => { w = newWidget(select.value); draw(); } },
     WIDGET_TYPES.map(([type, label]) => el('option', { value: type, selected: type === w.type }, label)));
-  const body = el('div', {}, el('p', { class: 'hint' }, 'Native markup, no scripts required. Fields are plain text; separate paragraphs with a blank line. Use Edit HTML afterwards for rich content. Links can be relative, such as ./products/. Comparisons are side-by-side, not sliders.'), el('label', {}, 'Widget type', select), fields);
+  const body = el('div', {}, el('p', { class: 'hint' }, 'Fields are plain text; separate paragraphs with a blank line. Use Edit HTML afterwards for rich content. An iframe loads its HTTPS provider and runs its scripts in a sandbox. Comparisons are side-by-side, not sliders.'), el('label', {}, 'Widget type', select), fields);
   const field = (obj, key, label, multiline = false) => el('label', {}, label, el(multiline ? 'textarea' : 'input', { 'aria-label': label, ...(multiline ? { rows: 3 } : { value: obj[key] || '' }), oninput: (e) => { obj[key] = e.target.value; } }, ...(multiline ? [obj[key] || ''] : [])));
   const image = (obj, prefix, credit = false) => {
     const source = field(obj, 'image', `${prefix} image`);
@@ -72,6 +85,21 @@ export function editWidget(initial, chooseImage) {
       case 'steps': nodes = repeat(w.items, 'Step', () => '', (_, i) => field(w.items, i, `Step ${i + 1}`, true)); break;
       case 'compare': nodes = w.figures.map((f, i) => el('fieldset', {}, el('legend', {}, i === 0 ? 'Before' : 'After'), image(f, i === 0 ? 'Before' : 'After'))); break;
       case 'definitions': nodes = repeat(w.items, 'Definition', () => ({ term: '', definition: '' }), (item, i) => [field(item, 'term', `Term ${i + 1}`), field(item, 'definition', `Definition ${i + 1}`, true)]); break;
+      case 'embed': nodes = [field(w, 'title', 'Embed title'), field(w, 'url', 'HTTPS embed address')]; break;
+      case 'markdown': nodes = [el('p', { class: 'hint' }, 'Canonical Markdown ending with a newline. HTML blocks and video embeds are not supported inside this widget.'), field(w, 'markdown', 'Markdown source', true)]; break;
+      case 'film-cards':
+        nodes = [field(w, 'id', 'Section anchor (optional)'), ...repeat(w.cards, 'Film', () => newWidget('film-cards').cards[0], (card, i) => [
+          field(card, 'image', `Film ${i + 1} poster`),
+          el('button', { type: 'button', onclick: () => chooseImage((ref) => {
+            card.image = ref;
+            draw();
+          }) }, 'Choose poster from Media…'),
+          field(card, 'url', `Film ${i + 1} link`), field(card, 'title', `Film ${i + 1} title`),
+          field(card, 'topic', `Film ${i + 1} topic`), field(card, 'duration', `Film ${i + 1} duration`),
+          el('label', {}, 'Status', el('select', { 'aria-label': `Film ${i + 1} status`, onchange: (e) => { card.status = e.target.value; } }, ['demonstration', 'derivation'].map((v) => el('option', { value: v, selected: card.status === v }, v)))),
+          field(card, 'claim', `Film ${i + 1} claim`, true), field(card, 'scene', `Film ${i + 1} scene link`), field(card, 'tutorial', `Film ${i + 1} tutorial link`),
+        ])];
+        break;
     }
     fields.replaceChildren(...nodes);
     body.dispatchEvent(new Event('change', { bubbles: true }));

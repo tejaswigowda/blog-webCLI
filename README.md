@@ -320,6 +320,19 @@ The reserved `wc-` prefix is a closed content contract:
 | Steps | `ol.wc-steps` of nonempty `li`; a `div.wc-steps` wrapping one such unclassed `ol` is also accepted | Numbered steps |
 | Comparison | `div.wc-compare` containing exactly two figures, each with an image, alt text and caption | Side-by-side images; stacked on phones |
 | Definitions | Native `dl` / `dt` / `dd`, no reserved class needed | Native definition list |
+| Film cards | `ul.wc-film-cards` of film cards, with editable poster, title, status, claim and links | Responsive cards |
+| Iframe embed | A standalone titled `div.wc-embed` with an HTTPS link | A sandboxed iframe and a link to the source |
+| Markdown | A standalone `div.wc-markdown` containing encoded source in `pre > code` | Rendered Markdown |
+
+The Markdown widget keeps its source separately editable through **Edit widget**. It supports
+the app's canonical Markdown subset, ending in a newline; HTML blocks and `video:` embeds
+inside it are refused. Links, media pins, math and affiliate checks apply as they do outside it.
+
+The iframe widget loads the entered HTTPS address, including URLs on asset-provider hosts;
+unlike `video:` references, it is not pinned. The frame uses `sandbox="allow-scripts"`,
+`referrerpolicy="no-referrer"`, lazy loading and a source link. The provider can make network
+requests and may block embedding or require sandbox permissions not granted here; use only
+sources you trust. Raw authored `<iframe>` remains disallowed.
 
 Unknown `wc-*` classes are refused as `bad-widget`, naming the file, offending class and
 nearest known spelling. Malformed structures are refused, not stripped or silently rendered.
@@ -362,8 +375,8 @@ removing heading links. Do not write a separate contents widget or maintain its 
 FAQ accordions are supported now using native HTML, with no scripting or invented ARIA.
 The attribute allowlist is unchanged: authored roles and ARIA state are not accepted.
 Comparisons are **not dragging sliders**. Forms, inputs and contact/newsletter widgets
-belong to site configuration (`subscribe`), not post content. Use the existing sandboxed
-embed / `video:` path for embedded media; no iframe is added to the HTML allowlist.
+belong to site configuration (`subscribe`), not post content. Use the iframe widget or the
+existing `video:` path for embedded media; no iframe is added to the HTML allowlist.
 Inline SVG remains excluded because it can carry scripts and `foreignObject`: use image
 diagrams and the existing icon set. A `<button>` is not a link and is not allowlisted.
 Charts, lightboxes, code-copy controls, table enhancements and tabs are deferred, not shipped.
@@ -396,6 +409,22 @@ For example:
 Text inside an HTML block uses HTML syntax (`<strong>bold</strong>`), not Markdown (`**bold**`).
 The editor displays the block as source, not a live preview; check its rendered appearance in
 the `/blog/` reader or on the published page. Styling belongs in **Settings → Custom CSS**.
+
+Links in HTML blocks may use `rel` with the distinct, space-separated tokens `sponsored`,
+`nofollow`, `ugc`, `noopener`, and `noreferrer`. For example:
+
+```html
+<p><a href="https://shop.example/offer" rel="sponsored">See the offer</a></p>
+```
+
+External links also receive `noopener noreferrer`. Ordinary Markdown links and table links
+cannot carry an authored `rel`; use an HTML block when a relation is needed.
+In **Settings → Affiliate domains**, list affiliate hostnames without schemes, ports or wildcards.
+Publishing checks all generated HTML pages and refuses links to those hosts or their subdomains
+unless they include `sponsored`; lookalike domains do not match. This includes navigation links,
+which cannot currently be marked and must not point to configured affiliate domains. Sites using
+the gate use a full rebuild rather than incremental publishing. No disclosure is inserted:
+authors must write any disclosure they need themselves.
 
 A line that starts with an HTML tag starts a block, which runs to the next blank line: so a block keeps its tags together, and a
 blank line inside `<div>…</div>` is refused as an unclosed tag rather than guessed at. This is the one place a post's own markup
@@ -783,6 +812,7 @@ four keys are required, and the real file is plain JSON (no comments):
 | `theme` | no | `"default"`, or a [pinned theme](#pinning) object | `"default"` |
 | `contents` | no | boolean default for post/page contents lists; frontmatter overrides it; requires at least three h2/h3 | `false` |
 | `cover` | no | an `asset:` reference: the share image of the index, and of any post with no `cover` of its own | no `og:image` unless a post has one (a build warning says so) |
+| `affiliateDomains` | no | hostnames (one per line in Settings): links to these hosts or subdomains must have `rel="sponsored"` | no affiliate-domain gate |
 | `assets` | no | binaries (images, audio): [below](#assets) | an `images/` folder of `repo` |
 | `video` | no | video releases: [below](#video) | a `videos/` folder of `repo` |
 | `content` | no | the live copy that makes publishing feel instant: [below](#content) | off: pages carry no script and there is no `404.html` |

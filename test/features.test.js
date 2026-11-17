@@ -36,6 +36,42 @@ const POSTS = [
   post('secret', { date: '2026-04-01', tags: ['hidden-tag'], status: 'draft' }),
 ];
 
+test('affiliate gate checks rendered links in content and navigation without adding disclosure text', () => {
+  const config = { affiliateDomains: ['shop.example'] };
+  for (const body of [
+    '[Offer](https://shop.example/item)',
+    '| Offer |\n| --- |\n| [Buy](https://sub.shop.example/item) |',
+    '<p><a href="//shop.example/item">Offer</a></p>',
+    '<p><a href="https://shop&#46;example/item">Offer</a></p>',
+  ]) {
+    const result = build(config, [post('deal', { body })]);
+    assert.equal(result.errors[0]?.code, 'affiliate-link');
+    assert.deepEqual(result.files, {});
+  }
+  const marked = '<p><a href="https://sub.shop.example/item" rel="sponsored">Offer</a></p>';
+  const { files } = ok(config, [post('deal', { body: marked })]);
+  assert.match(files['deal/index.html'], /rel="sponsored noopener noreferrer"/);
+  assert.doesNotMatch(files['deal/index.html'], /affiliate disclosure/i);
+  assert.deepEqual(build(config, [post('deal', { body: '[Not an affiliate](https://shop.example.evil/item)' })]).errors, []);
+  assert.deepEqual(build({}, [post('deal', { body: '[Offer](https://shop.example/item)' })]).errors, []);
+  const nav = build({ ...config, customize: { header: { links: [{ label: 'Shop', url: 'https://shop.example/' }] } } }, []);
+  assert.equal(nav.errors[0]?.code, 'affiliate-link');
+  for (const domains of [['https://shop.example'], ['*.shop.example'], ['shop.example:443'], 'shop.example']) {
+    assert.throws(() => validateBlog(blogJson({ affiliateDomains: domains })), (e) => e.code === 'bad-blog-json');
+  }
+});
+
+test('live rebuilding refuses a newly unmarked affiliate link', async () => {
+  const blog = blogJson({ repo: 'me/blog', affiliateDomains: ['shop.example'] });
+  const original = post('deal');
+  const built = buildSite({ blog, posts: [original], lock: {} });
+  const map = new Map(Object.entries(built.files));
+  map.set('blog.json', JSON.stringify(blog));
+  map.set('assets.lock.json', '{}');
+  const site = await loadSite(async (p) => map.has(p) ? enc.encode(map.get(p)) : null, { anyBlog: true });
+  assert.throws(() => renderFromSite(site, { slug: 'deal', text: post('deal', { body: '[Offer](https://shop.example/)' }).text }), (e) => e.reason === 'affiliate-link');
+});
+
 // ---------- taxonomy ----------
 test('taxonomy: slugs, groups, years and pages are deterministic', () => {
   assert.equal(slugify('Static HLS'), 'static-hls');

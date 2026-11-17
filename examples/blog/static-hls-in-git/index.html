@@ -113,7 +113,7 @@ ul.posts.cards li{margin:0;padding:1rem 1.1rem;border:1px solid var(--rule);bord
 ul.posts h2{margin:.1em 0}
 ul.posts h2 a{color:var(--fg);text-decoration:none}
 ul.posts p{margin:.3em 0}
-footer.site{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule);color:var(--muted);font:.85rem/1.5 system-ui,sans-serif}
+footer.site{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule);color:var(--muted);font:.85rem/1.5 system-ui,sans-serif;text-align:center}
 .unresolved{color:var(--muted);font-style:italic}
 table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse}
 td,th{padding:.3rem .6rem;border:1px solid var(--rule)}
@@ -151,6 +151,15 @@ form.subscribe input,form[role=search] input{width:100%;margin-bottom:.5rem}
 .webcli-slideshow :focus-visible{outline:3px solid #ffdc65;outline-offset:3px}
 @media(max-width:600px){.webcli-slideshow .webcli-slide{min-height:30rem}.webcli-slideshow .webcli-slide>figcaption{padding:2rem 1.25rem}}
 :is(.wc-faq,.wc-note,.wc-columns,.wc-col,.wc-figure,.wc-button,.wc-quote,.wc-steps,.wc-compare){box-sizing:border-box;min-width:0;max-width:100%;overflow-wrap:anywhere}
+.wc-embed,.wc-film-cards,.wc-markdown{box-sizing:border-box;min-width:0;max-width:100%;overflow-wrap:anywhere}
+.wc-embed{margin:1.5rem 0}
+.wc-embed iframe{display:block;width:100%;aspect-ratio:16/9;border:0}
+.wc-embed>a{display:inline-block;margin-top:.4rem}
+.wc-film-cards{list-style:none;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:1.25rem}
+.wc-film-cards .card{height:100%;display:flex;flex-direction:column;border:1px solid var(--wc-border,var(--rule,#aaa));border-radius:var(--wc-radius,.4rem);overflow:hidden}
+.wc-film-cards .card-poster img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover}
+.wc-film-cards .card-body{padding:.75rem 1rem;display:flex;flex-direction:column;flex:1}
+.wc-film-cards .ships{margin-top:auto}
 :is(.wc-faq,.wc-note,.wc-figure,.wc-quote,.wc-steps,.wc-compare){margin:1.5rem 0}
 .wc-faq{display:block!important}
 .wc-faq>details{display:block!important;margin:.6rem 0;padding:1rem;border:1px solid var(--wc-border,var(--rule,#aaa));border-radius:var(--wc-radius,.4rem)}
