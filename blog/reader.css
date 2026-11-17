@@ -17,7 +17,7 @@
 #reader .sortbar select:focus{outline:2px solid var(--link,#0b5fff);outline-offset:1px}
 
 /* below the page: the reader's own controls, kept out of the page so that the page is the published one */
-#tools{padding-top:.5rem;padding-bottom:0;font:.85rem/1.5 system-ui,sans-serif;color:var(--muted,#666);display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
+#tools{padding-top:.5rem;padding-bottom:0;font:.85rem/1.5 system-ui,sans-serif;color:var(--muted,#666);display:flex;gap:.75rem;align-items:center;justify-content:center;flex-wrap:wrap}
 #tools:empty{display:none}
 #tools .sortbar{margin:0}
 #tools select{font:inherit;padding:.2rem .4rem}

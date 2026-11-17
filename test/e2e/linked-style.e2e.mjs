@@ -59,3 +59,61 @@ test('linked stylesheet: the reader shows a blog whose pages carry no <style>, s
     web.close();
   }
 });
+
+test('reader resolves page images against the site and opens unindexed paths on the published site', { skip, timeout: 120000 }, async () => {
+  const home = { path: 'pages/home.md', text: '---\nslug: home\ntitle: Home\nstatus: published\n---\n\n<div>\n<img src="/media/root.jpg" alt="root">\n<img src="photos/relative.jpg" alt="relative">\n<a href="/linked/about/">About</a>\n<a href="/linked/films/clip/">Film</a>\n<a href="/outside/">Outside</a>\n</div>\n' };
+  const about = { path: 'pages/about.md', text: '---\nslug: about\ntitle: About\nstatus: published\n---\n\n![Nested](photos/about.jpg)\n' };
+  const inputs = [...POSTS, home, about];
+  const built = buildSite({ blog: BLOG, posts: inputs, lock: {} });
+  assert.deepEqual(built.errors, []);
+  const files = Object.fromEntries(Object.entries({ ...built.files, 'blog.json': BLOG, ...Object.fromEntries(inputs.map((p) => [p.path, p.text])) }).map(([p, t]) => [p, b64(t)]));
+  const web = await serve(root);
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/blog/`);
+    await until(page, "document.querySelector('#reader')");
+    await page.evaluate(`(async () => {
+      window.__cspBlocks = [];
+      document.addEventListener('securitypolicyviolation', (e) => window.__cspBlocks.push(e.blockedURI));
+      const m = await import('/test/fake-github.js');
+      const dec = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+      const files = Object.fromEntries(Object.entries(JSON.parse(atob(${JSON.stringify(b64(JSON.stringify(files)))}))).map(([p, b]) => [p, dec(b)]));
+      const fake = m.fakeGitHub({ 'example/linked': files });
+      await fake.ready;
+      window.fetch = (u, o) => fake.fetch(u, o);
+      location.hash = '#repo=example/linked';
+    })()`);
+    await until(page, "document.querySelector('#reader img[alt=root]')");
+    const result = await page.evaluate(`(() => ({
+      images: [...document.querySelectorAll('#reader img')].map((i) => i.getAttribute('src')),
+      links: [...document.querySelectorAll('#reader .home a')].map((a) => [a.textContent, a.getAttribute('href')]),
+      blocked: window.__cspBlocks
+    }))()`);
+    assert.deepEqual(result.images, ['https://example.github.io/media/root.jpg', 'https://example.github.io/linked/photos/relative.jpg']);
+    assert.deepEqual(result.links, [
+      ['About', '#repo=example/linked&post=about'],
+      ['Film', 'https://example.github.io/linked/films/clip/'],
+      ['Outside', 'https://example.github.io/outside/'],
+    ]);
+    assert.ok(!result.blocked.some((uri) => uri.includes('/media/root.jpg') && uri.startsWith('http:')), 'no image request is made against the reader origin');
+    const footerOffset = await page.evaluate(`(() => {
+      const footer = document.querySelector('#reader footer.site');
+      const text = footer.querySelector('.foot-text').getBoundingClientRect();
+      const bounds = footer.getBoundingClientRect();
+      return (text.left + text.width / 2) - (bounds.left + bounds.width / 2);
+    })()`);
+    assert.ok(Math.abs(footerOffset) < 1, 'footer text is centered');
+    await page.evaluate("location.hash = '#repo=example/linked&post=about'; 0");
+    await until(page, "document.querySelector('#reader img[alt=Nested]')");
+    assert.equal(await page.evaluate("document.querySelector('#reader img[alt=Nested]').getAttribute('src')"), 'https://example.github.io/linked/about/photos/about.jpg');
+    const linkOffset = await page.evaluate(`(() => {
+      const link = document.querySelector('#tools a').getBoundingClientRect();
+      const midpoint = (rect) => rect.left + rect.width / 2;
+      return midpoint(link) - midpoint(document.querySelector('#tools').getBoundingClientRect());
+    })()`);
+    assert.ok(Math.abs(linkOffset) < 1, 'published-page link is centered');
+  } finally {
+    chrome.close();
+    web.close();
+  }
+});

@@ -6,7 +6,7 @@ import { chromePath, launch, openPage } from './cdp.mjs';
 
 const skip = chromePath() ? false : 'Chrome is not installed';
 
-test('editor header groups accessible About and GitHub icons at desktop and phone widths', { skip, timeout: 60000 }, async () => {
+test('editor header groups accessible Tutorials, About and GitHub icons at desktop and phone widths', { skip, timeout: 60000 }, async () => {
   const web = await serve(fileURLToPath(new URL('../../', import.meta.url)));
   const chrome = await launch();
   const base = `http://127.0.0.1:${web.address().port}`;
@@ -25,25 +25,38 @@ test('editor header groups accessible About and GitHub icons at desktop and phon
     for (const width of [1280, 390]) {
       await page.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
       const result = await page.evaluate(`(() => {
+        const tutorials = document.querySelector('#top a[aria-label="Tutorials"]');
         const about = document.querySelector('#top a[aria-label="About blog-webCLI"]');
         const github = document.querySelector('#top .gh-link');
-        const a = about.getBoundingClientRect(), g = github.getBoundingClientRect();
+        const t = tutorials.getBoundingClientRect(), a = about.getBoundingClientRect(), g = github.getBoundingClientRect();
         return {
+          tutorialsPath: new URL(tutorials.href).pathname,
+          tutorialsIcon: !!tutorials.querySelector('svg[aria-hidden="true"]'),
           aboutPath: new URL(about.href).pathname,
           aboutIcon: !!about.querySelector('svg'),
           githubUrl: github.dataset.href,
           githubLabel: github.getAttribute('aria-label'),
           githubIcon: getComputedStyle(github, '::before').maskImage !== 'none',
-          text: about.textContent + github.textContent,
-          adjacent: about.nextElementSibling === github && a.top === g.top && g.left >= a.right && g.left - a.right < 12,
+          tooltips: [...document.querySelectorAll('#top form button, #top .help-nav > *')].map((el) => [el.getAttribute('aria-label'), el.getAttribute('title')]),
+          text: tutorials.textContent + about.textContent + github.textContent,
+          adjacent: tutorials.nextElementSibling === about && t.top === a.top && a.left >= t.right && a.left - t.right < 12 &&
+            about.nextElementSibling === github && a.top === g.top && g.left >= a.right && g.left - a.right < 12,
           overflow: document.documentElement.scrollWidth > innerWidth
         };
       })()`);
+      assert.equal(result.tutorialsPath, '/about/tutorials/');
+      assert.equal(result.tutorialsIcon, true);
       assert.equal(result.aboutPath, '/about/');
       assert.equal(result.aboutIcon, true);
       assert.equal(result.githubUrl, 'https://github.com/tejaswigowda/blog-webCLI');
       assert.equal(result.githubLabel, 'Fork on GitHub');
       assert.equal(result.githubIcon, true);
+      assert.deepEqual(result.tooltips, [
+        ['Open repository', 'Open repository'],
+        ['Tutorials', 'Tutorials'],
+        ['About blog-webCLI', 'About blog-webCLI'],
+        ['Fork on GitHub', 'Fork on GitHub'],
+      ]);
       assert.equal(result.text, '');
       assert.equal(result.adjacent, true, `${width}px`);
       assert.equal(result.overflow, false, `${width}px`);

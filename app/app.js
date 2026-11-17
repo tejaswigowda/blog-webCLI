@@ -352,7 +352,7 @@ const link = (repo, extra = '') => `#repo=${repo}${extra}`;
 
 function renderTop(repo, ref) {
   const input = h('input', { name: 'repo', placeholder: 'owner/blog or owner/repo/folder', value: repo || '', 'aria-label': 'Repository' });
-  const form = h('form', { onsubmit: (e) => { e.preventDefault(); try { location.hash = link(parseRepo(input.value)); } catch (err) { view.replaceChildren(errBox(err)); } } }, input, h('button', { icon: 'arrow-right' }, ''));
+  const form = h('form', { onsubmit: (e) => { e.preventDefault(); try { location.hash = link(parseRepo(input.value)); } catch (err) { view.replaceChildren(errBox(err)); } } }, input, h('button', { icon: 'arrow-right', title: 'Open repository', 'aria-label': 'Open repository' }, ''));
   const auth = gh.token
     ? h('span', { class: 'signed', title: login ? `Signed in as ${login}` : 'Signed in' }, icon('user'), h('span', { class: 'who' }, login || 'Signed in'), oauthOn && /^ghu_/.test(gh.token) ? h('button', { type: 'button', class: 'icon-btn', icon: 'sliders', title: 'Repository access', 'aria-label': 'Repository access', onclick: () => openTab(installUrl(config.oauth.app)) }) : null, h('button', { type: 'button', class: 'icon-btn', icon: 'log-out', title: 'Sign out', 'aria-label': 'Sign out', onclick: () => signOut() }))
     : h('button', { type: 'button', class: 'primary', icon: 'log-in', onclick: () => signInDialog() }, 'Sign in to edit');
@@ -363,7 +363,7 @@ function renderTop(repo, ref) {
     form,
     auth,
     h('nav', { class: 'help-nav', 'aria-label': 'Help' },
-      h('a', { href: 'about/tutorials/' }, 'Tutorials'),
+      h('a', { href: 'about/tutorials/', class: 'header-icon', title: 'Tutorials', 'aria-label': 'Tutorials' }, icon('book-open')),
       h('a', { href: 'about/', class: 'header-icon', title: 'About blog-webCLI', 'aria-label': 'About blog-webCLI' }, icon('info')),
       outbound('', 'https://github.com/tejaswigowda/blog-webCLI', { class: 'header-icon gh-link', title: 'Fork on GitHub', 'aria-label': 'Fork on GitHub' })),
   );

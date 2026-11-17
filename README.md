@@ -11,6 +11,10 @@ JavaScript or sign-in, and linked from the editor header. The existing guides, s
 under `about/`. Edit `docs/about.md` or a tutorial source in `docs/` and run `npm run build:about`; `npm run check:about` verifies
 the committed HTML matches those sources.
 
+The editor header has icon controls for opening a repository, tutorials, About and GitHub. Hover for
+their names; the controls also have accessible labels. When signed in, the sign-out icon and,
+where available, repository-access icon are labelled too.
+
 **Licence, by surface** ([LICENSE](LICENSE)). The repository has two, because what it conveys is of two kinds:
 
 | Surface | Where | Licence | Who receives it |
@@ -666,10 +670,11 @@ CSP, and the same egress ledger (always 0 B uploaded). It takes the blog from th
   `blog.json`, `assets.lock.json`, `index/posts.json`, `theme.css` and `licences.json`), so the header menu, tag and author links,
   dates, pagination, archive, tag and author pages, standalone pages, the footer and the stylesheet are the published ones, not a
   look-alike. A test (`test/preview.test.js`) holds it: for every HTML file a build writes, the reader's page is byte-identical. The
-  reader only points the page's links at itself (`&post=slug`, `&path=…`) and drops its scripts. Its policy allows no form posts, so a comment or subscribe form is replaced by a link to the published page. `&post=slug` finds a post by its slug wherever a dated `permalink` puts it. An address with no page shows the
+  reader points indexed pages and listings at itself (`&post=slug`, `&path=…`) and drops the site's scripts. Relative images resolve against the published page; links outside the indexed blog open on the published site. Its policy allows no form posts, so a comment or subscribe form is replaced by a link to the published page. `&post=slug` finds a post by its slug wherever a dated `permalink` puts it. An address with no page shows the
   site's own 404. The search page, which needs its own script, and the feed open on the published site.
-* Below the page, outside it, the reader adds *Published page ↗* and, on the index, a **Sort** control (blog order, newest,
-  oldest, title) that lists every post in one list for the reader alone: no address or previous/next changes.
+* Below the page, outside it, the reader centres *Published page ↗* and, on the index, a **Sort** control (blog order, newest,
+  oldest, title) that lists every post in one list for the reader alone: no address or previous/next changes. The default theme
+  centres its footer; a blog's custom CSS or pinned theme can choose another alignment.
 * A blog with **no generated site yet** (no `index/posts.json`) is read from its source, with a notice saying so; publish it
   from the editor and the reader shows the real page.
 * **Same code, same date.** The preview is what the *current* generator makes. A page published by an older generator keeps its
@@ -1326,6 +1331,12 @@ curl --fail --location 'https://cdn.jsdelivr.net/npm/package@version/file.js' -o
 printf 'sha384-'; openssl dgst -sha384 -binary script.js | openssl base64 -A
 ```
 
+In Settings, paste the URL and hash in **CDN script links**, add `| module` only for an ES module,
+then select **Save settings…** and confirm the pre-flight. The link is saved in `blog.json` and
+added to the regenerated pages; the script itself is not copied into the repository. Check the
+published site after deployment: neither the editor preview nor the `/blog/` reader executes it.
+Remove a line and save again to stop loading that script.
+
 The corresponding top-level `blog.json` setting is:
 
 ```json
@@ -1689,7 +1700,7 @@ an iframe with `sandbox="allow-scripts"` and no `allow-same-origin`. The frame h
 opaque origin and cannot access the parent's cookies, storage or editor token.
 The video release and player configuration are unchanged; `iframe` is still not an
 authored HTML-block tag. Declared comments, analytics and CDN script links are configuration,
-not content blocks, and keep their integrity-pinning requirements.
+not content blocks; CDN links require integrity pins, while comments and analytics may specify them.
 
 ### Licences
 
@@ -2393,7 +2404,7 @@ fast and the send is patient. A repository over what a browser can hold in memor
   script) and the third-party scripts (comments, analytics, CDN links), which it never runs. A blog that has not been built yet is read from
   its source, without the site's menu, tag pages or archive.
 * Comments, analytics and opt-in CDN links are third-party scripts on your readers' pages (see [above](#custom-js-cdn-links-only)); the generator
-  cannot vouch for them, only pin them with `integrity`.
+  cannot vouch for them. CDN links require `integrity`; it is optional for comments and analytics.
 * Two tags that share an address (`C++`, `c`) share a page, and the first alphabetically names it; nothing refuses it.
 * `index/posts.json` now records each post's `author`, and the standalone `pages`; readers that ignore unknown fields are unaffected.
 * **Page addresses:** turning `pagination.stable` on or off renames every `page/N/` once; a post's own address never changes. The feed holds the

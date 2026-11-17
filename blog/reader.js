@@ -88,10 +88,18 @@ const enc = new TextEncoder();
 const LISTING_ROOTS = new Set(['tags', 'authors', 'archive', 'search', 'page']);
 const domainRoot = (blog) => new URL(blog.domain).pathname.replace(/\/+$/, '');
 
-function retarget(doc, { parsed, blog, file }) {
+function retarget(doc, { parsed, blog, file, site }) {
   const home = new URL(blog.domain);
   const dir = file.replace(/index\.html$/, '');
   const here = new URL(`${home.origin}${domainRoot(blog)}/${dir}`);
+  for (const img of doc.body.querySelectorAll('img[src]')) {
+    const raw = img.getAttribute('src');
+    try {
+      img.setAttribute('src', new URL(raw, here).href);
+    } catch {
+      // Leave malformed addresses for the browser to report.
+    }
+  }
   for (const a of doc.body.querySelectorAll('a[href]')) {
     const raw = a.getAttribute('href');
     if (raw.startsWith('#')) continue;
@@ -102,13 +110,18 @@ function retarget(doc, { parsed, blog, file }) {
       continue;
     }
     const root = domainRoot(blog);
-    if (u.origin !== home.origin || !(u.pathname === root || u.pathname.startsWith(`${root}/`))) continue; // another site: as written
+    if (u.origin !== home.origin || !(u.pathname === root || u.pathname.startsWith(`${root}/`))) {
+      a.setAttribute('href', u.href);
+      continue;
+    }
     const p = u.pathname.slice(root.length) || '/';
     const isPage = (p.endsWith('/') || p.endsWith('/index.html')) && !p.startsWith('/search/');
     // a page of the blog opens here; a file (the feed, the search page, which needs its own script) opens where it is published
     const segs = p.replace(/index\.html$/, '').split('/').filter(Boolean);
+    const known = !segs.length || LISTING_ROOTS.has(segs[0]) || sourceOf(site, fileFor(p)) ||
+      (site.index.redirects || []).some((r) => r.from === segs.join('/'));
     // a post or a standalone page keeps the address the reader has always had (&post=slug); the listing pages have a path
-    const href = !isPage ? `${home.origin}${root}${p}${u.search}${u.hash}` : segs.length === 1 && !LISTING_ROOTS.has(segs[0]) ? hashFor(parsed, { post: segs[0] }) : hashFor(parsed, { path: segs.join('/') + (segs.length ? '/' : '') });
+    const href = !isPage || !known ? u.href : segs.length === 1 && !LISTING_ROOTS.has(segs[0]) ? hashFor(parsed, { post: segs[0] }) : hashFor(parsed, { path: segs.join('/') + (segs.length ? '/' : '') });
     a.setAttribute('href', href);
   }
   // the reader may post nowhere (its policy says form-action 'none'): a comment or subscribe form is a pointer to the published page, which can
@@ -125,7 +138,8 @@ function retarget(doc, { parsed, blog, file }) {
 }
 
 function showPreview(html, ctx, css = '') {
-  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const doc = document.implementation.createHTMLDocument('');
+  doc.documentElement.innerHTML = html;
   const style = doc.querySelector('head style');
   theme.textContent = style ? style.textContent : css; // a linked stylesheet is not in the page: the preview has its text
   for (const s of doc.querySelectorAll('script')) s.remove(); // a page of the site loads its own scripts; the reader runs none of them
@@ -157,9 +171,9 @@ async function preview(parsed, mine) {
   const commentsFile = source && /^posts\//.test(source) ? await gh.readText(plain, at(folder, `comments/${source.replace(/^posts\//, '').replace(/\.md$/, '')}.json`), parsed.ref) : null;
   const out = previewHtml(site, file, { text, comments: commentsFile });
   if (mine !== seq) return true;
-  const ctx = { parsed, blog, file };
-  showPreview(out.html, ctx, out.css);
+  const ctx = { parsed, blog, file, site };
   if (out.redirect) {
+    showPreview(out.html, ctx, out.css);
     // an old address: the page says "moved", and its link is already the reader's own address for the post
     const to = document.querySelector('#reader a[href^="#"]');
     if (to) location.replace(to.getAttribute('href'));
@@ -182,7 +196,10 @@ async function preview(parsed, mine) {
     draw(mode);
   };
   if (isIndex) show(savedSort(sessionStorage, repo));
-  else draw('order');
+  else {
+    showPreview(out.html, ctx, out.css);
+    draw('order');
+  }
   return true;
 }
 
