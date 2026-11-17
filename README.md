@@ -5,9 +5,10 @@ renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-blog deployment.
 
 [About blog-webCLI](about/) and [hands-on tutorials](about/tutorials/): recreate webcli.app, migrate a WordPress site,
-and rebuild its look step by step. These are standalone static pages at `blog.webcli.app/about/`, readable without
+rebuild Lyceum Shorts, and rebuild a site's look step by step. The first two showcase sites are
+[webcli.app](https://webcli.app/) and [Lyceum Shorts](https://lyceumshorts.com/). These are standalone static pages at `blog.webcli.app/about/`, readable without
 JavaScript or sign-in, and linked from the editor header. The existing guides, screenshots and theme download now live
-under `about/`. Edit `docs/about.md` or `docs/tutorial.md` and run `npm run build:about`; `npm run check:about` verifies
+under `about/`. Edit `docs/about.md` or a tutorial source in `docs/` and run `npm run build:about`; `npm run check:about` verifies
 the committed HTML matches those sources.
 
 **Licence, by surface** ([LICENSE](LICENSE)). The repository has two, because what it conveys is of two kinds:

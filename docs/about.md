@@ -20,9 +20,14 @@ Published content is static HTML and remains readable without scripting. Optiona
 
 Comments scripts, analytics and Custom JS CDN links are explicit opt-ins. Custom JS accepts approved HTTPS CDN links with required integrity hashes, never inline JavaScript. These scripts run with the published page's full powers, not inside a sandbox; they can make further requests. The editor and reader preview do not execute them.
 
-## Not just chronological blogs
+## Two showcase sites
 
-Standalone pages, home-page slots, reusable content widgets and Custom CSS can make a portfolio, documentation site or directory. The [webcli.app tutorial](/about/tutorials/recreate-webcli-app.html) explains a real rebuild: an existing tool directory recreated with structured data, canonical pages and CSS, without its former client-side rendering dependency.
+Standalone pages, home-page slots, reusable content widgets and Custom CSS make more than chronological blogs possible. The first two showcases illustrate different boundaries:
+
+- [Recreating webcli.app](/about/tutorials/recreate-webcli-app.html): restore a tool directory with structured data, canonical pages and Custom CSS, without its former client-side rendering dependency.
+- [Rebuilding Lyceum Shorts](/about/tutorials/rebuild-lyceumshorts.html): use the shared renderer for six film pages and the index while keeping the specialized, self-hosted HLS player, captions, transcripts and existing URLs.
+
+They are both live examples: [webcli.app](https://webcli.app/) and [Lyceum Shorts](https://lyceumshorts.com/).
 
 The [tutorials and guides](/about/tutorials/) also cover the Swim Platform migration, with screenshots and a downloadable theme recipe. For a shorter starting point, read the [WordPress migration guide](/about/WP-MIGRATION-GUIDE.md).
 
@@ -38,4 +43,4 @@ The runtime library and generated-page code are MIT-licensed. The editor, reader
 
 Report a problem or propose an improvement through [GitHub issues](https://github.com/tejaswigowda/blog-webCLI/issues). A useful report names the command or editor action, expected result and refusal or error, without including tokens or other secrets.
 
-[Tutorial: recreating webcli.app](/about/tutorials/recreate-webcli-app.html) · [Open the editor](/)
+[Tutorial: webcli.app](/about/tutorials/recreate-webcli-app.html) · [Tutorial: Lyceum Shorts](/about/tutorials/rebuild-lyceumshorts.html) · [Open the editor](/)

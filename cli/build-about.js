@@ -10,6 +10,7 @@ const check = process.argv.includes('--check');
 const pages = [
   { source: 'docs/about.md', out: 'about/index.html', title: 'About blog-webCLI', description: 'About the GitHub-native editor, reader and static-site generator, with tutorials and migration guides.' },
   { source: 'docs/tutorial.md', out: 'about/tutorials/recreate-webcli-app.html', title: 'Recreating webcli.app with blog-webCLI', description: 'How an existing tool directory was rebuilt with canonical markdown, structured content and Custom CSS.' },
+  { source: 'docs/lyceum-tutorial.md', out: 'about/tutorials/rebuild-lyceumshorts.html', title: 'Rebuilding Lyceum Shorts with blog-webCLI', description: 'How Lyceum Shorts kept its self-hosted HLS player and public URLs while moving its static site build to blog-webCLI.' },
 ];
 
 for (const page of pages) {

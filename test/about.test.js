@@ -1,14 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-test('About and the webcli.app tutorial match their authored markdown', () => {
+test('About and both showcase tutorials match their authored markdown', () => {
   execFileSync(process.execPath, ['cli/build-about.js', '--check'], { cwd: root });
+  assert.match(readFileSync(path.join(root, 'about/tutorials/index.html'), 'utf8'), /rebuild-lyceumshorts\.html/);
 });
 
 test('relocated guides, screenshots, downloads and public-page links all resolve without scripts', async () => {

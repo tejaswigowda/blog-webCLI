@@ -23,8 +23,10 @@
 <p>Publishing is egress: source, generated pages and any selected media are sent to the repositories shown in the pre-flight. The egress ledger makes those requests visible. Nothing is published until you confirm the operation.</p>
 <p>Published content is static HTML and remains readable without scripting. Optional search, live updates and slideshow playback add first-party scripts for those features. Math is rendered at publish time rather than requiring a reader-side math library.</p>
 <p>Comments scripts, analytics and Custom JS CDN links are explicit opt-ins. Custom JS accepts approved HTTPS CDN links with required integrity hashes, never inline JavaScript. These scripts run with the published page&#39;s full powers, not inside a sandbox; they can make further requests. The editor and reader preview do not execute them.</p>
-<h2>Not just chronological blogs</h2>
-<p>Standalone pages, home-page slots, reusable content widgets and Custom CSS can make a portfolio, documentation site or directory. The <a href="/about/tutorials/recreate-webcli-app.html">webcli.app tutorial</a> explains a real rebuild: an existing tool directory recreated with structured data, canonical pages and CSS, without its former client-side rendering dependency.</p>
+<h2>Two showcase sites</h2>
+<p>Standalone pages, home-page slots, reusable content widgets and Custom CSS make more than chronological blogs possible. The first two showcases illustrate different boundaries:</p>
+<ul><li><a href="/about/tutorials/recreate-webcli-app.html">Recreating webcli.app</a>: restore a tool directory with structured data, canonical pages and Custom CSS, without its former client-side rendering dependency.</li><li><a href="/about/tutorials/rebuild-lyceumshorts.html">Rebuilding Lyceum Shorts</a>: use the shared renderer for six film pages and the index while keeping the specialized, self-hosted HLS player, captions, transcripts and existing URLs.</li></ul>
+<p>They are both live examples: <a href="https://webcli.app/" rel="noopener noreferrer">webcli.app</a> and <a href="https://lyceumshorts.com/" rel="noopener noreferrer">Lyceum Shorts</a>.</p>
 <p>The <a href="/about/tutorials/">tutorials and guides</a> also cover the Swim Platform migration, with screenshots and a downloadable theme recipe. For a shorter starting point, read the <a href="/about/WP-MIGRATION-GUIDE.md">WordPress migration guide</a>.</p>
 <h2>Inspect the implementation</h2>
 <p>The shared lib code is used by the generator and live renderer so that publishing and rebuilding follow the same rules. Tests cover round trips, validation, generated output, runtime boundaries and browser workflows.</p>
@@ -32,7 +34,7 @@
 <h2>Licences and contributions</h2>
 <p>The runtime library and generated-page code are MIT-licensed. The editor, reader and command-line tool are GPL-3.0-only. Third-party components retain their own licences; see <a href="/#licences">Licences and dependencies</a> for the generated inventory and the repository&#39;s licence files for the terms.</p>
 <p>Report a problem or propose an improvement through <a href="https://github.com/tejaswigowda/blog-webCLI/issues" rel="noopener noreferrer">GitHub issues</a>. A useful report names the command or editor action, expected result and refusal or error, without including tokens or other secrets.</p>
-<p><a href="/about/tutorials/recreate-webcli-app.html">Tutorial: recreating webcli.app</a> · <a href="/">Open the editor</a></p>
+<p><a href="/about/tutorials/recreate-webcli-app.html">Tutorial: webcli.app</a> · <a href="/about/tutorials/rebuild-lyceumshorts.html">Tutorial: Lyceum Shorts</a> · <a href="/">Open the editor</a></p>
 <footer>blog-webCLI · <a href="https://github.com/tejaswigowda/blog-webCLI">Source and documentation</a></footer>
 </main>
 </body>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="description" content="How Lyceum Shorts kept its self-hosted HLS player and public URLs while moving its static site build to blog-webCLI.">
+<title>Rebuilding Lyceum Shorts with blog-webCLI</title>
+<link rel="canonical" href="https://blog.webcli.app/about/tutorials/rebuild-lyceumshorts.html">
+<link rel="stylesheet" href="/about/tutorials/tutorials.css">
+</head>
+<body>
+<main>
+<nav class="actions" aria-label="Site"><a href="/">Open the editor</a><a href="/about/">About</a><a href="/about/tutorials/">Tutorials and guides</a></nav>
+<h1>Rebuilding Lyceum Shorts with blog-webCLI</h1>
+<p class="lead">Six short educational films, their source scenes and tutorials, an existing HLS player and 131 MB of locally hosted video: this migration uses blog-webCLI for the shared site renderer while keeping Lyceum&#39;s specialized publishing pipeline.</p>
+<p>The <a href="https://lyceumshorts.com/" rel="noopener noreferrer">live site</a> is driven by <a href="https://github.com/tejaswigowda/lyceumshorts.com/blob/main/lyceum.json" rel="noopener noreferrer"><code>lyceum.json</code></a>. The migration preserves its public paths, metadata, scenes, captions, video renditions and no-third-party-request policy.</p>
+<h2>1. Keep the data model</h2>
+<p>Each film already has a structured record: claim, assumptions, demonstration-or-derivation status, colour key, scene repository and pinned render facts. Replacing that with hand-maintained HTML would create another source of truth. <code>lyceum.json</code> remains authoritative for those fields; the site generator turns each record into page content and canonical Markdown for the shared renderer.</p>
+<p>The film files keep their existing addresses:</p>
+<pre><code class="language-text">films/pythagoras/
+films/a-plus-b-cubed/
+films/hardy-weinberg/
+films/area-volume/
+films/projectile/
+films/piston/
+</code></pre>
+<p>Preserving the path preserves existing links and embeds. The root index, About, Contribute and 404 pages are also generated through blog-webCLI. The six films are rendered in a separate folder-scoped blog build, so the index can retain its curated grouping by subject without making a second all-films feed.</p>
+<h2>2. Generate, round-trip and render</h2>
+<p><code>scripts/generate.mjs</code> adapts each structured record to the page content, converts it to the app&#39;s canonical Markdown, then calls the pinned blog-webCLI <code>buildSite</code> for the actual pages. The generated <code>pages/*.md</code> files make the renderer input inspectable alongside its HTML output.</p>
+<p>The HTML round trip is not a way around the authored-HTML allowlist. It normalizes the source template into Markdown first; blog-webCLI parses, validates and re-serializes its content before output. Site-owned player wiring happens afterwards in this explicit build adapter, not in an author&#39;s post or Custom JS setting.</p>
+<h2>3. Preserve the specialized player locally</h2>
+<p>The editor does not provide an adaptive HLS player, a caption-aware video element or transcript time links. Rather than add a provider-specific feature or move the 131 MB of renditions to a third party, the site build restores Lyceum&#39;s first-party player to film pages:</p>
+<ul><li>the HLS playlists, segments, posters, captions and vendored hls.js remain in this repository;</li><li>Safari uses native HLS; other supporting browsers use the local hls.js and player scripts;</li><li>the full transcript remains readable without scripting, and timestamp links seek when playback is available;</li><li>films retain their VideoObject metadata, exact scene links and existing canonical addresses.</li></ul>
+<p>This is a narrow, named integration in <code>scripts/generate.mjs</code>. It does not enable local or inline JavaScript in blog-webCLI. Index cards and ordinary content still use the shared renderer; the film page&#39;s trusted integration is kept distinct so it can be audited and tested.</p>
+<h2>4. Keep presentation and requests honest</h2>
+<p>The existing <code>assets/style.css</code> remains first-party and preserves the mobile-first light/dark palette, film cards, transcript and player. Its <code>prefers-reduced-motion</code> rules disable animation and transitions; scroll behavior is left intact so transcript navigation still works.</p>
+<p>The build removes blog-webCLI&#39;s default Font Awesome link, then Lyceum&#39;s gate checks generated resource references. The only external URLs are ordinary links a person can choose to follow; the page itself fetches from its own origin. Player libraries and video files remain self-hosted.</p>
+<h2>5. Rebuild and verify from a clean checkout</h2>
+<p>The repository pins the shared renderer by commit in <code>.blog-webcli-ref</code>. From a checkout:</p>
+<pre><code class="language-sh">git clone https://github.com/tejaswigowda/lyceumshorts.com.git
+cd lyceumshorts.com
+git clone https://github.com/tejaswigowda/blog-webCLI.git .blog-webcli
+git -C .blog-webcli checkout --detach &quot;$(cat .blog-webcli-ref)&quot;
+npm run build
+npm test
+npm run check:page
+</code></pre>
+<p>The build verifies the pinned generator, regenerates Markdown and static pages, then installs the player integration. <code>npm test</code> checks reproducibility, every original Lyceum content/media/accessibility gate, and local paths. <code>npm run check:page</code> exercises the rendered index and film player in Chrome, including responsive layout and transcript seeking.</p>
+<p>The resulting <code>x-generator</code> metadata identifies blog-webCLI output. The site remains static and is served from the repository root by GitHub Pages; no app server or new deployment workflow is required.</p>
+<h2>Why use both showcases?</h2>
+<p><a href="https://webcli.app/" rel="noopener noreferrer">webcli.app</a> demonstrates a structured tool directory rebuilt as canonical pages and CSS. Lyceum Shorts demonstrates the other boundary: share rendering and publishing machinery, preserve a specialized local media pipeline, and make the integration explicit. Together they show a static site tool can be useful without pretending every feature is a generic blog post.</p>
+<p><a href="/about/tutorials/">Tutorials and guides</a> · <a href="/about/">About blog-webCLI</a> · <a href="https://lyceumshorts.com/" rel="noopener noreferrer">Open Lyceum Shorts</a></p>
+<footer>blog-webCLI · <a href="https://github.com/tejaswigowda/blog-webCLI">Source and documentation</a></footer>
+</main>
+</body>
+</html>
