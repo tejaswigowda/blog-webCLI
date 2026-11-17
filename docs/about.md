@@ -20,14 +20,14 @@ Published content is static HTML and remains readable without scripting. Optiona
 
 Comments scripts, analytics and Custom JS CDN links are explicit opt-ins. Custom JS accepts approved HTTPS CDN links with required integrity hashes, never inline JavaScript. These scripts run with the published page's full powers, not inside a sandbox; they can make further requests. The editor and reader preview do not execute them.
 
-## Two showcase sites
+## Showcases and work in progress
 
-Standalone pages, home-page slots, reusable content widgets and Custom CSS make more than chronological blogs possible. The first two showcases illustrate different boundaries:
+Standalone pages, home-page slots, reusable content widgets and Custom CSS make more than chronological blogs possible:
 
 - [Recreating webcli.app](/about/tutorials/recreate-webcli-app.html): restore a tool directory with structured data, canonical pages and Custom CSS, without its former client-side rendering dependency.
-- [Rebuilding Lyceum Shorts](/about/tutorials/rebuild-lyceumshorts.html): use the shared renderer for six film pages and the index while keeping the specialized, self-hosted HLS player, captions, transcripts and existing URLs.
+- [Rebuilding Lyceum Shorts](/about/tutorials/rebuild-lyceumshorts.html): a local prototype exploring the shared renderer with a self-hosted HLS player. It is not yet safe to publish from the editor.
 
-They are both live examples: [webcli.app](https://webcli.app/) and [Lyceum Shorts](https://lyceumshorts.com/).
+[webcli.app](https://webcli.app/) is a live example. The current [Lyceum Shorts](https://lyceumshorts.com/) site has not been migrated to blog-webCLI.
 
 The [tutorials and guides](/about/tutorials/) also cover the Swim Platform migration, with screenshots and a downloadable theme recipe. For a shorter starting point, read the [WordPress migration guide](/about/WP-MIGRATION-GUIDE.md).
 
