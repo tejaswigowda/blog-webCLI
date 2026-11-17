@@ -5,9 +5,10 @@ renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-site deployment. This is not a visual or drag-and-drop builder or a template marketplace.
 
 [About blog-webCLI](about/) and [hands-on tutorials](about/tutorials/): recreate webcli.app, migrate a WordPress site,
-and rebuild a site's look step by step. [webcli.app](https://webcli.app/) is a live showcase; the Lyceum Shorts
-migration is a local prototype and is not yet safe to publish from the editor. These are standalone static pages at `blog.webcli.app/about/`, readable without
-JavaScript or sign-in, and linked from the editor header. The existing guides, screenshots and theme download now live
+and rebuild a site's look step by step. [webcli.app](https://webcli.app/) is a live showcase. [Lyceum Shorts](https://lyceumshorts.com/)
+is live too, but its blog-webCLI migration is still a prototype: editor publishing bypasses its custom player integration
+and is not yet safe. The About and tutorial pages are standalone static pages at `blog.webcli.app/about/`, readable without
+JavaScript or sign-in, and linked from the editor header. The existing guides, screenshots and theme download live
 under `about/`. Edit `docs/about.md` or a tutorial source in `docs/` and run `npm run build:about`; `npm run check:about` verifies
 the committed HTML matches those sources.
 
@@ -30,7 +31,7 @@ Themes are separate repositories with their own licences (the built-in ones are 
 app generates carry its built-in default theme, which is part of the runtime (MIT), and say so in their licence comment and in `licences.json`.
 
 ```
-blog repo     posts/*.md · pages/*.md · blog.json · [order.json] · assets.lock.json · index/posts.json [+ index/posts-N.json shards] · generated HTML · feed.xml · sitemap.xml
+site repo     posts/*.md · pages/*.md · blog.json · [order.json] · assets.lock.json · index/posts.json [+ index/posts-N.json shards] · generated HTML · [feed.xml] · [sitemap.xml]
 images repo   binaries
 audio repo    binaries
 video repo    a renders repository published by hls.webcli.app (HLS releases, tagged <name>/vN)
@@ -55,8 +56,9 @@ GitHub Pages from the repository root and put `.nojekyll` there (the generated o
 folder is ignored by Pages); `domain` is the folder's URL (the app fills it in, see below).
 
 Publishing does two things: it commits the **markdown**, and it commits **generated
-static HTML** (a page per post, an index, `feed.xml`) that the blog repo's own GitHub
-Pages serves. The universal renderer (this app) works for any repo; the static pages
+static HTML** (an index and a page per published post or standalone page) that the site's own GitHub
+Pages serves. A feed is generated only when there are published posts; search and the sitemap follow their settings.
+The universal renderer (this app) works for any repo; the static pages
 are what crawlers and link unfurlers see. Both come from one library in [lib/](lib/).
 
 ## A post
@@ -651,8 +653,8 @@ where that blog would put it gets the old address as an alias. The wizard's chec
 
 **What cannot be kept, said before the commit.** A static host cannot answer with a 301, so every stub is a page with a canonical link, a
 refresh and `noindex` (search engines follow it, slowly). WordPress serves its feed at `/feed/`; GitHub Pages cannot return an Atom document
-there, so the feed moves to `/feed.xml` and existing subscribers must resubscribe. `/feed/` is a small page that links the new address, and
-every page carries feed autodiscovery. The review lists both under its headline.
+there, so the feed moves to `/feed.xml` and existing subscribers must resubscribe. When there are published posts, `/feed/` is a small page
+that links the new address, and pages carry feed autodiscovery. The review lists both under its headline.
 
 The command line takes `--uploads <dir>` for the same copy and `--no-comments`, and `--no-fetch` with `--uploads` to use only the pictures in that copy and leave the rest linked to the old site (the folder may be `uploads`, an earlier import's `images/wp`, or any year). It writes `blog.json`, `posts/`, `pages/` and `images/` and nothing else (options `--domain`, `--no-drafts`, `--no-library`); push the pictures,
 then run `blog-webcli pin` (the pin is the commit the pictures are in) and `build`. The images folder sits beside a blog that has a folder of
@@ -1145,7 +1147,7 @@ description: Optional; defaults to the first paragraph.
 
 | Key | Required | Value |
 |---|---|---|
-| `slug` | yes | lowercase letters, digits and single hyphens; must equal the file name; set once and never changed (it is the URL). `posts`, `pages`, `index`, `feed`, `assets`, `static`, `node_modules`, `p`, `tags`, `authors`, `archive`, `search` and `page` are reserved, as is the first folder of any media folder inside the blog |
+| `slug` | yes | lowercase letters, digits and single hyphens; must equal the file name; set once and never changed (it is the stable id and the final URL segment). `posts`, `pages`, `index`, `feed`, `assets`, `static`, `node_modules`, `p`, `tags`, `authors`, `archive`, `search` and `page` are reserved, as is the first folder of any media folder inside the blog |
 | `title` | yes | text; change it freely |
 | `date` | yes | a real `YYYY-MM-DD`; posts are ordered by it, not by commit time |
 | `status` | yes | `draft` (in no index, page, feed, sitemap or search), `scheduled` (a draft with a time: [scheduled publishing](#scheduled-publishing)) or `published` |
@@ -1167,17 +1169,26 @@ tags, and has no previous/next, comments or subscribe form. It is in the sitemap
 pages share one slug space (`slug-collision` for a repeat). Pages are not drawn early by the live script
 (see [Known limits](#known-limits)).
 
-Pages can have a `parent:` page slug; files remain flat and the address is derived from the chain:
+In **Pages → New page**, fill in the title and slug, optionally enter another page's slug in **Parent page**, choose
+a **Menu position** and publish. Leave the parent blank for a top-level page; leave the position blank to keep a leaf
+out of the menu. Pages can also be edited as Markdown: `parent:` names a page slug, files remain flat, and the address
+is derived from the chain:
 
-```yaml
+```markdown
+---
 slug: team
 title: Our team
 status: published
 parent: about
 menu: 2
+---
+
+Meet our team.
 ```
 
-`pages/team.md` then publishes at `/about/team/`. `menu: <0-99>` orders siblings by position, then slug; a page
+With a published `pages/about.md`, `pages/team.md` publishes at `/about/team/`. Slugs are unique across posts and
+pages, even when pages have different parents; the parent is not a directory or a stored URL.
+`menu: <0-99>` orders siblings by position, then slug; a page
 with visible descendants appears in the menu even without its own position. Published parents are required for
 published children. The build refuses `no-such-parent`, `page-cycle`, and `page-too-deep` (more than three levels).
 The index records each resolved path for the generator, live renderer and reader. When an existing page moves,
@@ -1277,7 +1288,7 @@ Most "SEO" is advice. Here it is either a tag on a page the generator writes, or
 | canonical and `og:url`, from `domain` (the address GitHub Pages actually serves), `<meta description>`, Open Graph and Twitter tags with absolute URLs | every page |
 | JSON-LD `BlogPosting` / `WebPage` / `WebSite` (with `SearchAction`); `seo_title`, `image`, `canonical`, `noindex` per post | [Post frontmatter](#post-frontmatter) |
 | `sitemap.xml` (an index per year past 500 posts) and, at a host root, `robots.txt` | `seo.sitemap`, `seo.robots` |
-| feed autodiscovery (`<link rel="alternate" type="application/atom+xml">`) on every page; `/feed/` is a notice page, never an Atom document | [Known limits](#known-limits) |
+| feed autodiscovery (`<link rel="alternate" type="application/atom+xml">`) on every page when there are published posts; `/feed/` is a notice page, never an Atom document | [Known limits](#known-limits) |
 | the full text of a post with scripting off | every post page |
 | `width` and `height` on every `<img>` the lock file knows the size of, so the page does not shift as pictures load | [Assets](#assets), `blog-webcli sizes` |
 | old addresses: a stub (canonical, refresh, `noindex`) at each alias | [Old addresses](#old-addresses-redirects) |
@@ -1603,7 +1614,7 @@ owner/theme-name[/folder]
 |---|---|
 | `blog-webcli-v1` | this app's own markup (`.wrap`, `header.site`, `ul.posts`, …) |
 | `wordpress-classic` | the de facto classic-theme contract: `#page.site`, `#masthead.site-header`, `.site-title`, `.site-description`, `#site-navigation.primary-navigation` > `ul.menu-wrapper`, `#content.site-content` > `main#main.site-main`, `article.post.hentry.tag-…` with `.entry-header.alignwide`, `.entry-title`, `.entry-meta`, `.entry-content`, `.entry-summary`, `.entry-footer`, `.post-thumbnail`, `#colophon.site-footer`; `body` classes `home blog` / `single single-post postid-N`; content blocks `wp-block-heading`, `wp-block-quote`, `wp-block-code`, `wp-block-list`, `wp-block-image`, `wp-block-embed` |
-| `wordpress-classic-2` | `wordpress-classic` plus classes a blog can truthfully carry: `page-numbers` / `current` / `prev` / `next` / `posts-navigation` on the pager, `post-date`, `page-content` on a standalone page, `taxonomy-description`, `nav-menu`, `site-logo`, and body class `archive` on listings. `wordpress-classic` itself never changes (pinned themes depend on it); the two are tested to differ only by those classes. Nothing is added that would be empty or false: no sidebar, comments, categories or submenus. See [docs/contract-v2.md](docs/contract-v2.md). |
+| `wordpress-classic-2` | `wordpress-classic` plus classes a blog can truthfully carry: `page-numbers` / `current` / `prev` / `next` / `posts-navigation` on the pager, `post-date`, `page-content` on a standalone page, `taxonomy-description`, `nav-menu`, `site-logo`, and body class `archive` on listings. `wordpress-classic` itself never changes (pinned themes depend on it); the two are tested to differ only by those classes. Nothing is added that would be empty or false: no sidebar, comments or categories. Hierarchical pages produce nested menus in both classic contracts. See [docs/contract-v2.md](docs/contract-v2.md). |
 
 **A page skeleton** (`"skeleton": "skeleton.html"`, with an optional `"body_class"`, on a `wordpress-classic` theme) gives a theme
 its own page structure. Many themes target their own class names (`.ast-container`, `.main-header-bar`, `.site-branding`, …), not the
@@ -2008,9 +2019,10 @@ index is as of the last build, not the live copy. A site with **more than 500 se
 megabyte in ten thousand posts and not the whole index; the search page reads the list and every shard, and equal scores then keep the
 newest first rather than the blog's order.
 
-With no published posts (including when all posts are drafts), the build skips the feed, archive, tags and authors,
-reports the skip, and omits the feed links and empty post listing. The sitemap still includes published pages unless
-disabled by SEO settings; search indexes those pages when enabled.
+With no published posts (including when all posts are drafts), the build reports **"No published posts: skipped feed,
+archive, tags, authors."** It omits those artifacts, feed autodiscovery and the empty post listing. The sitemap still
+includes published pages unless disabled by SEO settings; search indexes those pages when enabled. Nested pages appear
+at their resolved paths in both.
 
 **Index.** A blog of more than 500 posts keeps `index/posts.json` as a small manifest (version 3: the order, the pages, the old addresses)
 plus 16 shards `index/posts-N.json` holding the entries, split by the same hash as the search shards, so a new post changes the manifest and
@@ -2236,8 +2248,8 @@ upload, and nothing is uploaded until you confirm.
   A hand-kept `order.json` that named the post loses the entry in the same commit. The file stays in the repository's history, so
   reverting that commit brings it back. Links in other posts to a deleted post are not rewritten.
 * **The editor**: *New post* and *New page* open the same editor (Quill, restricted to what markdown can express). A post
-  has title, slug, cover, description, date, tags, author and status; a page has a menu position instead of date, tags and
-  author. *Search and sharing* (collapsed) holds the search title, share image, canonical address and `noindex`. *Pages* on
+  has title, slug, cover, description, date, tags, author and status; a page has a parent page and sibling menu position
+  instead of date, tags and author. *Search and sharing* (collapsed) holds the search title, share image, canonical address and `noindex`. *Pages* on
   the blog's start screen lists the standalone pages. *Settings* has the live preview in the form column and the colours in the side panel with the theme box;
   on a wide screen the side panel scrolls with the page.
 
@@ -2305,6 +2317,8 @@ Math refusals: `dollar-math` · `unclosed-math` · `math-macro` · `bad-math` ·
 | S5 JSON-LD cannot end its `<script>`; `seo_title`, `image`, `canonical`, `noindex` each do exactly what they say | `test/features.test.js` |
 | S6 comments, analytics, CDN script links and the subscribe form are off by default; CDN links require an allowed HTTPS host and integrity hash | `test/features.test.js`, `test/settings.test.js`, `test/e2e/themes.e2e.mjs` |
 | S7 standalone pages: no required date or tags, in the menu by position and in search but not the post index or feed; drafts invisible; one address space | `test/features.test.js`, `test/features-app.test.js`, `test/e2e/features.e2e.mjs` |
+| J3–J7 page-only and all-draft sites skip blog artifacts, report the skip, and retain configured search and sitemap | `test/features.test.js`, `test/e2e/features.e2e.mjs` |
+| J8–J13 page hierarchy, named refusals, sibling order, indexed paths, move aliases and platform-neutral tree | `test/features.test.js`, `test/features-app.test.js`, `test/preview.test.js`, `test/neutral.test.js`, `test/e2e/features.e2e.mjs` |
 | S8 every feature on, the live renderer's post is byte-identical to the generator's; regenerating in any input order is byte-identical | `test/features.test.js` |
 | S9 turning a feature off deletes what it wrote, in the editor's pre-flight and in the CLI; `check` finds a stale file | `test/features-app.test.js` |
 | W1 a WordPress export reads into posts, pages, drafts, tags, authors, the menu and the library; trash and other types are not imported; a DOCTYPE entity is never expanded | `test/wp-content.test.js` |
