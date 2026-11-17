@@ -36,7 +36,9 @@ test('aliases: a path, normalised; anything that is not a plain path is refused 
   assert.equal(normaliseAlias('/2020/05/Old-Post/'), '2020/05/Old-Post');
   assert.equal(normaliseAlias('blog/post.html'), 'blog/post.html');
   assert.equal(normaliseAlias('日本/ünï'), '日本/ünï');
-  for (const bad of ['', '/', '  ', '?p=123', 'a?b=1', 'a#frag', 'https://old.test/a', 'a b', 'a//b', '../x', 'a/../b', './a', '.hidden', 'a/.git', 'a\\b', 'a/%41', 'a/<b>', 'x'.repeat(101), Array(9).fill('a').join('/'), 5, null, {}]) {
+  assert.equal(normaliseAlias(`2020/05/12/${'a'.repeat(200)}`), `2020/05/12/${'a'.repeat(200)}`);
+  assert.equal(normaliseAlias('日'.repeat(85)), '日'.repeat(85));
+  for (const bad of ['', '/', '  ', '?p=123', 'a?b=1', 'a#frag', 'https://old.test/a', 'a b', 'a//b', '../x', 'a/../b', './a', '.hidden', 'a/.git', 'a\\b', 'a/%41', 'a/<b>', 'x'.repeat(201), '日'.repeat(86), Array(9).fill('a').join('/'), 5, null, {}]) {
     assert.throws(() => normaliseAlias(bad), code('bad-alias'), JSON.stringify(bad));
   }
   assert.deepEqual(parseAliases({ aliases: ['/a/', 'b/c'] }), ['a', 'b/c']);

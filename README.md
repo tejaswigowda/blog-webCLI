@@ -177,7 +177,8 @@ Use `\mid` for a vertical bar in a table-cell equation; table rows still use the
 
 **Dollar-delimited math is refused** (`dollar-math`): dollars are currency, and
 `the $30 item and the $50 one` must stay prose. Use the supported delimiters instead of
-`$x$` or `$$x$$`; show those spellings as inline code when discussing them.
+`$x$` or `$$x$$`; show those spellings as inline code when discussing them. Escape a
+literal dollar as `\$` when adjacent prose would otherwise be mistaken for dollar math.
 Math in headings is refused (`math-in-heading`), so heading anchors remain text-derived.
 
 The shared first-party renderer uses vendored **[Temml 0.14.0](https://github.com/ronkok/Temml)**
@@ -421,11 +422,13 @@ Links in HTML blocks may use `rel` with the distinct, space-separated tokens `sp
 
 External links also receive `noopener noreferrer`. Ordinary Markdown links and table links
 cannot carry an authored `rel`; use an HTML block when a relation is needed.
-In **Settings → Affiliate domains**, list affiliate hostnames without schemes, ports or wildcards.
-Publishing checks all generated HTML pages and refuses links to those hosts or their subdomains
-unless they include `sponsored`; lookalike domains do not match. This includes navigation links,
-which cannot currently be marked and must not point to configured affiliate domains. Sites using
-the gate use a full rebuild rather than incremental publishing. No disclosure is inserted:
+To configure the gate in the editor, open the repository, choose **Settings → Affiliate domains**, enter one
+affiliate hostname per line (for example `affiliate.example.com`), then save and publish the settings.
+Enter hostnames without schemes, ports or wildcards: a hostname covers itself and its subdomains, not
+lookalike domains. Leaving the field empty disables the gate; it does not mark links automatically.
+Publishing checks all generated HTML pages and refuses links to configured hosts unless they include
+`sponsored`. This includes navigation links, which cannot currently be marked and must not point to those
+hosts. Sites using the gate use a full rebuild rather than incremental publishing. No disclosure is inserted:
 authors must write any disclosure they need themselves.
 
 A line that starts with an HTML tag starts a block, which runs to the next blank line: so a block keeps its tags together, and a
@@ -1209,7 +1212,7 @@ A static site cannot answer with a 301; this is what a redirect plugin leaves to
 or listing; `index/posts.json` records them (`redirects: [{ from, slug }]`, or `{ from, to, title }` for an [archive address](#addresses-permalinks-old-archive-addresses)), which is how the `/blog/` reader shows the same page
 and follows it, and how the editor deletes one when its alias is removed.
 
-* An alias is a plain path: letters (any script), digits and `. _ ~ -`, at most 8 segments, no query string, scheme or space.
+* An alias is a plain path: letters (any script), digits and `. _ ~ -`, at most 8 segments and 300 characters in total, with at most 200 characters and 255 UTF-8 bytes per segment; no query string, scheme or space.
   `?p=123` addresses cannot be redirected (`bad-alias`). At most 25 per page.
 * It is **refused** (`alias-collision`, naming the file) when it is a current address, is claimed by another page, is below a
   post address or a reserved draft address, or is below something the generator or the repository owns (`tags`, `feed.xml`,
@@ -2427,7 +2430,7 @@ code as for a small blog, made to cope:
 rest of it is: the index (`index/posts.json`, and its shards on a big blog) holds every post's entry and the resolved order, so a change to one post needs that post, the posts whose
 previous/next links change (the two beside it, before and after), and the newest 50 for the feed. Everything made of the index (the listing
 pages, the tag, author and archive pages, the feed, the sitemap, the index itself) is made again from the new index **by the same functions
-the full build uses**, the search shard the post belongs to is spliced, and only the files that differ from what is committed are sent. On
+the full build uses**, the search shard the post belongs to is spliced while retaining searchable standalone pages, and only the files that differ from what is committed are sent. On
 the 8,000-post blog this is 0.4 s instead of 4.5 s and reads 50 posts and one shard instead of 8,000 posts; editing a post in the middle
 changes 5 files, and a new newest post changes about 1,260 (39 MB) with the default pagination, because every page of a position-numbered
 listing shifts by one (a larger `pageSize` does not help: the pages together stay the same size). With
@@ -2435,7 +2438,7 @@ listing shifts by one (a larger `pageSize` does not help: the pages together sta
 the feed, and the index's manifest and one shard.
 It is **declined**, and the whole blog built as before, when it cannot be sure of the answer: the committed index was written by another
 version of the generator, a hand-kept or field order, a small blog (under 300 posts), a search index not in shards,
-a standalone page, or a change that alters the header of every page (the first tag in the blog, a second author). A test holds it equal:
+an edit to a standalone page, hierarchical pages, or a change that alters the header of every page (the first tag in the blog, a second author). A test holds it equal:
 [test/incremental.test.js](test/incremental.test.js) applies each kind of edit, and 24 random edits one on another, to a blog with
 pagination, tags, authors, cards, search shards, a sitemap and old addresses, and requires the files to be exactly a full build's; the same
 holds on the real 8,000-post blog.

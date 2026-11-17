@@ -8,7 +8,7 @@ import { createNet } from '../app/net.js';
 import { BULK_AT, GitHub } from '../app/github.js';
 import { executePlan, planChange, planSettings } from '../app/site.js';
 import { blogToForm } from '../lib/settings.js';
-import { buildSite } from '../lib/blog.js';
+import { buildSite, SEARCH_SHARD_OVER } from '../lib/blog.js';
 import { Refusal } from '../lib/errors.js';
 import { EX, readDirFiles } from './helpers.js';
 import { fakeGitHub } from './fake-github.js';
@@ -254,4 +254,24 @@ test('bulk: publishing one more post on a big blog reads the newest few and the 
   const posts_ = Object.entries(now).filter(([p]) => /^posts\//.test(p)).map(([path, text]) => ({ path, text }));
   const want = buildSite({ blog: now['blog.json'], posts: posts_, lock: JSON.parse(now['assets.lock.json']) });
   for (const [p, c] of Object.entries(want.files)) assert.equal(now[p], c, p);
+});
+
+test('bulk: searchable pages do not force unrelated invalid posts into a post preflight', async () => {
+  const base = await readDirFiles(path.join(EX, 'blog'));
+  const blog = { ...JSON.parse(dec.decode(base['blog.json'])), search: true };
+  const lock = JSON.parse(dec.decode(base['assets.lock.json']));
+  const source = posts(SEARCH_SHARD_OVER + 20);
+  source['pages/about.md'] = '---\nslug: about\ntitle: About\nstatus: published\n---\n\nSearchable page.\n';
+  const built = buildSite({ blog, lock, posts: Object.entries(source).map(([path, text]) => ({ path, text })) });
+  assert.deepEqual(built.errors, []);
+  const slug = built.index[0].slug;
+  const unrelated = built.index.at(-1).slug;
+  source[`posts/${unrelated}.md`] += '\nUnsupported $x$ notation.\n';
+  const server = fakeGitHub({ 'example/blog': { ...built.files, ...source, 'blog.json': JSON.stringify(blog), 'assets.lock.json': JSON.stringify(lock) } });
+  await server.ready;
+  const gh = clientFor(server);
+  const plan = await planChange(gh, { repo: 'example/blog', branch: 'main', slug, text: source[`posts/${slug}.md`].replace('Words of post', 'Updated words of post') });
+  assert.ok(plan.changes.some((c) => c.path === `posts/${slug}.md`));
+  const batches = only(logOf(server), /graphql/);
+  assert.ok(batches.length <= 1 && batches.every((l) => Number(/graphql (\d+)/.exec(l)?.[1]) <= 55), `only affected posts are read: ${batches}`);
 });

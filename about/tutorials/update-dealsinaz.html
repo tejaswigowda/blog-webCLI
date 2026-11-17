@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="description" content="A one-time, five-day update to an existing WordPress import, with media, URL and cutover checks.">
+<title>Updating Deals in AZ from WordPress</title>
+<link rel="canonical" href="https://blog.webcli.app/about/tutorials/update-dealsinaz.html">
+<link rel="stylesheet" href="/about/tutorials/tutorials.css">
+</head>
+<body>
+<main>
+<nav class="actions" aria-label="Site"><a href="/">Open the editor</a><a href="/about/">About</a><a href="/about/tutorials/">Tutorials and guides</a></nav>
+<h1>Updating an existing WordPress import: Deals in AZ</h1>
+<p class="lead">An existing GitHub-backed copy can be brought up to date without replacing its older posts. This case study stages a one-time update, not an automatic WordPress sync.</p>
+<p><strong>Status:</strong> the update was pushed to the destination repository. Do not switch DNS until the new site and the cutover checks below have been verified.</p>
+<h2>1. Establish the source and destination</h2>
+<p>The source is <a href="https://dealsinaz.com/" rel="noopener noreferrer">dealsinaz.com</a>; the destination is <a href="https://github.com/FoxyNinjaStudios/dealsinaz" rel="noopener noreferrer">FoxyNinjaStudios/dealsinaz</a>. Work in a separate checkout and preserve posts that are no longer in WordPress. Record the source snapshot time and compare against the original import and any edits made since.</p>
+<p>For this update, the owner requested only the last five days. The snapshot contained four published posts modified from November 12 at 23:16 UTC through November 17, 2026 at 23:16 UTC. WordPress was authoritative for those posts; older posts were not synchronized. An exact rolling window matters: a different snapshot time can produce different results.</p>
+<p>The public WordPress REST API only exposes what it allows anonymous readers to see. It does not include private posts or drafts. This snapshot reported 7,999 published posts and three pages; its media endpoint advertised 26,329 records but returned 26,323, and its comments endpoint advertised 33 but returned 32. Comments were not imported during this update.</p>
+<h2>2. Match before writing</h2>
+<p>Compare WordPress IDs, original paths, dates and titles with the destination. A shortened slug is not a reliable identity: two unrelated posts can share the same shortened name. Inspect ambiguous matches rather than overwriting either post. Keep destination-only posts, and review any demo or test content separately.</p>
+<p>The editor&#39;s WordPress import can add missing content to an existing blog, but <strong>add does not update an existing post</strong>. In the import wizard, the option to add to an existing blog preserves its settings and skips content whose address is already in use. The CLI&#39;s <code>--add</code> has the same limitation. To update matching content, compare and edit it deliberately; do not mistake an add-only import for a sync.</p>
+<p>This case used a local, one-off comparison and conversion, not a supported reusable sync command. Review converted text and links, then verify the source files round-trip in the editor. The original source may contain markup the importer cannot preserve exactly.</p>
+<h2>3. Keep the requested media</h2>
+<p>Existing pinned assets were left alone. Four images needed by the four recent posts were copied to the destination repository and pinned to the media commit in <code>assets.lock.json</code>. Third-party images remain external links. Check each imported post in the editor and open its images before publishing.</p>
+<p>Older posts already contain image URLs, but some point to <code>https://dealsinaz.com/wp-content/uploads/</code>. Those URLs depend on the WordPress host. If DNS is moved to GitHub Pages, the old uploads will not automatically be there: move or serve those files and test their URLs before cutover. This update did not copy the older media library.</p>
+<h2>4. Addresses, settings and affiliate links</h2>
+<p>The four new posts retain their WordPress dated addresses as aliases. Each static alias is a page with a canonical link and refresh, not an HTTP 301. Older posts were outside this five-day update: their historical WordPress URLs have not been comprehensively redirected. Audit and preserve those addresses before switching the domain.</p>
+<p>The staged settings use <code>https://dealsinaz.com</code> as the canonical domain and remove the demo banner and <code>noindex</code>. The site owner is responsible for DNS and GitHub Pages domain configuration. Until cutover, the live WordPress site remains the source.</p>
+<p>Affiliate-domain enforcement was deliberately left disabled because no hostnames were configured. To enable it later, open <strong>Settings → Affiliate domains</strong>, enter one hostname per line and save. Links to those hosts and their subdomains must then be marked <code>sponsored</code>; the gate does not mark links automatically. Review affiliate links before launch.</p>
+<h2>5. Build and verify</h2>
+<p>From a checkout of blog-webCLI, build and check the staged repository:</p>
+<pre><code class="language-sh">node cli/blog.js build /path/to/dealsinaz
+node cli/blog.js check /path/to/dealsinaz
+</code></pre>
+<p>Inspect the recent posts, copied images and their pinned commit, existing posts and pages, search, feed, sitemap, navigation and the four redirect pages. Verify the canonical domain and indexing settings. A missing-cover warning means the affected page has no share image; resolve it if a share image is needed.</p>
+<p>Before any DNS change, test historical links and every referenced upload on the new host. Confirm that GitHub Pages is serving the expected commit, and keep the old WordPress site available until the cutover has been verified. Re-run the comparison for later changes; this case study does not set up ongoing synchronization.</p>
+<p><a href="/about/tutorials/">Tutorials and guides</a> · <a href="/">Open the editor</a></p>
+<footer>blog-webCLI · <a href="https://github.com/tejaswigowda/blog-webCLI">Source and documentation</a></footer>
+</main>
+</body>
+</html>

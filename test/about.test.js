@@ -11,6 +11,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 test('About and both showcase tutorials match their authored markdown', () => {
   execFileSync(process.execPath, ['cli/build-about.js', '--check'], { cwd: root });
   assert.match(readFileSync(path.join(root, 'about/tutorials/index.html'), 'utf8'), /rebuild-lyceumshorts\.html/);
+  assert.match(readFileSync(path.join(root, 'about/tutorials/index.html'), 'utf8'), /update-dealsinaz\.html/);
 });
 
 test('relocated guides, screenshots, downloads and public-page links all resolve without scripts', async () => {

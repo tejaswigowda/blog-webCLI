@@ -43,13 +43,18 @@ test('V4/V5: adversarial math is verbatim in Delta and survives both Markdown ro
 });
 
 test('V2/V3: delimiters exclude code and HTML, escaped openers are prose, and prices remain currency', () => {
-  const literal = 'Literal \\\\( and $30 item and $50 one.\n\n`\\(x_1\\) $x$`\n\n```text\n\\(x_1\\) $$x$$\n```\n\n<p>\\(x\\) $x$</p>\n';
+  const literal = 'Literal \\\\( and $30 item and $50 one; $.99 and $.58, or $5 and $.25.\n\n`\\(x_1\\) $x$`\n\n```text\n\\(x_1\\) $$x$$\n```\n\n<p>\\(x\\) $x$</p>\n';
   const delta = mdToDelta(literal);
   assert.equal(deltaToMd(delta), literal);
   assert.equal(hasMath(delta), false);
   assert.doesNotMatch(deltaToHtml(delta), /<math[\s>]/);
   for (const md of ['$x$\n', '$ x $\n', '$$x$$\n', '$30$\n']) {
     assert.throws(() => mdToDelta(md), (e) => e.code === 'dollar-math' && /currency/.test(e.detail));
+  }
+  for (const text of ['Save $$$ on groceries', '$20 and c$oupons', 'save $5 and $ off']) {
+    const markdown = deltaToMarkdownChecked({ ops: [{ insert: `${text}\n` }] }).md;
+    assert.equal(mdToDelta(markdown).ops[0].insert, `${text}\n`);
+    assert.equal(deltaToMd(mdToDelta(markdown)), markdown);
   }
   assert.throws(() => deltaToHtml(mdToDelta('```math\n$$x$$\n```\n')), (e) => e.code === 'dollar-math');
   for (const md of ['\\(x_1\n', '\\( \\right) x\n']) assert.throws(() => mdToDelta(md), (e) => e.code === 'unclosed-math');

@@ -87,6 +87,22 @@ test('incremental: a post edited in the middle of a big blog: its page, its neig
   assert.ok(r.need.slugs.length <= 3 + FEED_LIMIT, `reads the neighbours and the feed's posts, not ${N}: ${r.need.slugs.length}`);
 });
 
+test('incremental: editing a post preserves standalone pages in its search shard', async () => {
+  const blog = BLOG();
+  const page = { path: 'pages/about.md', text: '---\nslug: about\ntitle: About\nstatus: published\n---\n\nSearchable page words.\n' };
+  const n = Array.from({ length: N }, (_, i) => i).find((i) => shardOf(`p${i}`) === shardOf('about'));
+  const posts = [...corpus(N), page];
+  const before = full(blog, posts);
+  for (const change of [make(n, { body: 'Updated words.' }), make(n, { status: 'draft' })]) {
+    const r = await incremental({ blog, before, beforePosts: posts, change });
+    assert.ok(!r.reason, r.reason);
+    assert.ok(r.need.slugs.length <= 3 + FEED_LIMIT, 'reads only affected posts');
+    same(r.state, full(blog, r.afterPosts).files, 'post change with searchable page');
+    const shard = JSON.parse(r.state[`search/data-${shardOf('about')}.json`]);
+    assert.ok(shard.posts.some((p) => p.slug === 'about' && p.text.includes('Searchable page words')));
+  }
+});
+
 test('incremental: every kind of edit gives exactly the files a full build gives', async () => {
   const blog = BLOG();
   const posts = corpus(N);
