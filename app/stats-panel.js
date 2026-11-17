@@ -111,7 +111,7 @@ export function createStatsPanel({ h, gh, where, repo, folder, branch, blog, loc
           extra.live = { state: 'private' };
           return;
         }
-        const s = postStats({ ops: [], f: { slug: saved.slug, date: saved.date, status: 'published' }, blog, kind });
+        const s = postStats({ ops: [], f: { slug: saved.slug, date: saved.date, status: 'published' }, blog, kind, index });
         let state = { state: 'unknown', bytes: 0 };
         try {
           const res = await gh.net.fetchRemote(s.address.url.replace(/^http:/, 'https:')); // a Pages address is served over https even when blog.json says http

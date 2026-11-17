@@ -65,6 +65,15 @@ test('address follows the permalink; neighbours, related and comments come from 
   assert.deepEqual(stats({ f: { tags: ['z'] } }).related.map((r) => r.slug), ['other'], 'related follows the tags as typed, not as saved');
 });
 
+test('page address uses the recorded path and reflects a new parent', () => {
+  const index = { posts: [], sequence: [], pages: [{ slug: 'about', path: 'about' }, { slug: 'team', path: 'about/team', parent: 'about' }, { slug: 'other', path: 'other' }] };
+  const page = (parent) => postStats({ ops: [], f: { slug: 'team', status: 'published', parent }, blog: BLOG, index, kind: 'page' }).address.url;
+  assert.equal(page('about'), 'https://x.test/b/about/team/');
+  assert.equal(page('other'), 'https://x.test/b/other/team/');
+  assert.equal(page(''), 'https://x.test/b/team/');
+  assert.equal(page('missing'), '');
+});
+
 test('history summary: count, first and last, who', () => {
   const c = (login, date, message) => ({ author: { login }, commit: { author: { name: login, date }, message } });
   const h = summariseHistory([c('ann', '2026-11-09T10:00:00Z', 'Fix a typo\n\nlonger'), c('bob', '2026-11-05T10:00:00Z', 'Edit'), c('ann', '2026-11-01T10:00:00Z', 'Publish')]);

@@ -57,6 +57,16 @@ test('preview: page-only sites do not preview a nonexistent feed', async () => {
   assert.equal(previewHtml(site, 'feed/index.html').status, 404);
 });
 
+test('preview: hierarchy reads the resolved address from the index', async () => {
+  const inputs = [page('about', { menu: 1 }), page('team', { parent: 'about', menu: 1 }), page('people', { parent: 'team', menu: 1 }), post('news', { body: '[Team](../team/)' })];
+  const { r, site, texts } = await siteOf(blogJson(), inputs);
+  for (const file of ['index.html', 'about/index.html', 'about/team/index.html', 'about/team/people/index.html', 'news/index.html']) {
+    const source = sourceOf(site, file);
+    assert.equal(previewHtml(site, file, { text: source ? texts.get(source) : null }).html, r.files[file], file);
+  }
+  assert.equal(sourceOf(site, 'about/team/people/index.html'), 'pages/people.md');
+});
+
 test('preview: every page of a rich blog is byte-identical to the deployed one (index, pages, tags, authors, archive, search, posts, standalone pages)', async () => {
   const { htmls } = await same(blogJson({ pagination: { size: 2 }, search: true, content: { base: 'https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{path}' } }), 'paged, live, search');
   for (const want of ['index.html', 'page/2/index.html', 'tags/index.html', 'tags/video/index.html', 'authors/ada/index.html', 'archive/index.html', 'search/index.html', 'alpha/index.html', 'about/index.html']) assert.ok(htmls.includes(want), want);

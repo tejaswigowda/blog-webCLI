@@ -72,6 +72,7 @@
     "lib/math-syntax.js",
     "lib/mathml.js",
     "lib/order.js",
+    "lib/page-tree.js",
     "lib/page.js",
     "lib/permalink.js",
     "lib/pin.js",

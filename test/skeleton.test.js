@@ -76,6 +76,14 @@ test('a skeleton shapes every page: its structure around the blog\'s content, me
   assert.ok(!('theme-skeleton.json' in buildSite({ blog: JSON.stringify(BLOG), posts: [post('one', 'x')], lock: {} }).files), 'no theme, no skeleton file');
 });
 
+test('a skeleton keeps the entire nested menu, including later siblings', () => {
+  const { pin, theme } = pinned(GOOD);
+  const page = (slug, parent = '') => ({ path: `pages/${slug}.md`, text: `---\nslug: ${slug}\ntitle: ${slug}\nstatus: published\n${parent ? `parent: ${parent}\n` : ''}menu: 1\n---\n\nText.\n` });
+  const r = buildSite({ blog: { ...BLOG, theme: pin }, posts: [page('about'), page('team', 'about'), page('other')], lock: {}, theme });
+  assert.deepEqual(r.errors, []);
+  assert.match(r.files['index.html'], /<ul class="menu"><li class="menu-item"><a href="\.\/about\/">about<\/a><ul class="sub-menu">[\s\S]*team[\s\S]*<\/ul><\/li><li class="menu-item"><a href="\.\/other\/">other<\/a>/);
+});
+
 test('a theme with no skeleton is exactly as before; the pinned digest covers the skeleton', () => {
   const a = pinned(GOOD);
   const b = pinned(GOOD.replace('site-header', 'site-header2'));

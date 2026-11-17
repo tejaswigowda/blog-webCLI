@@ -403,11 +403,48 @@ test('pages: pages/<slug>.md becomes <slug>/ with no date, author or tags; a men
   assert.ok(!('hush/index.html' in files) && !files['sitemap.xml'].includes('hush'), 'a draft page is invisible');
   assert.ok(files['alpha/index.html'].includes('<nav><a href="../contact/">Page contact</a><a href="../about/">Page about</a><a href="../archive/">Archive</a>'), 'menu pages first, lowest position first');
   assert.ok(!files['alpha/index.html'].includes('colophon'), 'a page with no menu value is not in the header');
-  assert.deepEqual(info, [{ slug: 'about', title: 'Page about', menu: 2 }, { slug: 'colophon', title: 'Page colophon' }, { slug: 'contact', title: 'Page contact', menu: 1 }], 'sorted by slug, so the index does not depend on the order files were read in');
+  assert.deepEqual(info, [{ slug: 'about', path: 'about', title: 'Page about', menu: 2 }, { slug: 'colophon', path: 'colophon', title: 'Page colophon' }, { slug: 'contact', path: 'contact', title: 'Page contact', menu: 1 }], 'sorted by slug, so the index does not depend on the order files were read in');
   assert.ok(!index.some((e) => ['about', 'contact', 'colophon'].includes(e.slug)), 'pages are not posts: not in the index, feed, archive or tags');
   assert.ok(!files['feed.xml'].includes('/about/') && !/<li><time[^>]*>[^<]*<\/time> <a href="\.\.\/about\//.test(files['archive/index.html']));
   assert.ok(files['sitemap.xml'].includes('https://example.test/about/') && files['sitemap.xml'].includes('https://example.test/colophon/'));
   assert.deepEqual(JSON.parse(files['index/posts.json']).pages.map((p) => p.slug).sort(), ['about', 'colophon', 'contact'], 'the index records the pages so a renderer can rebuild the menu');
+});
+
+test('page hierarchy derives three-level paths and orders sibling menus', () => {
+  const inputs = [page('about', { menu: 1 }), page('zeta', { parent: 'about', menu: 2 }), page('team', { parent: 'about', menu: 2 }), page('people', { parent: 'team', menu: 1, body: 'Find the unique otter.' }), post('news', { body: '[Team](../team/)' })];
+  const { files, pages } = ok({ search: true }, inputs);
+  assert.equal(pages.find((p) => p.slug === 'people').path, 'about/team/people');
+  assert.equal(JSON.parse(files['index/posts.json']).pages.find((p) => p.slug === 'team').parent, 'about');
+  assert.match(files['about/team/people/index.html'], /href="\.\.\/\.\.\/\.\.\/about\/team\/"/);
+  assert.match(files['news/index.html'], /href="\.\.\/about\/team\/"/);
+  assert.ok(files['index.html'].indexOf('Page team') < files['index.html'].indexOf('Page zeta'));
+  assert.match(files['index.html'], /class="sub-menu"/);
+  assert.match(files['sitemap.xml'], /https:\/\/example\.test\/about\/team\/people\//);
+  assert.equal(rank(JSON.parse(files['search.json']).posts, 'otter')[0].post.path, 'about/team/people');
+  assert.deepEqual(ok({ search: true }, [...inputs].reverse()).files, files);
+});
+
+test('page hierarchy refuses missing parents, cycles, and more than three levels', () => {
+  const code = (inputs) => build({}, inputs).errors[0]?.code;
+  assert.equal(code([page('a', { parent: 'missing' })]), 'no-such-parent');
+  assert.equal(code([page('a', { parent: 'b' }), page('b', { parent: 'a' })]), 'page-cycle');
+  assert.equal(code([page('a'), page('b', { parent: 'a' }), page('c', { parent: 'b' }), page('d', { parent: 'c' })]), 'page-too-deep');
+  assert.equal(code([page('a', { status: 'draft' }), page('b', { parent: 'a' })]), 'no-such-parent');
+});
+
+test('moving an ancestor preserves all old descendant paths in source aliases', () => {
+  const initial = [page('about'), page('team', { parent: 'about' }), page('people', { parent: 'team' }), page('other')];
+  const before = ok({}, initial);
+  const previousIndex = JSON.parse(before.files['index/posts.json']);
+  const moved = initial.map((p) => p.path === 'pages/team.md' ? page('team', { parent: 'other' }) : p);
+  const r = buildSite({ blog: blogJson(), posts: moved, previousIndex });
+  assert.deepEqual(r.errors, []);
+  assert.match(r.sourceUpdates['pages/team.md'], /aliases: \[about\/team\]/);
+  assert.match(r.sourceUpdates['pages/people.md'], /aliases: \[about\/team\/people\]/);
+  assert.match(r.files['about/team/index.html'], /https:\/\/example\.test\/other\/team\//);
+  assert.match(r.files['about/team/people/index.html'], /https:\/\/example\.test\/other\/team\/people\//);
+  const persisted = moved.map((p) => ({ ...p, text: r.sourceUpdates[p.path] || p.text }));
+  assert.deepEqual(build({}, persisted).files, r.files);
 });
 
 test('pages: refusals', () => {

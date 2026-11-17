@@ -154,6 +154,47 @@ test('a correction to a page is a pull request that leaves the default branch al
   assert.match(buildSite({ blog: JSON.stringify({ title: 'T', description: 'd', author: 'a', domain: 'https://x.test', repo: 'me/blog' }), posts: [{ path: 'pages/about.md', text: ABOUT() }], lock: {} }).files['about/index.html'], /#repo=me\/blog&amp;correctpage=about/, 'the page links to the correction path the app understands');
 });
 
+test('moving an editor page commits old addresses for it and its descendants', async () => {
+  const { server, gh } = await world();
+  const make = (slug, parent = '') => `---\nslug: ${slug}\ntitle: ${slug}\nstatus: published\n${parent ? `parent: ${parent}\n` : ''}menu: 1\n---\n\nText.\n`;
+  for (const [slug, parent] of [['about', ''], ['team', 'about'], ['people', 'team'], ['other', '']]) {
+    await executePlan(gh, await planChange(gh, { repo: 'example/blog', branch: 'main', slug, text: make(slug, parent), kind: 'page', create: true }));
+  }
+  const plan = await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'team', text: make('team', 'other'), kind: 'page' });
+  assert.ok(sorted(plan).includes('+pages/people.md'));
+  await executePlan(gh, plan);
+  const after = server.files('example/blog');
+  assert.match(after['pages/team.md'], /aliases: \[about\/team\]/);
+  assert.match(after['pages/people.md'], /aliases: \[about\/team\/people\]/);
+  assert.match(after['about/team/index.html'], /\/other\/team\//);
+  assert.match(after['about/team/people/index.html'], /\/other\/team\/people\//);
+  assert.match(after['other/team/people/index.html'], /<h1>people<\/h1>/);
+  const inputs = Object.entries(after).filter(([p]) => /^(posts|pages|comments)\/[^/]+\.(md|json)$/.test(p)).map(([path, text]) => ({ path, text }));
+  const regen = buildSite({ blog: after['blog.json'], posts: inputs, lock: JSON.parse(after['assets.lock.json']) });
+  assert.deepEqual(regen.errors, []);
+  for (const [p, content] of Object.entries(regen.files)) assert.equal(after[p], content, p);
+});
+
+test('CLI detects page moves, persists aliases, and keeps old descendants as redirects', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'page-tree-'));
+  try {
+    const make = (slug, parent = '') => `---\nslug: ${slug}\ntitle: ${slug}\nstatus: published\n${parent ? `parent: ${parent}\n` : ''}---\n\nText.\n`;
+    await fs.writeFile(path.join(dir, 'blog.json'), JSON.stringify({ title: 'T', description: 'D', author: 'A', domain: 'https://example.test' }));
+    await fs.mkdir(path.join(dir, 'pages'));
+    for (const [slug, parent] of [['about', ''], ['team', 'about'], ['people', 'team'], ['other', '']]) await fs.writeFile(path.join(dir, 'pages', `${slug}.md`), make(slug, parent));
+    const cli = (...args) => run('node', [path.join(root, 'cli', 'blog.js'), ...args, dir]);
+    await cli('build');
+    await fs.writeFile(path.join(dir, 'pages', 'team.md'), make('team', 'other'));
+    await assert.rejects(cli('check'), (e) => /old address must be recorded/.test(e.stderr));
+    await cli('build');
+    assert.match(await fs.readFile(path.join(dir, 'pages', 'people.md'), 'utf8'), /aliases: \[about\/team\/people\]/);
+    assert.match(await fs.readFile(path.join(dir, 'about', 'team', 'people', 'index.html'), 'utf8'), /\/other\/team\/people\//);
+    await cli('check');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('the CLI builds pages/, removes what a switched-off feature left, and check finds a stale file', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'features-'));
   for (const [rel, bytes] of Object.entries(await walk(EXAMPLE))) {

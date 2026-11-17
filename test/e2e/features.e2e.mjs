@@ -7,7 +7,7 @@
 // Run with: npm run test:e2e   (skips itself when Chrome is not installed)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,6 +108,41 @@ test('search: the page finds posts in the browser, writes results as text, and n
   }
 });
 
+test('page-only site: nested navigation and search work on mobile', { skip, timeout: 120000 }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'blog-page-tree-'));
+  const server = await serve(dir);
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const blog = { title: 'Site', description: 'd', author: 'A', domain: origin, theme: 'default', search: true };
+  const pages = [
+    { path: 'pages/about.md', text: '---\nslug: about\ntitle: About\nmenu: 1\nstatus: published\n---\n\nAbout us.\n' },
+    { path: 'pages/team.md', text: '---\nslug: team\ntitle: Team\nparent: about\nmenu: 1\nstatus: published\n---\n\nMeet the otter.\n' },
+    { path: 'pages/people.md', text: '---\nslug: people\ntitle: People\nparent: team\nmenu: 1\nstatus: published\n---\n\nOur people.\n' },
+  ];
+  const built = buildSite({ blog, posts: pages, lock: {} });
+  assert.deepEqual(built.errors, []);
+  for (const [rel, text] of Object.entries(built.files)) {
+    await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+    await writeFile(path.join(dir, rel), text);
+  }
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `${origin}/`);
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
+    await until(page, 'document.readyState === "complete"');
+    assert.deepEqual(await page.evaluate("[...document.querySelectorAll('header.site nav a')].map((a) => a.pathname)"), ['/about/', '/about/team/', '/about/team/people/', '/search/']);
+    assert.equal(await page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), true, 'navigation fits the mobile viewport');
+    await go(page, `${origin}/search/?q=otter`);
+    await until(page, "document.querySelectorAll('[data-results] a').length === 1");
+    assert.equal(await page.evaluate("document.querySelector('[data-results] a').pathname"), '/about/team/');
+    await go(page, `${origin}/about/team/`);
+    assert.match(await page.evaluate('document.body.innerText'), /Meet the otter/);
+  } finally {
+    chrome.close();
+    server.close();
+    await rm(dir, { recursive: true });
+  }
+});
+
 // ---------- 2. the editor ----------
 const BLOG = JSON.stringify({ title: 'T', description: 'd', author: 'A', domain: 'https://example.github.io/blog', repo: 'example/blog', theme: 'default' });
 
@@ -194,6 +229,21 @@ test('editor: a standalone page is written and published; a post has search and 
     assert.ok(!JSON.parse(after['index/posts.json']).posts.some((p) => p.slug === 'about'));
     assert.equal(await page.evaluate('location.hash'), '#repo=example/blog&editpage=about', 'it reopens as a page');
 
+    await page.evaluate("location.hash = '#repo=example/blog&newpage'; 0");
+    await until(page, "document.querySelector('.ql-editor') && !document.querySelector('#view input[placeholder=Title]').value");
+    await setValue(page, '#view input[placeholder=Title]', 'Team');
+    await setValue(page, '#view input[aria-label="Parent page"]', 'about');
+    await page.evaluate("document.querySelector('#view input[type=number]').value = '1'; 0");
+    await page.evaluate("(() => { const s = [...document.querySelectorAll('#view select')].find((x) => [...x.options].some((o) => o.value === 'published')); s.value = 'published'; s.dispatchEvent(new Event('change')); })()");
+    await clickText(page, '#view button', 'Publish');
+    await commit(page);
+    const nested = await page.evaluate("window.__fake.files('example/blog')");
+    assert.match(nested['pages/team.md'], /\nparent: about\n/);
+    assert.match(nested['about/team/index.html'], /<h1>Team<\/h1>/);
+    assert.equal(JSON.parse(nested['index/posts.json']).pages.find((p) => p.slug === 'team').path, 'about/team');
+    await page.evaluate("location.hash = '#repo=example/blog&editpage=about'; 0");
+    await until(page, "document.querySelector('.ql-editor') && document.querySelector('#view h1').textContent === 'Edit: About'");
+
     // Both the editor's Back link and browser Back return to Pages, including a direct editor URL.
     await clickText(page, '#view button', 'Back');
     await until(page, "document.querySelector('#tab-pages') && !document.querySelector('#tab-pages').hidden");
@@ -226,7 +276,7 @@ test('editor: a standalone page is written and published; a post has search and 
     assert.equal(JSON.parse(done['blog.json']).search, true);
     assert.deepEqual(JSON.parse(done['blog.json']).pagination, { size: 5 });
     for (const f of ['search/index.html', 'search.json', 'webcli-search.js']) assert.ok(f in done, f);
-    assert.ok(!JSON.parse(done['search.json']).posts.some((p) => p.slug === 'about'), 'pages are not in the post search');
+    assert.ok(JSON.parse(done['search.json']).posts.some((p) => p.slug === 'about'), 'search includes pages');
   } finally {
     chrome.close();
     web.close();

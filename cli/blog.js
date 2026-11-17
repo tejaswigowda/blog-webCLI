@@ -34,6 +34,7 @@ import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs } from '../lib/customize.js';
 import { resolveOrder } from '../lib/order.js';
 import { dueOf, publishText } from '../lib/schedule.js';
+import { readIndex } from '../lib/index-data.js';
 
 const exists = (p) => fs.access(p).then(() => true, () => false);
 
@@ -76,7 +77,8 @@ async function generate(dir, { instead } = {}) {
     console.log('fetching the pinned theme (as data) …');
     packs = await loadPacks(github(), validated);
   }
-  return buildSite({ blog, posts, lock, ...packs, orderList });
+  const previousIndex = await readIndex(async (p) => (await exists(path.join(dir, p)) ? fs.readFile(path.join(dir, p), 'utf8') : null));
+  return buildSite({ blog, posts, lock, ...packs, orderList, previousIndex });
 }
 
 // Generated files that exist only while a theme or a feature is in use.
@@ -136,6 +138,10 @@ async function build(dir) {
   const r = await generate(dir);
   report(r);
   if (r.errors.length) return 1;
+  for (const [rel, content] of Object.entries(r.sourceUpdates || {})) {
+    await fs.writeFile(path.join(dir, rel), content);
+    console.log(`preserved old address in ${rel}`);
+  }
   const expected = new Set(Object.keys(r.files));
   for (const [rel, content] of Object.entries(r.files)) {
     const f = path.join(dir, rel);
@@ -164,6 +170,7 @@ async function check(dir) {
   if (r.errors.length) return 1;
   const expected = new Set(Object.keys(r.files));
   const diffs = [];
+  for (const rel of Object.keys(r.sourceUpdates || {})) diffs.push(`differs  ${rel} (old address must be recorded)`);
   for (const [rel, content] of Object.entries(r.files)) {
     const f = path.join(dir, rel);
     const have = (await exists(f)) ? await fs.readFile(f, 'utf8') : null;

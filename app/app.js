@@ -1444,6 +1444,7 @@ async function editorView(repo, r) {
     tags: h('input', { value: (m.tags || []).join(', '), placeholder: 'video, git', disabled: correcting }),
     author: h('input', { value: m.author || '', placeholder: blog.author || 'Defaults to the blog\'s author', disabled: correcting }),
     menu: h('input', { type: 'number', min: 0, max: 99, value: m.menu || '', placeholder: 'not in the menu', disabled: correcting }),
+    parent: h('input', { value: m.parent || '', placeholder: 'parent page slug (optional)', 'aria-label': 'Parent page', disabled: correcting }),
     publish_at: h('input', { type: 'datetime-local', value: m.publish_at || '', disabled: correcting, 'aria-label': 'Publish at' }),
     status: h('select', { disabled: correcting }, (isPageKind ? ['draft', 'published'] : ['draft', 'scheduled', 'published']).map((s) => h('option', { value: s, selected: s === m.status }, s))),
     cover: h('input', { value: m.cover || '', placeholder: 'auto, or asset:images/cover.png', disabled: correcting, style: 'flex:1' }),
@@ -1512,7 +1513,7 @@ async function editorView(repo, r) {
     h('h1', {}, correcting ? `Correct: ${m.title}` : isNew ? `New ${word}` : `Edit: ${m.title}`),
     h('div', { class: 'cols' },
       h('div', {},
-        h('div', { class: 'row' }, field('Title', f.title), field('Slug (the URL — never changes)', f.slug)),
+        h('div', { class: 'row' }, field('Title', f.title), field(isPageKind ? 'Slug (page ID — never changes)' : 'Slug (the URL — never changes)', f.slug)),
         h('div', { class: 'row' }, field('Cover', h('div', { style: 'display:flex;gap:.4rem' }, f.cover, coverUpload, coverAuto), 'Upload an image, or auto: the post\'s first image, else the poster of its first video, else the blog\'s cover. It is the preview when the post is shared.'), field('Description', f.description)),
         sharing,
         editorEl,
@@ -1521,7 +1522,7 @@ async function editorView(repo, r) {
       h('div', { class: 'side' }, h('div', { class: 'card' }, h('div', { class: 'card-header' }, correcting ? 'Propose' : 'Publish'), h('div', { class: 'card-body' },
         correcting ? h('div', {}, field('Note for the pull request', note), canPush ? null : h('div', { class: 'err' }, 'You do not have write access to this repository. ', outbound('Propose the change on GitHub instead', `https://github.com/${plainRepo}/edit/${branch}/${at(folder, `${isPageKind ? 'pages' : 'posts'}/${r.post}.md`)}`, { class: 'link' }), ' — it forks and opens the pull request for you.')) : null,
         isPageKind
-          ? h('div', { class: 'row' }, field('Menu position', f.menu, 'A number puts the page in the header menu, lowest first. Leave blank to keep it out of the menu.'), field('Status', f.status))
+          ? [field('Parent page', f.parent, 'Use the parent page slug, or leave blank for a top-level page. Moving preserves the old address.'), h('div', { class: 'row' }, field('Menu position', f.menu, 'Order among pages with the same parent. Leave blank to keep a leaf out of the menu.'), field('Status', f.status))]
           : [field('Author', f.author, 'Posts by more than one author get an author page each.'), h('div', { class: 'row' }, field('Date', h('div', { style: 'display:flex;gap:.4rem' }, f.date, f.time), dateNote), field('Tags', f.tags), field('Status', f.status)), scheduleRow],
         h('div', { class: 'actions' }, go, !isNew && !correcting && existing ? h('button', { type: 'button', class: 'danger', icon: 'trash', onclick: (e) => deleteContent(repo, { slug: existing.post.slug, kind, ref: r.ref, button: e.currentTarget }) }, `Delete ${word}`) : null),
         deploy.el,
@@ -1536,7 +1537,7 @@ async function editorView(repo, r) {
   const readFields = () => ({
     title: f.title.value, slug: f.slug.value.trim(), date: f.date.value ? (f.time.value ? `${f.date.value}T${f.time.value}` : f.date.value) : '', status: f.status.value,
     tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), description: f.description.value, seo_title: f.seo_title.value, image: f.image.value,
-    canonical: f.canonical.value, noindex: f.noindex.checked, cover: f.cover.value, aliases: existing ? existing.post.meta.aliases : undefined,
+    canonical: f.canonical.value, noindex: f.noindex.checked, cover: f.cover.value, parent: isPageKind ? f.parent.value.trim() : undefined, aliases: existing ? existing.post.meta.aliases : undefined,
   });
   const stats = createStatsPanel({
     h, gh, where: repo, repo: plainRepo, folder, branch, blog, lock: cache.lock, kind, hasPages: !!info.has_pages, link,
@@ -1664,7 +1665,7 @@ async function editorView(repo, r) {
     };
     // a page has a menu position and nothing dated; a post has a date, tags and an author
     const vals = isPageKind
-      ? { ...common, menu: f.menu.value.trim() }
+      ? { ...common, parent: f.parent.value.trim(), menu: f.menu.value.trim() }
       : { ...common, date: f.date.value && f.time.value ? `${f.date.value}T${f.time.value}` : f.date.value, tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), author: f.author.value.trim() };
     const slug = existing ? existing.post.slug : f.slug.value.trim();
     if (!SLUG_RE.test(slug)) throw new Refusal('bad-frontmatter', `slug "${slug}" must be lowercase letters, digits and hyphens`);

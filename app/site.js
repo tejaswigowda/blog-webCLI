@@ -76,7 +76,8 @@ async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, o
   // a manual order is an authored file (order.json) beside blog.json; the generator reads it, never writes it
   const order = resolveOrder(blog);
   const orderList = orderText !== undefined ? orderText : order.by === 'manual' && tree.has(order.list) ? await gh.readText(repo, prefix + order.list, head.sha) : null;
-  const site = buildSite({ blog: blogText, posts, lock, ...packs, orderList });
+  const previousIndex = tree.has('index/posts.json') ? await readIndex((p) => gh.readText(repo, prefix + p, head.sha)) : null;
+  const site = buildSite({ blog: blogText, posts, lock, ...packs, orderList, previousIndex });
   if (site.errors.length) {
     const e = new Refusal(site.errors[0].code, site.errors.map((x) => x.detail + (x.where ? ` (${x.where})` : '')).join('\n'));
     e.all = site.errors;
@@ -172,7 +173,7 @@ async function computeChanges(gh, ctx) {
   const sidecarPath = `comments/${POST_PATH.exec(newPost.path)?.[1]}.json`;
   const posts = [...(ctx.newComments !== undefined ? others.filter((o) => o.path !== sidecarPath) : others), { path: newPost.path, text: newPost.text }, ...(ctx.newComments ? [{ path: sidecarPath, text: ctx.newComments }] : [])];
   const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, orderText: ctx.orderText });
-  const out = { ...site.files, [newPost.path]: newPost.text };
+  const out = { ...site.files, [newPost.path]: newPost.text, ...site.sourceUpdates };
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
   const changes = [];
   for (const [path, content] of Object.entries(out)) {
@@ -182,7 +183,7 @@ async function computeChanges(gh, ctx) {
   changes.push(...staleOptional(site, tree, prefix));
   if (prevIndex) {
     // a post or page that is gone, or back to a draft, loses its generated page
-    const now = new Set([...site.index.map((e) => e.path || e.slug), ...(site.pages || []).map((p) => p.slug)]);
+    const now = new Set([...site.index.map((e) => e.path || e.slug), ...(site.pages || []).map((p) => p.path || p.slug)]);
     for (const e of [...(prevIndex.posts || []), ...(prevIndex.pages || [])]) {
       const p = `${e.path || e.slug}/index.html`;
       if (!now.has(e.path || e.slug) && tree.has(p) && !(p in site.files)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
@@ -356,7 +357,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
   }
 
   const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock });
-  const out = { 'blog.json': blogText, ...site.files };
+  const out = { 'blog.json': blogText, ...site.files, ...site.sourceUpdates };
   for (const x of extraPosts) if (!tree.has(x.path)) out[x.path] = x.text;
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
   const changes = [];

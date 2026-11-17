@@ -66,13 +66,13 @@ function failsafe(parsed, blog, error) {
     found = { base: null, certain: false, error: e };
   }
   const why = error instanceof Refusal ? `Refused: ${error.code}. ${error.detail}` : error.message || String(error);
-  const target = found.base ? (parsed.post ? staticPostUrl(found.base, parsed.post) : `${found.base}/`) : null;
+  const target = found.base ? (parsed.path ? `${found.base}/${parsed.path.replace(/^\/+/, '')}` : parsed.post ? staticPostUrl(found.base, parsed.post) : `${found.base}/`) : null;
   page.innerHTML = notice(
     `<b>This blog could not be loaded from GitHub.</b><p>${esc(why)}</p>${
       target
         ? `<p>It may be readable on its own site: <a href="${esc(target)}" rel="noopener noreferrer">${esc(target)}</a>${found.certain ? '' : ' (the usual GitHub Pages address for this repository; it may not exist)'}.</p>`
         : `<p>${esc(found.error.message)}</p>`
-    }<p><a href="${esc(hashFor(parsed, { post: parsed.post }))}" id="retry">Try again</a></p>`,
+    }<p><a href="${esc(hashFor(parsed, { post: parsed.post, path: parsed.path }))}" id="retry">Try again</a></p>`,
     true,
   );
   q(page, '#retry').addEventListener('click', (e) => {
@@ -163,7 +163,7 @@ async function preview(parsed, mine) {
   const site = { ...loaded, blog: withRepoOverrides(loaded.blog, parsed) }; // the address may point the media elsewhere
   const blog = site.blog;
   // &post=<slug> is the post's id; where it lives is the index's business (a dated permalink puts it at 2024/05/<slug>)
-  const named = parsed.post ? site.index.posts.find((e) => e.slug === parsed.post) : null;
+  const named = parsed.post ? [...site.index.posts, ...(site.index.pages || [])].find((e) => e.slug === parsed.post) : null;
   const file = fileFor(parsed.post ? `${(named && named.path) || parsed.post}/` : parsed.path || '');
   const source = sourceOf(site, file);
   const text = source ? await gh.readText(plain, at(folder, source), parsed.ref) : null;

@@ -10,11 +10,27 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkPageTreeNeutral } from '../cli/build-live.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENTRIES = ['lib/blog.js', 'lib/live-render.js', 'lib/preview.js'].map((f) => path.join(root, f));
 const RUNTIME_DIRS = ['lib/', 'vendor/moment/', 'vendor/animate/', 'vendor/temml/'];
 const GLOBALS = ['document', 'window', 'self', 'localStorage', 'sessionStorage', 'navigator', 'DOMParser', 'XMLHttpRequest', 'HTMLElement', 'process', 'Buffer', 'require', '__dirname', '__filename', 'global'];
+
+test('the page tree build guard refuses Node imports and DOM globals', async () => {
+  await checkPageTreeNeutral();
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'page-tree-neutral-'));
+  try {
+    const nodeFile = path.join(dir, 'node.mjs');
+    const domFile = path.join(dir, 'dom.mjs');
+    await fs.writeFile(nodeFile, "import fs from 'node:fs'; export const f = fs;\n");
+    await fs.writeFile(domFile, 'export const f = () => globalThis.document.title;\n');
+    await assert.rejects(checkPageTreeNeutral(nodeFile));
+    await assert.rejects(checkPageTreeNeutral(domFile), /DOM or Node globals/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
 
 // -> { inputs: [file…], globals: [name…] }; rejects when something cannot be resolved on a neutral platform.
 export async function inspectRenderer(entries = ENTRIES) {

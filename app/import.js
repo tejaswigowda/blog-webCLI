@@ -316,6 +316,7 @@ async function planAddition(gh, { place, prefix, head, whole, b, assetMap, chang
   const site = await generateSite(gh, { repo, prefix, head, tree, blogText, posts: [...existing, ...merged.files], lock: pins });
   const out = { ...site.files };
   for (const f of merged.files) out[f.path] = f.text;
+  Object.assign(out, site.sourceUpdates);
   if (newKeys.length) out['assets.lock.json'] = json(sortedLock(pins));
   for (const [rel, content] of Object.entries(out)) {
     const bytes = enc.encode(content);
@@ -382,6 +383,7 @@ async function runImport(gh, plan, onProgress) {
       const site = await generateSite(gh, { repo: plan.repo, prefix: b.prefix, head: plan.head, tree: b.addition.tree, blogText: b.blogText, posts: [...b.addition.existing, ...b.files], lock: pins });
       const out = { ...site.files };
       for (const f of b.files) out[f.path] = f.text;
+      Object.assign(out, site.sourceUpdates);
       if (b.lockKeys.length) out['assets.lock.json'] = json(sortedLock(pins));
       for (const [rel, content] of Object.entries(out)) if (b.addition.tree.get(rel) !== (await gitBlobSha(enc.encode(content)))) files.push({ path: b.prefix + rel, content });
       continue;

@@ -1162,11 +1162,29 @@ description: Optional; defaults to the first paragraph.
 | `noindex` | no | `true` adds `<meta name="robots" content="noindex">` and leaves the post out of the sitemap; it stays in the index and the feed |
 
 A **standalone page** is `pages/<slug>.md`, for an About or Contact page. It has the same frontmatter except that
-`date` is optional and ignored, and it takes no `tags`; it also takes `menu: <0-99>`, which lists it in every
-page's header (lowest first; no value, no menu entry). A page is not a post: it is in no index, feed, archive,
-tag page or search, and has no previous/next, no comments and no subscribe form. It is in the sitemap. Posts and
-pages share one address space (`slug-collision` for a repeat). Pages are not drawn early by the live script
+`date` is optional and it takes no `tags`. A page is not a post: it is absent from the post list, feed, archive and
+tags, and has no previous/next, comments or subscribe form. It is in the sitemap and, when enabled, search. Posts and
+pages share one slug space (`slug-collision` for a repeat). Pages are not drawn early by the live script
 (see [Known limits](#known-limits)).
+
+Pages can have a `parent:` page slug; files remain flat and the address is derived from the chain:
+
+```yaml
+slug: team
+title: Our team
+status: published
+parent: about
+menu: 2
+```
+
+`pages/team.md` then publishes at `/about/team/`. `menu: <0-99>` orders siblings by position, then slug; a page
+with visible descendants appears in the menu even without its own position. Published parents are required for
+published children. The build refuses `no-such-parent`, `page-cycle`, and `page-too-deep` (more than three levels).
+The index records each resolved path for the generator, live renderer and reader. When an existing page moves,
+the editor or CLI records its old address in `aliases`, including for each affected descendant. A conflicting
+old address is refused rather than overwritten. Run `blog-webcli build` after editing a parent outside the editor
+and commit the updated source files along with the generated output; `check` reports a move not yet recorded.
+The platform-neutral MIT module [lib/page-tree.js](lib/page-tree.js) resolves and renders the tree.
 
 Frontmatter is a small YAML subset (scalars, inline and block lists, comments). Edits touch one key at a time,
 so a round trip never rewrites what you wrote.
@@ -1182,10 +1200,10 @@ and follows it, and how the editor deletes one when its alias is removed.
 
 * An alias is a plain path: letters (any script), digits and `. _ ~ -`, at most 8 segments, no query string, scheme or space.
   `?p=123` addresses cannot be redirected (`bad-alias`). At most 25 per page.
-* It is **refused** (`alias-collision`, naming the file) when it is the page's own address, is claimed by another page, is below a
-  post or page address (a draft's included), or is below something the generator or the repository owns (`tags`, `feed.xml`,
+* It is **refused** (`alias-collision`, naming the file) when it is a current address, is claimed by another page, is below a
+  post address or a reserved draft address, or is below something the generator or the repository owns (`tags`, `feed.xml`,
   `images`, …). A draft's aliases are not written, and not checked against other aliases, until it is published.
-* On a blog with a dated `permalink` an alias may not be, or sit below, any post's or page's address; an alias equal to the post's own address is refused too (list only what it used to have).
+  An alias may be below a live standalone page, so an old child address can redirect while its former parent remains.
 * `blog-webcli build` removes the redirect page of an alias that is gone, and the folders it leaves empty; `check` reports it as
   stale. Only a page carrying the generator's mark is ever removed.
 * Redirects work only when the new blog is served where the old site was (the blog at the root of the same domain, or the same

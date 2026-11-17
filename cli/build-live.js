@@ -146,9 +146,20 @@ export async function appBuild() {
 // Kept for the existing drift test.
 export const buildLive = () => buildTarget(TARGETS[0]);
 
+export async function checkPageTreeNeutral(entry = path.join(root, 'lib/page-tree.js')) {
+  const globals = ['document', 'window', 'self', 'navigator', 'localStorage', 'sessionStorage', 'DOMParser', 'HTMLElement', 'XMLHttpRequest', 'process', 'Buffer', 'require', '__dirname', '__filename', 'global'];
+  const names = [...globals, ...globals.map((name) => `globalThis.${name}`)];
+  const result = await build({
+    entryPoints: [entry], bundle: true, write: false, format: 'esm', platform: 'neutral', treeShaking: false, logLevel: 'silent',
+    define: Object.fromEntries(names.map((name) => [name, '__PAGE_TREE_PLATFORM_GLOBAL__'])),
+  });
+  if (result.outputFiles.some((file) => file.text.includes('__PAGE_TREE_PLATFORM_GLOBAL__'))) throw new Error('page tree must not use DOM or Node globals');
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const check = process.argv.includes('--check');
   let stale = false;
+  await checkPageTreeNeutral();
   // first: the live renderer bundles it
   const moment = await momentModule();
   const mfile = path.join(root, 'vendor', 'moment', 'moment.esm.js');
