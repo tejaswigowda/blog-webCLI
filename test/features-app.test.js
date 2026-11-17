@@ -184,5 +184,12 @@ test('the CLI builds pages/, removes what a switched-off feature left, and check
   await fs.writeFile(path.join(dir, 'posts', 'markdown-is-the-format.md'), post.replace(/^tags:.*\n/m, ''));
   assert.equal((await cli('build')).code, 0);
   await assert.rejects(fs.access(path.join(dir, 'tags', 'writing')));
+
+  await fs.mkdir(path.join(dir, 'about', 'kept'), { recursive: true });
+  await fs.writeFile(path.join(dir, 'about', 'kept', 'notes.txt'), 'Keep this file.');
+  await fs.rm(path.join(dir, 'pages', 'about.md'));
+  assert.equal((await cli('build')).code, 0);
+  await assert.rejects(fs.access(path.join(dir, 'about', 'index.html')));
+  assert.equal(await fs.readFile(path.join(dir, 'about', 'kept', 'notes.txt'), 'utf8'), 'Keep this file.');
   await fs.rm(dir, { recursive: true });
 });

@@ -36,6 +36,32 @@ const POSTS = [
   post('secret', { date: '2026-04-01', tags: ['hidden-tag'], status: 'draft' }),
 ];
 
+test('page-only and all-draft sites skip blog artifacts and search published page bodies', () => {
+  for (const drafts of [[], [post('draft', { status: 'draft', tags: ['hidden'] })]]) {
+    const r = ok({ search: true }, [page('about', { body: 'A distinctive seahorse lives here.' }), page('hidden', { status: 'draft', body: 'secret narwhal' }), ...drafts]);
+    const { files } = r;
+    assert.ok(r.warnings.includes('No published posts: skipped feed, archive, tags, authors.'));
+    for (const name of Object.keys(files)) assert.doesNotMatch(name, /^(feed(?:\.xml|\/)|archive\/|tags\/|authors\/)/);
+    for (const name of ['index.html', 'about/index.html', 'search/index.html']) {
+      assert.doesNotMatch(files[name], /rel="alternate"|href="[^"]*feed\.xml"|href="[^"]*archive\//);
+    }
+    assert.doesNotMatch(files['index.html'], /<ul class="posts/);
+    assert.match(files['sitemap.xml'], /https:\/\/example\.test\/about\//);
+    const records = JSON.parse(files['search.json']).posts;
+    assert.deepEqual(rank(records, 'seahorse').map((r) => r.post.slug), ['about']);
+    assert.deepEqual(rank(records, 'narwhal'), []);
+  }
+  const off = ok({ search: false, seo: { sitemap: false } }, [page('about')]).files;
+  assert.ok(!('search.json' in off) && !('sitemap.xml' in off));
+});
+
+test('search includes standalone pages alongside posts', () => {
+  const { files } = ok({ search: true }, [post('alpha'), page('about', { body: 'Rare umbrella term.' })]);
+  const records = JSON.parse(files['search.json']).posts;
+  assert.deepEqual(rank(records, 'umbrella').map((r) => r.post.slug), ['about']);
+  assert.ok(records.some((r) => r.slug === 'alpha'));
+});
+
 test('affiliate gate checks rendered links in content and navigation without adding disclosure text', () => {
   const config = { affiliateDomains: ['shop.example'] };
   for (const body of [

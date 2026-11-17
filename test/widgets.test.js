@@ -5,7 +5,7 @@ import { widgetHtml } from '../lib/widget-markup.js';
 import { WIDGET_CLASSES } from '../lib/widgets.js';
 import { checkHtmlBlock, tokenizeHtml } from '../lib/rawhtml.js';
 import { deltaToMarkdownChecked, hasMath, mdToDelta } from '../lib/markdown.js';
-import { deltaToHtml } from '../lib/html.js';
+import { deltaToHtml, excerpt } from '../lib/html.js';
 import { buildSite } from '../lib/blog.js';
 import { EXAMPLE_BLOG } from '../lib/sample.js';
 import { headingNavigation } from '../lib/headings.js';
@@ -59,6 +59,7 @@ test('Markdown widget preserves source, renders the subset, and checks its asset
   const src = widgetHtml({ type: 'markdown', markdown: '## Heading\n\nA **bold** [link](https://example.org/).\n' });
   assert.equal(deltaToMarkdownChecked(mdToDelta(src + '\n')).md, src + '\n');
   assert.match(deltaToHtml(mdToDelta(src + '\n')), /<div class="wc-markdown"><h2>Heading<\/h2>\n<p>A <strong>bold<\/strong>/);
+  assert.equal(excerpt(mdToDelta(src + '\n')), 'A bold link.');
   assert.throws(() => widgetHtml({ type: 'markdown', markdown: '<script>bad()</script>\n' }), /HTML blocks|not allowed/);
   assert.throws(() => widgetHtml({ type: 'markdown', markdown: 'not canonical' }), /canonical/);
   const body = widgetHtml({ type: 'markdown', markdown: '![Poster](asset:images/missing.png)\n' });

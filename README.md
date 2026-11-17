@@ -1,8 +1,8 @@
-# blog-webCLI
+# blog-webCLI: a site builder
 
-A blog is one or more GitHub repositories. `https://blog.webcli.app/#repo=owner/blog`
+Build and publish a text-first website or blog from GitHub repositories. `https://blog.webcli.app/#repo=owner/blog`
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
-per-blog deployment.
+per-site deployment. This is not a visual or drag-and-drop builder or a template marketplace.
 
 [About blog-webCLI](about/) and [hands-on tutorials](about/tutorials/): recreate webcli.app, migrate a WordPress site,
 and rebuild a site's look step by step. [webcli.app](https://webcli.app/) is a live showcase; the Lyceum Shorts
@@ -1979,16 +1979,20 @@ tag's total post count, since that would change it every time. `rel="prev"` and 
 the pages once (every `page/N/` becomes a different set of posts), so it suits a blog nobody links to by page number; a post's own address
 never changes.
 
-**Search.** With `"search": true`, `search/` has a box, and `search.json` has the title, date, tags, excerpt and the
-first 20 000 characters of text of every published post. The one script on that page (`webcli-search.js`, built by
+**Search.** With `"search": true`, `search/` has a box, and `search.json` includes published posts and standalone pages,
+including the first 20 000 characters of text. The one script on that page (`webcli-search.js`, built by
 `node cli/build-live.js` from [lib/search-client.js](lib/search-client.js)) fetches that file from the same origin and
 matches in the reader's browser: nothing is sent anywhere, and results are drawn as text, never markup. Every term must match;
 a term in the title counts most, then tags, excerpt, body; ties keep the blog's order. `search/?q=…` works as a link.
-Without scripting the page says so and points at the archive. The search page is `noindex` and not in the sitemap. The
-index is as of the last build, not the live copy. A blog of **more than 500 posts** keeps the index in **16 shards**
+Without scripting the page says so and points at the archive when one exists. The search page is `noindex` and not in the sitemap. The
+index is as of the last build, not the live copy. A site with **more than 500 searchable posts and pages** keeps the index in **16 shards**
 (`search/data-0.json` … `data-15.json`, by a hash of the slug) listed by `search.json`, so a new post changes one file of about a
 megabyte in ten thousand posts and not the whole index; the search page reads the list and every shard, and equal scores then keep the
 newest first rather than the blog's order.
+
+With no published posts (including when all posts are drafts), the build skips the feed, archive, tags and authors,
+reports the skip, and omits the feed links and empty post listing. The sitemap still includes published pages unless
+disabled by SEO settings; search indexes those pages when enabled.
 
 **Index.** A blog of more than 500 posts keeps `index/posts.json` as a small manifest (version 3: the order, the pages, the old addresses)
 plus 16 shards `index/posts-N.json` holding the entries, split by the same hash as the search shards, so a new post changes the manifest and
@@ -2282,7 +2286,7 @@ Math refusals: `dollar-math` · `unclosed-math` · `math-macro` · `bad-math` ·
 | S4 search runs in the browser against `search.json`, writes results as text, loads one same-origin script on one page | `test/features.test.js` (ranking, files), `test/e2e/features.e2e.mjs` (real Chrome: a hostile post, the request log) |
 | S5 JSON-LD cannot end its `<script>`; `seo_title`, `image`, `canonical`, `noindex` each do exactly what they say | `test/features.test.js` |
 | S6 comments, analytics, CDN script links and the subscribe form are off by default; CDN links require an allowed HTTPS host and integrity hash | `test/features.test.js`, `test/settings.test.js`, `test/e2e/themes.e2e.mjs` |
-| S7 standalone pages: no date or tags, in the menu by position, in no index, feed or search; drafts invisible; one address space | `test/features.test.js`, `test/features-app.test.js`, `test/e2e/features.e2e.mjs` |
+| S7 standalone pages: no required date or tags, in the menu by position and in search but not the post index or feed; drafts invisible; one address space | `test/features.test.js`, `test/features-app.test.js`, `test/e2e/features.e2e.mjs` |
 | S8 every feature on, the live renderer's post is byte-identical to the generator's; regenerating in any input order is byte-identical | `test/features.test.js` |
 | S9 turning a feature off deletes what it wrote, in the editor's pre-flight and in the CLI; `check` finds a stale file | `test/features-app.test.js` |
 | W1 a WordPress export reads into posts, pages, drafts, tags, authors, the menu and the library; trash and other types are not imported; a DOCTYPE entity is never expanded | `test/wp-content.test.js` |

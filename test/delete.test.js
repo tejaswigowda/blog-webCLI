@@ -32,6 +32,25 @@ function assertBuilt(files, what) {
   assert.deepEqual(stale, [], `${what}: generated files a build would not write`);
 }
 
+test('delete: the last published post removes both feed files and keeps page search', async () => {
+  const blog = { title: 'Site', description: 'Pages', author: 'Ada', domain: 'https://example.test', repo: 'example/blog', search: true };
+  const posts = [
+    { path: 'posts/one.md', text: '---\nslug: one\ntitle: One\ndate: 2026-01-01\nstatus: published\n---\n\nPost.\n' },
+    { path: 'pages/about.md', text: '---\nslug: about\ntitle: About\nstatus: published\n---\n\nFind seahorses.\n' },
+  ];
+  const built = buildSite({ blog, posts, lock: {} });
+  assert.deepEqual(built.errors, []);
+  const files = { 'blog.json': JSON.stringify(blog), ...Object.fromEntries(posts.map((p) => [p.path, p.text])), ...built.files };
+  const { server, gh } = await connect({ 'example/blog': files });
+  const plan = await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'one', kind: 'post', remove: true });
+  await executePlan(gh, plan);
+  const after = server.files('example/blog');
+  assert.ok(!('feed.xml' in after) && !('feed/index.html' in after));
+  assert.ok(!('archive/index.html' in after));
+  assert.match(text(after['search.json']), /seahorses/);
+  assert.doesNotMatch(text(after['index.html']), /feed\.xml/);
+});
+
 test('delete: a post goes, with its page, its place in every list and its redirects; the rest is what a build of the others gives', async () => {
   const base = await readDirFiles(path.join(EX, 'blog'));
   const files = { ...base, 'posts/old.md': `---\nslug: old\ntitle: Old\ndate: 2026-02-02\ntags: [video]\naliases: [2019/old-post]\nstatus: published\n---\n\nOld words.\n` };

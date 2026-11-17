@@ -143,12 +143,7 @@ async function build(dir) {
     await fs.writeFile(f, content);
   }
   for (const rel of await staleDirs(dir, expected)) {
-    await fs.rm(path.dirname(path.join(dir, rel)), { recursive: true });
-    // an old address is a few folders down: the ones it leaves empty go too
-    for (let d = path.dirname(path.dirname(rel)); d && d !== '.'; d = path.dirname(d)) {
-      if ((await fs.readdir(path.join(dir, d))).length) break;
-      await fs.rmdir(path.join(dir, d));
-    }
+    await removeWithEmptyParents(dir, rel);
     console.log(`removed stale ${rel}`);
   }
   for (const rel of await staleTrees(dir, expected)) {
@@ -156,7 +151,7 @@ async function build(dir) {
     console.log(`removed stale ${rel}`);
   }
   for (const f of OPTIONAL) if (!expected.has(f) && (await exists(path.join(dir, f)))) {
-    await fs.rm(path.join(dir, f));
+    await removeWithEmptyParents(dir, f);
     console.log(`removed stale ${f}`);
   }
   console.log(`built ${r.index.length} published post(s), ${expected.size} file(s)`);

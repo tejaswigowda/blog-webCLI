@@ -48,6 +48,15 @@ const same = async (blog, label) => {
   return { r, site, texts, htmls };
 };
 
+test('preview: page-only sites do not preview a nonexistent feed', async () => {
+  const { r, site, texts } = await siteOf(blogJson({ search: true }), [page('about')]);
+  for (const file of ['index.html', 'about/index.html', 'search/index.html']) {
+    const source = sourceOf(site, file);
+    assert.equal(previewHtml(site, file, { text: source ? texts.get(source) : null }).html, r.files[file]);
+  }
+  assert.equal(previewHtml(site, 'feed/index.html').status, 404);
+});
+
 test('preview: every page of a rich blog is byte-identical to the deployed one (index, pages, tags, authors, archive, search, posts, standalone pages)', async () => {
   const { htmls } = await same(blogJson({ pagination: { size: 2 }, search: true, content: { base: 'https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{path}' } }), 'paged, live, search');
   for (const want of ['index.html', 'page/2/index.html', 'tags/index.html', 'tags/video/index.html', 'authors/ada/index.html', 'archive/index.html', 'search/index.html', 'alpha/index.html', 'about/index.html']) assert.ok(htmls.includes(want), want);
