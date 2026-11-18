@@ -1082,7 +1082,8 @@ nothing else. On a big blog that is the cost of changing the CSS: 8,000 posts of
 colours is then `blog.json` and `style.css`, and no page. Turning it on or off rewrites every page once. The file is cached by GitHub Pages
 for a few minutes, so a change reaches a reader who has the old file in a few minutes, not at once. What stays in every page, and still
 rewrites every page when it changes: the title, the menu, the header and footer, the date format. The `/blog/` reader applies the same CSS;
-a page it shows is the page the build writes. (`test/linked-style.test.js`)
+a page it shows is the page the build writes. Publishing a single post on a large blog also refreshes the shared stylesheet when its
+generated CSS has changed, without reading or rewriting the whole archive. (`test/linked-style.test.js`, `test/incremental.test.js`)
 
 #### Anonymous comments, no server
 

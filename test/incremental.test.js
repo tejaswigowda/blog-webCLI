@@ -61,6 +61,19 @@ const same = (state, want, what) => {
 
 const N = SEARCH_SHARD_OVER + 20;
 
+test('incremental publishing refreshes a stale linked stylesheet without reading the whole archive', async () => {
+  const blog = BLOG({ stylesheet: 'linked' });
+  const posts = corpus(N);
+  const before = full(blog, posts);
+  before.files['style.css'] = '/* Stylesheet from an older generator. */\n';
+  const change = make(100, { body: '![Logo](https://example.test/logo.svg){.medium}' });
+  const r = await incremental({ blog, before, beforePosts: posts, change });
+  assert.ok(!r.reason, r.reason);
+  assert.match(r.res.files['p100/index.html'], /class="img-medium"/);
+  assert.ok(r.need.slugs.length <= 3 + FEED_LIMIT, 'Only the changed post, neighbours and feed sources are needed');
+  same(r.state, full(blog, r.afterPosts).files, 'edit with an old shared stylesheet');
+});
+
 test('incremental publishing falls back to a full site check when affiliate domains are configured', async () => {
   const blog = BLOG({ affiliateDomains: ['shop.example'] });
   const posts = corpus(4);
