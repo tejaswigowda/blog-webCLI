@@ -8,6 +8,7 @@ import { SEARCH_SOURCE } from '../lib/search-source.js';
 import { rank, snippet, tokenize } from '../lib/search-client.js';
 import { slugify, groupTags, paginate, byYear } from '../lib/taxonomy.js';
 import { loadSite, renderFromSite } from '../lib/live-render.js';
+import { previewHtml } from '../lib/preview.js';
 import { stripData } from './helpers.js';
 import { validateScripts } from '../lib/embeds.js';
 
@@ -96,6 +97,40 @@ test('live rebuilding refuses a newly unmarked affiliate link', async () => {
   map.set('assets.lock.json', '{}');
   const site = await loadSite(async (p) => map.has(p) ? enc.encode(map.get(p)) : null, { anyBlog: true });
   assert.throws(() => renderFromSite(site, { slug: 'deal', text: post('deal', { body: '[Offer](https://shop.example/)' }).text }), (e) => e.reason === 'affiliate-link');
+});
+
+test('affiliate marking and disclosure agree in static, live and reader pages', async () => {
+  const blog = blogJson({ repo: 'me/blog', content: { base: 'https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}' }, affiliates: ['amazon.com'], disclosure: 'We earn <commissions> & fees.', customize: { header: { links: [{ label: 'Shop', url: 'https://amazon.com/' }] } } });
+  const body = '[Buy](https://www.amazon.com/a) [No](https://notamazon.com/a) [No](https://amazon.com.example.net/a)\n\n<p><a rel="noopener noopener me" href="//amazon.com/b">Offer</a></p>';
+  const source = post('deal', { body });
+  const standalone = page('about', { body: '[Buy](https://amazon.com/)' });
+  const built = buildSite({ blog, posts: [source, standalone], lock: {} });
+  assert.deepEqual(built.errors, []);
+  const html = built.files['deal/index.html'];
+  assert.match(html, /href="https:\/\/www\.amazon\.com\/a" rel="noopener noreferrer sponsored"/);
+  assert.match(html, /href="https:\/\/notamazon\.com\/a" rel="noopener noreferrer"/);
+  assert.match(html, /href="https:\/\/amazon\.com\.example\.net\/a" rel="noopener noreferrer"/);
+  assert.match(html, /rel="noopener me noreferrer sponsored" href="\/\/amazon\.com\/b"/);
+  assert.match(html, /<p class="affiliate-disclosure">We earn &lt;commissions&gt; &amp; fees\.<\/p>/);
+  assert.doesNotMatch(built.files['about/index.html'], /affiliate-disclosure/);
+  assert.match(built.files['index.html'], /href="https:\/\/amazon\.com\/" rel="noopener noreferrer sponsored"/);
+  const map = new Map(Object.entries(built.files));
+  map.set('blog.json', JSON.stringify(blog));
+  map.set('assets.lock.json', '{}');
+  const site = await loadSite(async (p) => map.has(p) ? enc.encode(map.get(p)) : null, { anyBlog: true });
+  assert.equal(renderFromSite(site, { slug: 'deal', text: source.text }).html, html);
+  assert.equal(previewHtml(site, 'deal/index.html', { text: source.text }).html, html);
+  assert.equal(previewHtml(site, 'index.html').html, built.files['index.html']);
+  assert.equal(source.text, post('deal', { body }).text);
+});
+
+test('invalid rel names its file, link and offending token', () => {
+  const result = build({}, [post('deal', { body: '<p><a rel="license invalid" href="https://shop.example/item">Offer</a></p>' })]);
+  assert.equal(result.errors[0]?.code, 'bad-rel');
+  assert.match(result.errors[0].message, /posts\/deal\.md.*https:\/\/shop\.example\/item.*invalid/);
+  for (const domains of [['https://amazon.com'], ['*.amazon.com'], 'amazon.com']) {
+    assert.throws(() => validateBlog(blogJson({ affiliates: domains })), (e) => e.code === 'bad-blog-json');
+  }
 });
 
 // ---------- taxonomy ----------

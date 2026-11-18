@@ -102,7 +102,7 @@ async function blogDir(extra = {}) {
   }
   return dir;
 }
-const cli = (args) => run('node', [path.join(root, 'cli', 'blog.js'), ...args]).then((r) => ({ code: 0, ...r }), (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
+const cli = (args) => run('node', ['--import', path.join(root, 'test', 'fetch-preload.mjs'), path.join(root, 'cli', 'blog.js'), ...args]).then((r) => ({ code: 0, ...r }), (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
 
 test('N6: the workflow step commits nothing when nothing is due, and flips every due post in one build', async () => {
   const dir = await blogDir();

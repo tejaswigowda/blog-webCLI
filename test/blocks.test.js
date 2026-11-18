@@ -27,9 +27,9 @@ test('authored link relations survive HTML block editing and are safely combined
   assert.equal(rt(src + '\n'), src + '\n');
   assert.match(html(src + '\n'), /rel="sponsored nofollow noopener noreferrer"/);
   assert.match(renderHtmlBlock('<a href="//shop.example/item" rel="sponsored noreferrer">Offer</a>'), /rel="sponsored noreferrer noopener"/);
-  for (const rel of ['external', 'sponsored sponsored', 'sponsored" onclick="x']) {
-    assert.throws(() => checkHtmlBlock(`<p><a href="https://shop.example/" rel="${rel}">Offer</a></p>`), code('bad-html'));
-  }
+  assert.throws(() => checkHtmlBlock('<p><a href="https://shop.example/" rel="external">Offer</a></p>'), code('bad-rel'));
+  assert.match(renderHtmlBlock('<a href="https://shop.example/" rel="sponsored sponsored">Offer</a>'), /rel="sponsored noopener noreferrer"/);
+  assert.throws(() => checkHtmlBlock('<p><a href="https://shop.example/" rel="sponsored" onclick="x">Offer</a></p>'), code('bad-html'));
   assert.throws(() => checkHtmlBlock('<p><a href="https://shop.example/" rel="sponsored" rel="nofollow">Offer</a></p>'), code('bad-html'));
 });
 

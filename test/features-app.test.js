@@ -201,7 +201,7 @@ test('the CLI builds pages/, removes what a switched-off feature left, and check
     await fs.mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
     await fs.writeFile(path.join(dir, rel), bytes);
   }
-  const cli = (...args) => run('node', [path.join(root, 'cli', 'blog.js'), ...args, dir]).then((r) => ({ code: 0, ...r }), (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
+  const cli = (...args) => run('node', ['--import', path.join(root, 'test', 'fetch-preload.mjs'), path.join(root, 'cli', 'blog.js'), ...args, dir]).then((r) => ({ code: 0, ...r }), (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
   await fs.mkdir(path.join(dir, 'pages'));
   await fs.writeFile(path.join(dir, 'pages', 'about.md'), ABOUT('menu: 1\n'));
   const blog = JSON.parse(await fs.readFile(path.join(dir, 'blog.json'), 'utf8'));

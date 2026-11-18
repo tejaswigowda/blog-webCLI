@@ -743,7 +743,9 @@ async function settingsView(repo, r) {
       'Search engines',
       h('div', { class: 'row' }, field('Twitter / X handle', input('seoTwitter', { placeholder: '@name' }), 'Added to link previews as twitter:site.')),
       h('div', {}, check('seoSitemap', 'Write sitemap.xml'), check('seoRobots', 'Write robots.txt (only where the blog is at the root of its address)'), check('seoNoindex', 'Ask search engines not to index this blog (a demo or a copy; also turns the sitemap off)')),
-      field('Affiliate domains', area('affiliateDomains', 3, { placeholder: 'example.com', spellcheck: 'false' }), 'One hostname per line. Links to these domains or their subdomains must have rel="sponsored" in an HTML block. No disclosure text is added automatically.'),
+      field('Automatically mark affiliate domains', area('affiliates', 3, { placeholder: 'example.com', spellcheck: 'false' }), 'One hostname per line. Outbound links to these domains and their subdomains are marked sponsored when rendered.'),
+      field('Post disclosure', area('disclosure', 3, { placeholder: 'This post may contain affiliate links.' }), 'Plain text shown on every post, including with JavaScript off.'),
+      field('Affiliate domains (strict gate)', area('affiliateDomains', 3, { placeholder: 'example.com', spellcheck: 'false' }), 'Optional legacy gate: links to these domains must already be marked sponsored after rendering, or publishing is refused.'),
       h('div', { class: 'hint' }, 'Switching one off stops it being updated; delete a file you no longer want. A robots.txt you wrote yourself is replaced while this is on.'),
     ),
     section(
@@ -931,7 +933,7 @@ async function previewTheme(repo, spec, label, startFresh = false) {
       // start fresh = the example blog with the theme's kit: its settings, its header picture and its home page
       const kit = theme.manifest && theme.manifest.kit;
       const shown = fresh ? { ...EXAMPLE_BLOG, theme: pin, ...(kit && kit.customize ? { customize: kit.customize } : {}) } : mineBlog;
-      const homeHtml = fresh && kit ? heroHtml(pin, theme.manifest) + (kit.home ? deltaToHtml(mdToDelta(kit.home), { resolve: (r) => r, strict: false, contract: theme.contract }) : '') : '';
+      const homeHtml = fresh && kit ? heroHtml(pin, theme.manifest, shown) + (kit.home ? deltaToHtml(mdToDelta(kit.home), { resolve: (r) => r, base: shown.domain, affiliates: shown.affiliates, strict: false, contract: theme.contract }) : '') : '';
       const entries = fresh ? EXAMPLE_ENTRIES : mineEntries;
       const logo = fresh ? null : logoUrl;
       const menu = fresh ? EXAMPLE_MENU : undefined;

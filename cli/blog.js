@@ -2,6 +2,7 @@
 // blog-webcli — generate, verify and normalise a blog repo.
 //   build [dir]   regenerate index, pages and feed (refuses on any error)
 //   check [dir]   regenerate in memory and fail on any difference (CI, gate B8)
+//   links [dir]   list outbound hosts in published posts and pages
 //   fmt   [dir]   rewrite posts into canonical markdown
 //   publish-due [dir] [--now <ISO time>]   publish the scheduled posts whose time has come, then build (the schedule workflow runs this)
 //   pin   [dir]   pin unpinned asset: references to commits, and verify video: release tags, via the GitHub API
@@ -27,8 +28,11 @@ import { licenceRecords } from '../lib/licences.js';
 import { importWordPress } from './wp-content-import.js';
 import { importWordPressTheme } from './wp-import.js';
 import { splitFile, joinFile } from '../lib/frontmatter.js';
-import { deltaToMd, mdToDelta } from '../lib/markdown.js';
-import { collectAssetRefs, parseAssetRef } from '../lib/assets.js';
+import { deltaToMd, markdownWidget, mdToDelta, parseInline } from '../lib/markdown.js';
+import { toLines } from '../lib/delta.js';
+import { tokenizeHtml } from '../lib/rawhtml.js';
+import { matchesAffiliate, outboundHost } from '../lib/affiliate.js';
+import { collectAssetRefs, parseAssetRef, resolveAsset } from '../lib/assets.js';
 import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
 import { blogAssetRefs } from '../lib/customize.js';
@@ -78,7 +82,99 @@ async function generate(dir, { instead } = {}) {
     packs = await loadPacks(github(), validated);
   }
   const previousIndex = await readIndex(async (p) => (await exists(path.join(dir, p)) ? fs.readFile(path.join(dir, p), 'utf8') : null));
-  return buildSite({ blog, posts, lock, ...packs, orderList, previousIndex });
+  const result = buildSite({ blog, posts, lock, ...packs, orderList, previousIndex });
+  if (!result.errors.length) result.outbound = outboundReport(validated, posts);
+  return result;
+}
+
+function outboundReport(blog, files) {
+  const counts = new Map();
+  const add = (href) => {
+    const host = outboundHost(href, blog.domain + '/');
+    if (host) counts.set(host, (counts.get(host) || 0) + 1);
+  };
+  const inline = (items) => {
+    let previous = null;
+    for (const item of items) {
+      const href = item.attributes?.link || null;
+      if (href && href !== previous) add(href);
+      previous = href;
+    }
+  };
+  const visit = (delta) => {
+    for (const line of toLines(delta.ops)) {
+      if (line.block['code-block'] !== undefined) continue;
+      if (line.mdtable) {
+        const table = line.items[0].insert.mdtable;
+        for (const cell of [...table.head, ...table.rows.flat()]) inline(parseInline(cell));
+      } else if (line.htmlblock) {
+        const source = line.items[0].insert.htmlblock;
+        const widget = markdownWidget(source);
+        if (widget) visit(widget.delta);
+        else for (const token of tokenizeHtml(source)) {
+          if (token.t === 'open' && token.tag === 'a') {
+            const href = token.attrs.find(([key]) => key === 'href');
+            if (href) add(href[1]);
+          }
+        }
+      } else if (!line.video) inline(line.items);
+    }
+  };
+  for (const file of files) {
+    if (!/^(posts|pages)\/[^/]+\.md$/.test(file.path)) continue;
+    const post = parsePost(file);
+    if (post.status !== 'published') continue;
+    visit(post.delta);
+  }
+  return [...counts].map(([host, count]) => ({ host, count, marked: matchesAffiliate(host, blog.affiliates) }))
+    .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host));
+}
+
+async function links(dir) {
+  const { blog, posts } = await load(dir);
+  const report = outboundReport(validateBlog(blog), posts);
+  for (const { host, count, marked } of report) console.log(`${host}\t${count}\t${marked ? 'marked affiliate' : 'unmarked'}`);
+  console.log(`${report.length} outbound hosts, ${report.filter((entry) => entry.marked).length} marked affiliate`);
+  return 0;
+}
+
+async function checkPinnedAsset(dir) {
+  const { blog: raw, posts, lock } = await load(dir);
+  const blog = validateBlog(raw);
+  const refs = new Set(blogAssetRefs(blog));
+  for (const file of posts) {
+    if (!/^(posts|pages)\/[^/]+\.md$/.test(file.path)) continue;
+    const post = parsePost(file);
+    if (post.status === 'published') for (const ref of collectAssetRefs(post.delta, post.meta)) refs.add(ref);
+  }
+  const ref = [...refs].sort()[0] || Object.keys(lock).filter((key) => !key.endsWith('#size')).sort().map((key) => `asset:${key}`)[0];
+  if (!ref) {
+    console.log('no pinned assets to check');
+    return;
+  }
+  const url = resolveAsset(ref, blog, lock);
+  let res;
+  try {
+    res = await fetch(url, { credentials: 'omit', headers: { Range: 'bytes=0-4095' }, signal: AbortSignal.timeout(15000) });
+  } catch (error) {
+    throw new Refusal('unresolved-asset', `${ref}: anonymous fetch failed for ${url}: ${error.message}`);
+  }
+  if (!res.ok) throw new Refusal('unresolved-asset', `${ref}: anonymous fetch of ${url} returned HTTP ${res.status}`);
+  if (/\.(?:png|jpe?g|gif|webp|svg|avif)(?:$|\?)/i.test(ref) && /^text\/html\b/i.test(res.headers.get('content-type') || '')) {
+    throw new Refusal('unresolved-asset', `${ref}: anonymous fetch of ${url} returned HTML instead of an image`);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) throw new Refusal('unresolved-asset', `${ref}: anonymous fetch of ${url} returned an empty response`);
+  try {
+    const first = await reader.read();
+    if (first.done || !first.value.length) throw new Refusal('unresolved-asset', `${ref}: anonymous fetch of ${url} returned an empty response`);
+  } catch (error) {
+    if (error instanceof Refusal) throw error;
+    throw new Refusal('unresolved-asset', `${ref}: anonymous fetch of ${url} could not read the response: ${error.message}`);
+  } finally {
+    await reader.cancel();
+  }
+  console.log(`anonymous asset check passed: ${ref}`);
 }
 
 // Generated files that exist only while a theme or a feature is in use.
@@ -161,6 +257,7 @@ async function build(dir) {
     console.log(`removed stale ${f}`);
   }
   console.log(`built ${r.index.length} published post(s), ${expected.size} file(s)`);
+  console.log(`${r.outbound.length} outbound hosts, ${r.outbound.filter((entry) => entry.marked).length} marked affiliate`);
   return 0;
 }
 
@@ -184,6 +281,7 @@ async function check(dir) {
     console.error('generated output is out of date — run `blog-webcli build` and commit:\n  ' + diffs.join('\n  '));
     return 1;
   }
+  await checkPinnedAsset(dir);
   console.log(`ok: ${expected.size} generated file(s) match their source`);
   return 0;
 }
@@ -368,9 +466,9 @@ async function licences(dir) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const commands = { sizes: () => sizes(rest), comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
+const commands = { sizes: () => sizes(rest), comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), links: () => links(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
 if (!commands[cmd]) {
-  console.error('usage: blog-webcli <build|check|fmt|publish-due|pin|sizes|comments|theme|licences|import> …');
+  console.error('usage: blog-webcli <build|check|links|fmt|publish-due|pin|sizes|comments|theme|licences|import> …');
   process.exit(2);
 }
 try {

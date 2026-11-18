@@ -137,11 +137,11 @@ test('the CLI: build writes the redirects; removing an alias removes its page an
     const file = path.join(dir, 'posts', 'markdown-is-the-format.md');
     const text = await fs.readFile(file, 'utf8');
     await fs.writeFile(file, text.replace(/\nstatus:/, '\naliases: [2012/04/markdown, legacy.html]\nstatus:'));
-    const cli = (...a) => run('node', [path.join(root, 'cli', 'blog.js'), ...a, dir]).then((r) => r.stdout, (e) => { e.stdout += e.stderr; throw e; });
+    const cli = (...a) => run('node', ['--import', path.join(root, 'test', 'fetch-preload.mjs'), path.join(root, 'cli', 'blog.js'), ...a, dir]).then((r) => r.stdout, (e) => { e.stdout += e.stderr; throw e; });
     await cli('build');
     assert.match(await fs.readFile(path.join(dir, '2012', '04', 'markdown', 'index.html'), 'utf8'), /url=\.\.\/\.\.\/\.\.\/markdown-is-the-format\//);
     assert.ok(await fs.stat(path.join(dir, 'legacy.html', 'index.html')));
-    assert.match(await cli('check'), /^ok:/);
+    assert.match(await cli('check'), /\nok:/);
     // the alias goes: the build says so and leaves nothing behind, and an unrelated folder of the same shape is not touched
     await fs.mkdir(path.join(dir, 'mine', 'notes'), { recursive: true });
     await fs.writeFile(path.join(dir, 'mine', 'notes', 'index.html'), '<p>my own page</p>');
@@ -152,7 +152,7 @@ test('the CLI: build writes the redirects; removing an alias removes its page an
     await assert.rejects(fs.stat(path.join(dir, '2012')), /ENOENT/, 'the empty folders go too');
     await assert.rejects(fs.stat(path.join(dir, 'legacy.html')), /ENOENT/);
     assert.ok(await fs.stat(path.join(dir, 'mine', 'notes', 'index.html')), 'a page that is not the generator\'s is never swept');
-    assert.match(await cli('check'), /^ok:/);
+    assert.match(await cli('check'), /\nok:/);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }

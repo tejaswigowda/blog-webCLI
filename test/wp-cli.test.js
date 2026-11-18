@@ -13,7 +13,7 @@ import { PNG, WXR } from './wp-fixtures.js';
 const run = promisify(execFile);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const JPG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0, 1, 1, 1, 0, 72]);
-const cli = (...args) => run('node', [path.join(root, 'cli', 'blog.js'), ...args]).then((r) => ({ code: 0, ...r }), (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
+const cli = (...args) => run('node', [...(args[0] === 'check' ? ['--import', path.join(root, 'test', 'fetch-preload.mjs')] : []), path.join(root, 'cli', 'blog.js'), ...args]).then((r) => ({ code: 0, ...r }), (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
 const walk = async (dir, base = dir) => {
   const out = [];
   for (const e of await fs.readdir(dir, { withFileTypes: true })) {

@@ -18,8 +18,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libxml2-utils
       - name: Tests (gates B1-B11)
         run: npm test
-      - name: Example blog's generated output is current (gate B8)
-        run: node cli/blog.js check examples/blog
+      - name: Example output is current (fixture asset fetch is mocked)
+        run: node --import ./test/fetch-preload.mjs cli/blog.js check examples/blog
       - name: The live script a blog ships is current (gate L5)
         run: node cli/build-live.js --check
       - name: Nothing unlicensed or copyleft reaches the runtime; the inventory is current (gates R4, R5)

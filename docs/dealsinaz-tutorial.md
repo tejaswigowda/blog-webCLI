@@ -32,7 +32,15 @@ The four new posts retain their WordPress dated addresses as aliases. Each stati
 
 The staged settings use `https://dealsinaz.com` as the canonical domain and remove the demo banner and `noindex`. The site owner is responsible for DNS and GitHub Pages domain configuration. Until cutover, the live WordPress site remains the source.
 
-Affiliate-domain enforcement was deliberately left disabled because no hostnames were configured. To enable it later, open **Settings → Affiliate domains**, enter one hostname per line and save. Links to those hosts and their subdomains must then be marked `sponsored`; the gate does not mark links automatically. Review affiliate links before launch.
+For the affiliate rebuild, set **Settings → Automatically mark affiliate domains** (`affiliates` in `blog.json`) and a plain-text **Post disclosure** (`disclosure`). The renderer marks matching outbound links in existing posts without changing their Markdown. Hostnames match only themselves and subdomains; the older `affiliateDomains` setting is a separate strict gate and is not required for automatic marking.
+
+Run `node cli/blog.js links /path/to/dealsinaz` to review outbound hosts. The initial report contained 1,427 hosts; the configured list includes the requested retailers and prominent affiliate/tracking domains found in the archive. It is not proof that every affiliate host has been identified: review unmarked hosts regularly, especially new retailers and shortened links.
+
+### Disclosure diagnosis
+
+The November 17 WordPress REST snapshot included the exact phrase “may receive a small commission via affiliate links in this post” in 883 of 7,999 published post bodies. In the Walgreens photo-card post, the disclosure is present in the WordPress response, the imported Markdown and the static post HTML; the importer did not drop it in that example. The public response alone does not establish whether WordPress saved the text in the editor or inserted it through a hook, and this sample does not prove that every post kept every disclosure. Many posts lack that exact phrase, so a site-level disclosure is needed even when some imported posts already have one.
+
+Retailer-hosted images remain third-party requests and may break if a retailer changes or removes their URLs.
 
 ## 5. Build and verify
 
@@ -44,6 +52,8 @@ node cli/blog.js check /path/to/dealsinaz
 ```
 
 Inspect the recent posts, copied images and their pinned commit, existing posts and pages, search, feed, sitemap, navigation and the four redirect pages. Verify the canonical domain and indexing settings. A missing-cover warning means the affected page has no share image; resolve it if a share image is needed.
+
+This rebuild uses the existing pinned `asset:images/design/hero.png` as the site cover, and `check` tests one pinned asset anonymously. One successful request does not verify every media repository. The post disclosure may duplicate text already present in imported posts.
 
 Before any DNS change, test historical links and every referenced upload on the new host. Confirm that GitHub Pages is serving the expected commit, and keep the old WordPress site available until the cutover has been verified. Re-run the comparison for later changes; this case study does not set up ongoing synchronization.
 

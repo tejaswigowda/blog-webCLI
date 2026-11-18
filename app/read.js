@@ -88,5 +88,5 @@ export async function loadPost(gh, where, slug, ref, { blog, lock }, { allowDraf
   if (post.status !== 'published' && !allowDraft) throw new NotFound(kind === 'page' ? 'No such page.' : 'No such post.');
   const resolve = (r) => resolveAsset(r, blog, lock);
   const contract = blog.theme && typeof blog.theme === 'object' ? blog.theme.contract : undefined;
-  return { post, text, html: deltaToHtml(post.delta, { resolve, resolveVideo: (r) => videoEmbedUrl(r, blog), strict: false, contract }) };
+  return { post, text, html: deltaToHtml(post.delta, { resolve, base: blog.domain, affiliates: blog.affiliates, resolveVideo: (r) => videoEmbedUrl(r, blog), strict: false, contract }) };
 }

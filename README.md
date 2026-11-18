@@ -413,23 +413,28 @@ Text inside an HTML block uses HTML syntax (`<strong>bold</strong>`), not Markdo
 The editor displays the block as source, not a live preview; check its rendered appearance in
 the `/blog/` reader or on the published page. Styling belongs in **Settings → Custom CSS**.
 
-Links in HTML blocks may use `rel` with the distinct, space-separated tokens `sponsored`,
-`nofollow`, `ugc`, `noopener`, and `noreferrer`. For example:
+Links in HTML blocks may use `rel` with the space-separated tokens `sponsored`,
+`nofollow`, `ugc`, `noopener`, `noreferrer`, `me`, `license`, and `author`; other
+values are refused as `bad-rel`. For example:
 
 ```html
 <p><a href="https://shop.example/offer" rel="sponsored">See the offer</a></p>
 ```
 
 External links also receive `noopener noreferrer`. Ordinary Markdown links and table links
-cannot carry an authored `rel`; use an HTML block when a relation is needed.
-To configure the gate in the editor, open the repository, choose **Settings → Affiliate domains**, enter one
-affiliate hostname per line (for example `affiliate.example.com`), then save and publish the settings.
-Enter hostnames without schemes, ports or wildcards: a hostname covers itself and its subdomains, not
-lookalike domains. Leaving the field empty disables the gate; it does not mark links automatically.
-Publishing checks all generated HTML pages and refuses links to configured hosts unless they include
-`sponsored`. This includes navigation links, which cannot currently be marked and must not point to those
-hosts. Sites using the gate use a full rebuild rather than incremental publishing. No disclosure is inserted:
-authors must write any disclosure they need themselves.
+cannot carry an authored `rel`. To mark affiliate links without editing posts, enter one hostname
+per line under **Settings → Automatically mark affiliate domains** (`affiliates` in `blog.json`).
+Links to those outbound hosts and their subdomains gain `sponsored` at render, including links
+in HTML blocks and navigation; existing relations are preserved and deduplicated. Hostnames must
+not include schemes, ports or wildcards; `amazon.com` matches `www.amazon.com`, not
+`notamazon.com` or `amazon.com.example.net`. An unlisted host does not prevent publishing.
+
+Add **Post disclosure** (`disclosure`) as plain text to show it on every post, including in
+static HTML with JavaScript off. It can appear alongside disclosures already in the post.
+`blog-webcli links` lists outbound hosts in published posts and pages for review.
+The separate legacy **Affiliate domains (strict gate)** (`affiliateDomains`) still refuses
+unmarked links on generated pages and requires a full rebuild. If both settings list a host,
+automatic marking occurs before that gate.
 
 A line that starts with an HTML tag starts a block, which runs to the next blank line: so a block keeps its tags together, and a
 blank line inside `<div>…</div>` is refused as an unclosed tag rather than guessed at. This is the one place a post's own markup
@@ -817,6 +822,8 @@ four keys are required, and the real file is plain JSON (no comments):
 | `theme` | no | `"default"`, or a [pinned theme](#pinning) object | `"default"` |
 | `contents` | no | boolean default for post/page contents lists; frontmatter overrides it; requires at least three h2/h3 | `false` |
 | `cover` | no | an `asset:` reference: the share image of the index, and of any post with no `cover` of its own | no `og:image` unless a post has one (a build warning says so) |
+| `affiliates` | no | hostnames automatically marked `sponsored` in outbound links | no automatic marking |
+| `disclosure` | no | plain text displayed on each post, including in static HTML | no site-level disclosure |
 | `affiliateDomains` | no | hostnames (one per line in Settings): links to these hosts or subdomains must have `rel="sponsored"` | no affiliate-domain gate |
 | `assets` | no | binaries (images, audio): [below](#assets) | an `images/` folder of `repo` |
 | `video` | no | video releases: [below](#video) | a `videos/` folder of `repo` |
@@ -2124,7 +2131,8 @@ so the commit that holds it cannot be named inside it.
 
 ```
 node cli/blog.js build [dir]   regenerate index, pages, tags, archive, search, sitemap, feed (writes nothing if anything is refused)
-node cli/blog.js check [dir]   regenerate in memory; non-zero on any difference — for CI
+node cli/blog.js check [dir]   compare generated output and anonymously check one pinned asset
+node cli/blog.js links [dir]   outbound host counts in published posts and pages, sorted by count
 node cli/blog.js comments lift [dir]   move old "## Comments" sections out of posts into comments/<slug>.json
 node cli/blog.js fmt   [dir]   rewrite posts into canonical markdown
 node cli/blog.js publish-due [dir] [--now T]   publish the scheduled posts whose time has come, then build once (a refusal leaves them scheduled and exits non-zero)
@@ -2141,6 +2149,12 @@ node cli/serve.js [dir] [port] static server for local preview
 the build's warnings, including the posts that are in no list. They read `posts/` and `pages/`, and `build` removes what a feature
 that is now off left behind (`check` lists it as `stale`). They fetch a pinned theme as data and
 regenerate any valid blog without precomputed hook output or a coverage precondition.
+`build` prints the number of outbound hosts and how many match `affiliates`. `links` counts
+authored links, excluding internal URLs and `asset:` references, not repeated navigation; it
+does not fail for unlisted hosts. After a successful comparison, `check` makes one anonymous
+request for a pinned asset, failing on a network error, inaccessible response or an HTML response
+instead of an image. If no pin exists, it reports that no asset was checked. This requires network
+access; one successful asset does not guarantee every pinned repository is public.
 `node cli/build-live.js` rebuilds the first-party live, search, slideshow and optional live-math scripts
 after changes under `lib/`; CI runs it with `--check`.
 

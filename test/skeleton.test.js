@@ -165,6 +165,7 @@ test('kit: the header picture is a theme file at the pinned address, with its ph
   const html = heroHtml(pin, kitManifest({ ...KIT, hero: { ...KIT.hero, alt: 'A "lake" & hills' } }));
   assert.match(html, /<figure class="theme-hero"><img src="https:\/\/cdn\.jsdelivr\.net\/gh\/me\/themes@v1\.0\.0\/k\/kit\/hero\.jpg" alt="A &quot;lake&quot; &amp; hills">/);
   assert.match(html, /Photo by <a href="https:\/\/unsplash\.com\/@ada" rel="noopener">Ada Photographer<\/a> on <a href="https:\/\/unsplash\.com\/photos\/lake-abc123" rel="noopener">Unsplash<\/a>/);
+  assert.match(heroHtml(pin, kitManifest(KIT), { domain: 'https://example.test', affiliates: ['unsplash.com'] }), /rel="noopener sponsored"/);
   assert.equal(heroHtml(pin, kitManifest({ customize: KIT.customize })), '');
   assert.equal(heroHtml(pin, { name: 'x' }), '');
 });

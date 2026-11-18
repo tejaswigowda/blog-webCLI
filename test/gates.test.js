@@ -24,7 +24,7 @@ async function tmpBlog() {
   await fs.cp(EXAMPLE, d, { recursive: true });
   return d;
 }
-const cli = (cmd, dir) => run('node', [CLI, cmd, dir]).then((r) => ({ code: 0, ...r }), (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
+const cli = (cmd, dir) => run('node', ['--import', path.join(root, 'test', 'fetch-preload.mjs'), CLI, cmd, dir]).then((r) => ({ code: 0, ...r }), (e) => ({ code: e.code, stdout: e.stdout, stderr: e.stderr }));
 const walk = async (dir, base = dir) => {
   const out = [];
   for (const e of await fs.readdir(dir, { withFileTypes: true })) {

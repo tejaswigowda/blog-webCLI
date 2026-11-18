@@ -86,3 +86,30 @@ test('CLI: retired ext subcommands are not available', async () => {
   assert.equal(result.code, 2);
   assert.match(result.stderr, /usage:/);
 });
+
+test('CLI: check refuses an inaccessible or HTML pinned image anonymously', async () => {
+  const d = await blogDir();
+  assert.equal((await cli(['build', d])).code, 0);
+  for (const [env, detail] of [[{ TEST_ASSET_STATUS: '404' }, /HTTP 404/], [{ TEST_ASSET_HTML: '1' }, /returned HTML/]]) {
+    const result = await cli(['check', d], env);
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, detail);
+  }
+  assert.match((await cli(['check', d])).stdout, /anonymous asset check passed/);
+});
+
+test('CLI: links counts outbound authored anchors, sorted, including pages but not drafts', async () => {
+  const d = await fs.mkdtemp(path.join(os.tmpdir(), 'cli-links-'));
+  await fs.mkdir(path.join(d, 'posts'));
+  await fs.mkdir(path.join(d, 'pages'));
+  await fs.writeFile(path.join(d, 'blog.json'), JSON.stringify({ title: 'T', description: 'D', author: 'A', domain: 'https://site.test', affiliates: ['shop.test'] }));
+  await fs.writeFile(path.join(d, 'posts', 'a.md'), '---\nslug: a\ntitle: A\ndate: 2026-01-01\nstatus: published\n---\n\n[**Shop** now](https://www.shop.test/a) [internal](https://site.test/x) [other](https://other.test/x)\n');
+  await fs.writeFile(path.join(d, 'pages', 'b.md'), '---\nslug: b\ntitle: B\nstatus: published\n---\n\n<p><a href="https://www.shop.test/b">Buy</a></p>\n');
+  await fs.writeFile(path.join(d, 'posts', 'draft.md'), '---\nslug: draft\ntitle: Draft\ndate: 2026-01-01\nstatus: draft\n---\n\n[Hidden](https://hidden.test/)\n');
+  const result = await cli(['links', d]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /^www\.shop\.test\t2\tmarked affiliate\nother\.test\t1\tunmarked\n2 outbound hosts, 1 marked affiliate\n$/);
+  const built = await cli(['build', d]);
+  assert.equal(built.code, 0, built.stderr);
+  assert.match(built.stdout, /2 outbound hosts, 1 marked affiliate/);
+});
