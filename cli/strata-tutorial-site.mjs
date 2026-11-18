@@ -135,8 +135,8 @@ export async function prepareTutorialSite(root, sourceRef) {
     }
     await writeFile(path.join(folder, 'pages', `${slug}.md`), joinFile(newFront(meta), body));
     const styles = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]);
-    // Native nesting scopes each original stylesheet without changing its selectors.
-    css += `\nhtml:has(.strata-tutorial-${name.slice(0, -5)}){\n${[...styles, ...cssRules].join('\n').replace(/:root\b/g, '&').replace(/\bfooter\b/g, '.tutorial-footer')}\n}\n`;
+    // Generated section anchors must not inherit the card's stretched-link overlay.
+    css += `\nhtml:has(.strata-tutorial-${name.slice(0, -5)}){\n${[...styles, ...cssRules].join('\n').replace(/:root\b/g, '&').replace(/\bfooter\b/g, '.tutorial-footer').replaceAll('.card h3 a::after', '.card h3 a:not(.anchor)::after')}\n}\n`;
     report.push({ name, source: `pages/${slug}.md`, changes: [...new Set(changes)] });
     if (name === 'index.html') {
       const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gi)];

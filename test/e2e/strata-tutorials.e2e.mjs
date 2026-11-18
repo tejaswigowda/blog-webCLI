@@ -112,6 +112,19 @@ test('Strata complete migration: every old URL, layout, search, source and norma
     await page.evaluate("(() => {const box=document.querySelector('input[type=search]');box.value='GIS-grounded';box.dispatchEvent(new Event('input'));})()");
     assert.equal(await page.evaluate("document.querySelectorAll('#list .card:not([hidden])').length"), 1);
     assert.match(await page.evaluate("document.querySelector('#list .card:not([hidden])').textContent"), /GIS-grounded/);
+    const point = await page.evaluate(`(() => {
+      const card = document.querySelector('#list .card:not([hidden])');
+      const link = card.querySelector('h3 a:not(.anchor)');
+      link.href = ${JSON.stringify(origin)} + new URL(link.href).pathname;
+      card.scrollIntoView({block:'start',behavior:'instant'});
+      const rect = card.getBoundingClientRect();
+      const x = rect.left + rect.width / 2, y = rect.top + 20;
+      return {x, y, href:document.elementFromPoint(x,y)?.closest('a')?.href};
+    })()`);
+    assert.equal(point.href, `${origin}/about/tutorials/gis-walkway-shade.html`, 'The card thumbnail must open the tutorial, not its heading anchor');
+    await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+    await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+    await until(page, "location.pathname === '/about/tutorials/gis-walkway-shade.html' && !!document.querySelector('h1')");
 
     const files = {};
     for (const { url } of inventory) {

@@ -61,6 +61,8 @@ plain paragraphs and isolated code blocks use native editor formats where they
 preserve the content. Adjacent command/output code blocks remain separate HTML
 blocks rather than being merged. Custom step headings, callouts, credits and
 the index cards retain their markup.
+Card-wide links exclude generated section anchors so clicking a thumbnail or
+card background opens the tutorial, not an index heading.
 
 The extracted first-party theme is MIT licensed with the owner's approval.
 Commit its `theme/` files and `tutorial-enhancements.js` first, then use that
