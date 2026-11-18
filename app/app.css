@@ -75,7 +75,7 @@ dialog::backdrop{background:rgba(5,6,10,.7)}
 dialog h2{margin-top:0;font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;padding-bottom:.7rem;border-bottom:1px solid var(--rule)}
 .preflight{font-weight:600;background:var(--surface2);padding:.6rem .8rem;border-radius:8px;margin:.5rem 0}
 .files{font:.73rem/1.55 'SF Mono','Fira Code','Courier New',monospace;background:var(--code);color:#7dd3fc;padding:10px 12px;border-radius:6px;max-height:10rem;overflow:auto}
-#editor{height:24rem;font:17px/1.6 Georgia,serif}
+#editor{height:24rem;min-height:12rem;resize:vertical;overflow:auto;font:17px/1.6 Georgia,serif}
 .ql-toolbar{border-radius:6px 6px 0 0;background:var(--surface2)}
 .ql-container{border-radius:0 0 6px 6px;background:var(--panel)}
 .ql-snow .ql-editor img{max-width:100%}

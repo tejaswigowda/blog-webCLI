@@ -12,6 +12,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '../../cli/serve.js';
 import { chromePath, launch, openPage } from './cdp.mjs';
+import { buildSite } from '../../lib/blog.js';
+import { loadTheme, pinFor, themeDigest, themeFilePaths } from '../../lib/theme-pack.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const skip = chromePath() ? false : 'Chrome is not installed (set CHROME=/path/to/chrome)';
@@ -72,6 +74,102 @@ async function signedIn(blogJson) {
 const blogJson = (extra = {}) => JSON.stringify({ title: 'T', description: 'd', author: 'A', domain: 'https://example.github.io/blog', theme: 'default', ...extra });
 const clickText = (page, selector, text) => page.evaluate(`(() => { const button = [...document.querySelectorAll(${JSON.stringify(selector)})].find(b => b.textContent.trim().startsWith(${JSON.stringify(text)})); if (!button) throw new Error('No button: ' + ${JSON.stringify(text)}); button.click(); })()`);
 const fill = (page, selector, value) => page.evaluate(`(() => { const input = document.querySelector(${JSON.stringify(selector)}); input.value = ${JSON.stringify(value)}; input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+
+test('Quill editor resizes vertically by dragging without changing its width or document', { skip, timeout: 60000 }, async () => {
+  const { page, close } = await signedIn(blogJson({ repo: 'example/blog' }));
+  try {
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1400, deviceScaleFactor: 1, mobile: false });
+    await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
+    await until(page, "document.querySelector('#editor .ql-editor')");
+    const before = await page.evaluate(`(() => {
+      const editor=document.querySelector('#editor');
+      Quill.find(editor).setText('Keep this text.\\n');
+      editor.scrollIntoView({block:'center',behavior:'instant'});
+      const rect=editor.getBoundingClientRect();
+      return {x:rect.right-4,y:rect.bottom-4,width:rect.width,height:rect.height,text:JSON.stringify(Quill.find(editor).getContents())};
+    })()`);
+    await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: before.x, y: before.y, button: 'left', clickCount: 1 });
+    await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: before.x + 80, y: before.y + 120, button: 'left', buttons: 1 });
+    await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: before.x + 80, y: before.y + 120, button: 'left', clickCount: 1 });
+    const after = await page.evaluate(`(() => {const editor=document.querySelector('#editor'),r=editor.getBoundingClientRect();return {width:r.width,height:r.height,text:JSON.stringify(Quill.find(editor).getContents())};})()`);
+    assert.ok(after.height >= before.height + 100, 'Dragging the resize handle must actually increase the editor height');
+    assert.equal(after.width, before.width, 'The editor resizes vertically only');
+    assert.equal(after.text, before.text);
+  } finally {
+    close();
+  }
+});
+
+test('Quill picture presets survive saving and control rendered images with default and pinned themes', { skip, timeout: 60000 }, async () => {
+  const picture = 'data:image/svg+xml,' + encodeURIComponent(await readFile(path.join(root, 'examples/theme-plain/img/rule.svg'), 'utf8'));
+  const web = await serve(root);
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/`);
+    await until(page, "document.readyState === 'complete'");
+    await page.evaluate(`(async () => {
+      const {createEditor,setAssetResolver} = await import('/app/editor.js');
+      setAssetResolver(() => ${JSON.stringify(picture)});
+      window.__markdown = await import('/lib/markdown.js');
+      const host = document.createElement('div'); document.body.append(host);
+      window.__pictureEditor = await createEditor(host, {});
+      __pictureEditor.setContents([{insert:{image:'asset:images/rule.svg'}},{insert:'\\n'}]);
+    })()`);
+    const files = {
+      'theme.json': JSON.stringify({ name: 'Image rules', version: '1.0.0', licence: 'MIT', class_contract: 'blog-webcli-v1', css: ['style.css'] }),
+      'style.css': 'html body article img[src]{width:100%;height:120px;display:inline;margin:0;float:none}',
+    };
+    const manifest = JSON.parse(files['theme.json']);
+    const pin = pinFor('example/themes/images', 'v1.0.0', manifest, themeDigest(files, themeFilePaths(manifest)));
+    const theme = loadTheme(pin, files);
+    for (const [preset, ratio] of [['small', .25], ['medium', .5], ['large', .75], ['full', 1], ['left', .4], ['right', .4], ['inline', null], ['', null]]) {
+      const md = await page.evaluate(`(() => {
+        __pictureEditor.root.querySelector('img').click();
+        __pictureEditor.container.querySelector('.img-bar [data-value="${preset}"]').click();
+        return __markdown.deltaToMarkdownChecked(__pictureEditor.getContents()).md;
+      })()`);
+      if (preset) assert.match(md, new RegExp(`\\{\\.${preset}\\}`), 'The Quill choice must reach saved Markdown');
+      else assert.doesNotMatch(md, /\{\./, 'Default clears the saved preset');
+      for (const pinned of [false, true]) {
+        const out = buildSite({
+          blog: { title: 'Images', description: 'd', author: 'A', domain: 'https://example.test/', assets: { base: 'https://cdn.example/{owner}/{repo}/{sha}/{path}', repos: { images: 'example/images' } }, ...(pinned ? { theme: pin } : {}) },
+          posts: [{ path: 'posts/picture.md', text: `---\nslug: picture\ntitle: Picture\ndate: 2026-01-01\nstatus: published\n---\n\n${md}` }],
+          lock: { 'images/rule.svg': 'a'.repeat(40), 'images/rule.svg#size': '64x2' }, ...(pinned ? { theme } : {}),
+        });
+        assert.deepEqual(out.errors, []);
+        await page.evaluate(`(() => {
+          document.querySelector('#picture-output')?.remove();
+          const frame = document.createElement('iframe');
+          frame.id = 'picture-output'; frame.width = '1100'; frame.height = '600';
+          frame.setAttribute('sandbox', 'allow-same-origin');
+          frame.srcdoc = ${JSON.stringify(out.files['picture/index.html'].replace(/(<img\b[^>]*\bsrc=")[^"]*/g, (_match, prefix) => prefix + picture))};
+          document.body.append(frame);
+        })()`);
+        await until(page, `(() => {const img=document.querySelector('#picture-output').contentDocument?.querySelector('article img');return img?.complete && img.naturalWidth > 0;})()`);
+        for (const width of [1100, 390]) {
+          const layout = await page.evaluate(`(async () => {
+            const frame=document.querySelector('#picture-output');frame.width='${width}';
+            await new Promise(resolve=>requestAnimationFrame(resolve));
+            const img=frame.contentDocument.querySelector('article img');
+            const css=img.ownerDocument.defaultView.getComputedStyle(img);
+            return {ratio:img.getBoundingClientRect().width/img.parentElement.getBoundingClientRect().width,float:css.float,display:css.display,height:parseFloat(css.height),font:parseFloat(css.fontSize)};
+          })()`);
+          const floating = ['left', 'right'].includes(preset);
+          const expected = width < 640 && (floating || preset === 'small') ? (floating ? 1 : .5) : ratio;
+          if (ratio !== null) {
+            assert.ok(Math.abs(layout.ratio - expected) < .01, `${preset}, ${pinned ? 'pinned' : 'default'}, ${width}px: expected ${expected}, got ${layout.ratio}`);
+            assert.equal(layout.float, floating && width > 640 ? preset : 'none');
+            assert.equal(layout.display, 'block');
+          } else if (preset === 'inline') assert.ok(Math.abs(layout.height - layout.font * 1.4) < 1);
+          else assert.equal(layout.height, pinned ? 120 : 2, 'Unmarked images retain theme defaults');
+        }
+      }
+    }
+  } finally {
+    chrome.close();
+    web.close();
+  }
+});
 
 test('Settings: choose a favicon from the media library', { skip, timeout: 60000 }, async () => {
   const { page, close } = await signedIn(blogJson({ repo: 'example/blog', assets: { base: 'https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}', repos: { images: 'example/images' } } }));

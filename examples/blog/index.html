@@ -190,6 +190,13 @@ form.subscribe input,form[role=search] input{width:100%;margin-bottom:.5rem}
 .toc ol{margin:0;padding-inline-start:1.5rem}
 .anchor{font-size:.75em;margin-inline-start:.35em;text-decoration:none}
 @media(max-width:640px){.wc-columns,.wc-compare{grid-template-columns:minmax(0,1fr)!important}}
+img:is(.img-inline,.img-small,.img-medium,.img-large,.img-full,.img-left,.img-right){box-sizing:border-box!important;min-width:0!important;max-width:100%!important;height:auto!important}
+img.img-inline{display:inline!important;float:none!important;height:1.4em!important;width:auto!important;margin:0!important;vertical-align:text-bottom!important}
+img.img-small,img.img-medium,img.img-large,img.img-full{display:block!important;float:none!important;margin:1.2em auto!important}
+img.img-small{width:25%!important}img.img-medium{width:50%!important}img.img-large{width:75%!important}img.img-full{width:100%!important}
+img.img-left{float:left!important;width:40%!important;margin:.3em 1.2em .8em 0!important}img.img-right{float:right!important;width:40%!important;margin:.3em 0 .8em 1.2em!important}
+h1,h2,h3,h4{clear:both}
+@media (max-width:640px){img.img-left,img.img-right{float:none!important;display:block!important;width:100%!important;margin:1em auto!important}img.img-small{width:50%!important}}
 :root{--width:42rem}
 @media not (prefers-color-scheme:dark){:root{--link:#0b7a5f}}
 @media (prefers-color-scheme:dark){:root{--link:#5fd3a8}}</style>
