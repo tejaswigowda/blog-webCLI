@@ -1,0 +1,63 @@
+name: reference sites
+
+on:
+  push:
+  schedule:
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { site: swim, repository: tejaswigowda/blogtest, secret: REFERENCE_TEJASWIGOWDA_READ }
+          - { site: webcli, repository: tejaswigowda/webcli.app, secret: REFERENCE_TEJASWIGOWDA_READ }
+          - { site: lyceum, repository: tejaswigowda/lyceumshorts.com, secret: REFERENCE_TEJASWIGOWDA_READ }
+          - { site: dealsinaz, repository: FoxyNinjaStudios/dealsinaz, secret: REFERENCE_FOXYNINJASTUDIOS_READ }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ae4798b74ff1e1f110be10aa02eaaad407c0b712
+          path: approved-generator
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repository }}
+          ref: main
+          path: reference
+          token: ${{ secrets[matrix.secret] || github.token }}
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /blog.json
+            /assets.lock.json
+            /order.json
+            /posts/
+            /pages/
+            /comments/
+            /films/blog.json
+            /films/assets.lock.json
+            /films/pages/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compare regenerated files and anonymously check a pinned asset
+        env:
+          SITE: ${{ matrix.site }}
+          TIER: ${{ github.event_name == 'push' && 'fixture' || 'full' }}
+        run: node cli/reference-corpus.mjs "$SITE" "$TIER" reference approved-generator
+      - name: Compare the catalogue's film pages
+        if: ${{ always() && matrix.site == 'lyceum' }}
+        env:
+          TIER: ${{ github.event_name == 'push' && 'fixture' || 'full' }}
+        run: node cli/reference-corpus.mjs lyceum-films "$TIER" reference/films approved-generator
