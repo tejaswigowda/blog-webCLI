@@ -24,6 +24,7 @@ export const examples = [
   { type: 'compare', figures: [image, { ...image, caption: 'After' }] },
   { type: 'definitions', items: [{ term: 'Term', definition: 'Its meaning.' }, { term: 'Other', definition: 'More.\n\nDetails.' }] },
   { type: 'embed', title: 'Video & sound', url: 'https://player.example/#https://cdn.example/a&present=true' },
+  { type: 'native-video', title: 'Demonstration', url: 'https://example.org/demo.mp4' },
   { type: 'film-cards', cards: [{ image: './poster.jpg', url: './film/', title: 'Film', topic: 'Geometry', duration: '1:00', status: 'demonstration', claim: 'A claim.', scene: 'https://example.org/scene', tutorial: 'https://example.org/tutorial' }] },
   { type: 'markdown', markdown: '## Heading\n\nA **bold** link to [more](https://example.org/).\n' },
 ];
@@ -53,6 +54,18 @@ test('iframe widget emits only sandboxed HTTPS frames with a fallback and escape
   const blog = { ...EXAMPLE_BLOG, video: { player: 'https://player.example/', base: 'https://cdn.example/{tag}/{slug}/', repos: { videos: 'me/videos' } } };
   const post = { path: 'posts/embed.md', text: `---\nslug: embed\ntitle: Embed\ndate: 2026-01-01\nstatus: published\n---\n\n${src}\n` };
   assert.deepEqual(buildSite({ blog, posts: [post], lock: {} }).errors, []);
+});
+
+test('native video widget preserves the source and renders controls with a fallback link', () => {
+  const src = '<div class="wc-video" title="A demonstration"><a href="https://example.org/demo.mp4">Watch the demonstration</a></div>';
+  assert.equal(deltaToMarkdownChecked(mdToDelta(src + '\n')).md, src + '\n');
+  const rendered = deltaToHtml(mdToDelta(src + '\n'));
+  assert.match(rendered, /<video src="https:\/\/example.org\/demo.mp4" title="A demonstration" controls preload="metadata"><\/video>/);
+  assert.match(rendered, /<a href="https:\/\/example.org\/demo.mp4"/);
+  for (const href of ['javascript:alert(1)', 'http://example.org/demo.mp4', 'https://example.org/page.html', 'https://user:pass@example.org/demo.mp4']) {
+    assert.throws(() => checkHtmlBlock(src.replace('https://example.org/demo.mp4', href)));
+  }
+  assert.throws(() => checkHtmlBlock('<video src="https://example.org/demo.mp4"></video>'), /not allowed/);
 });
 
 test('Markdown widget preserves source, renders the subset, and checks its asset and provider links', () => {

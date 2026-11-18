@@ -359,6 +359,7 @@ The reserved `wc-` prefix is a closed content contract:
 | Definitions | Native `dl` / `dt` / `dd`, no reserved class needed | Native definition list |
 | Film cards | `ul.wc-film-cards` of film cards, with editable poster, title, status, claim and links | Responsive cards |
 | Iframe embed | A standalone titled `div.wc-embed` with an HTTPS link | A sandboxed iframe and a link to the source |
+| Native video | A standalone titled `div.wc-video` with an HTTPS `.mp4`, `.webm` or `.ogv` link | Native video controls and a source link; no autoplay |
 | Markdown | A standalone `div.wc-markdown` containing encoded source in `pre > code` | Rendered Markdown |
 
 The Markdown widget keeps its source separately editable through **Edit widget**. It supports

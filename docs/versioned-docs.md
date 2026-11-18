@@ -36,16 +36,48 @@ the document model when someone is actively writing a book to test it against.
 
 The [pre-migration inventory](strata-tutorial-inventory.json) records every
 existing `.html` address, allowlist conflicts, and interactive embeds. The
-migration leaves incompatible pages in place; it does not replace working
-iframes or native videos with unverified equivalents.
+migration initially left incompatible pages in place. The complete migration uses
+`docs/about/tutorials` as the editor root, with 27 tutorial sources plus
+`pages/home.md` for the index. Every old `.html` URL remains direct output.
 
-For an already migrated Strata checkout, run
+For the historical partial migration, run
 `node cli/strata-tutorial-migrate.mjs <Strata repository> --native` to make simple
 headings and prose editable natively in Quill. It updates only migrated
 tutorials and checks that the rendered markup is equivalent. Blocks with custom
 markup that Markdown cannot reproduce (for example numbered step headings and
 styled callouts) stay as HTML. Run the same command with `--check` to verify the
 generated files are current.
+
+The complete migration is staged with:
+
+```sh
+node cli/strata-tutorial-site.mjs <Strata checkout> --prepare <legacy-commit>
+```
+
+This inventories intentional markup substitutions in the tutorial folder's
+`migration.json`: inline styles become theme classes, iframe examples become
+sandboxed embed widgets, and the MP4 becomes a native-video widget. Headings,
+plain paragraphs and isolated code blocks use native editor formats where they
+preserve the content. Adjacent command/output code blocks remain separate HTML
+blocks rather than being merged. Custom step headings, callouts, credits and
+the index cards retain their markup.
+
+The extracted first-party theme is MIT licensed with the owner's approval.
+Commit its `theme/` files and `tutorial-enhancements.js` first, then use that
+immutable commit to pin the theme and integrity-checked scripts:
+
+```sh
+node cli/strata-tutorial-site.mjs <Strata checkout> --build <theme-script-commit>
+node cli/strata-tutorial-site.mjs <Strata checkout> --check
+STRATA_CHECKOUT=<Strata checkout> node --test test/e2e/strata-tutorials.e2e.mjs
+```
+
+After migration, edit the Markdown in the new root through blog-webCLI; do not
+repeat `--prepare` over edited sources. Normal editor publishing writes the
+generated files alongside those sources and does not touch the Strata editor
+outside the tutorial folder. GitHub Pages still serves `main:/docs` directly.
+The archived `tutorials.json` catalogue continues to serve existing external
+consumers; the editable home page owns the visible index.
 
 To check a staged deployment, run
 `node cli/strata-tutorial-inventory.mjs --verify http://localhost:5597/about/tutorials/`.

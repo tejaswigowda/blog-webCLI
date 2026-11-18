@@ -13,6 +13,10 @@ contents: true
 <details><summary>Can I style it?</summary><p>The runtime supplies the layout; each starter supplies its visual character.</p></details>
 </div>
 
+## Native video
+
+<div class="wc-video" title="Native video"><a href="https://example.org/demo.mp4">Watch the demonstration</a></div>
+
 ## Notes
 
 <aside class="wc-note note"><p>A useful note.</p></aside>

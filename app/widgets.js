@@ -24,6 +24,7 @@ export function readWidget(src) {
   else if (has('wc-steps') && root.tagName === 'OL') w = { type: 'steps', items: [...root.children].map(ps) };
   else if (has('wc-compare')) w = { type: 'compare', figures: [...root.children].map(figureOf) };
   else if (has('wc-embed')) w = { type: 'embed', title: root.getAttribute('title') || '', url: root.querySelector('a')?.getAttribute('href') || '' };
+  else if (has('wc-video')) w = { type: 'native-video', title: root.getAttribute('title') || '', url: root.querySelector('a')?.getAttribute('href') || '' };
   else if (has('wc-markdown')) w = { type: 'markdown', markdown: root.querySelector('pre > code')?.textContent || '' };
   else if (has('wc-film-cards')) w = { type: 'film-cards', id: root.getAttribute('id') || '', cards: [...root.children].map((n) => ({
     image: n.querySelector('.card-poster img')?.getAttribute('src') || '',
@@ -86,6 +87,7 @@ export function editWidget(initial, chooseImage) {
       case 'compare': nodes = w.figures.map((f, i) => el('fieldset', {}, el('legend', {}, i === 0 ? 'Before' : 'After'), image(f, i === 0 ? 'Before' : 'After'))); break;
       case 'definitions': nodes = repeat(w.items, 'Definition', () => ({ term: '', definition: '' }), (item, i) => [field(item, 'term', `Term ${i + 1}`), field(item, 'definition', `Definition ${i + 1}`, true)]); break;
       case 'embed': nodes = [field(w, 'title', 'Embed title'), field(w, 'url', 'HTTPS embed address')]; break;
+      case 'native-video': nodes = [field(w, 'title', 'Video title'), field(w, 'url', 'HTTPS video address (.mp4, .webm or .ogv)')]; break;
       case 'markdown': nodes = [el('p', { class: 'hint' }, 'Canonical Markdown ending with a newline. HTML blocks and video embeds are not supported inside this widget.'), field(w, 'markdown', 'Markdown source', true)]; break;
       case 'film-cards':
         nodes = [field(w, 'id', 'Section anchor (optional)'), ...repeat(w.cards, 'Film', () => newWidget('film-cards').cards[0], (card, i) => [

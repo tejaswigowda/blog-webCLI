@@ -12,6 +12,9 @@ import { planChange } from '../app/site.js';
 import { fakeGitHub } from './fake-github.js';
 import { nativeTutorialProse } from '../cli/strata-native-prose.mjs';
 import { mdToDelta } from '../lib/markdown.js';
+import { tutorialSource } from '../cli/strata-tutorial-site.mjs';
+import { deltaToHtml } from '../lib/html.js';
+import { widgetHtml } from '../lib/widget-markup.js';
 
 const run = promisify(execFile);
 const root = process.cwd();
@@ -36,6 +39,35 @@ test('Strata migration turns plain prose into native editor ops without flatteni
   assert.ok(ops.some(({ insert, attributes }) => insert === 'code' && attributes?.code));
   assert.deepEqual(ops.flatMap(({ insert }) => insert.htmlblock ? [insert.htmlblock] : []), kept);
   assert.deepEqual(nativeTutorialProse(migrated.body), { body: migrated.body, converted: 0 });
+});
+
+test('complete tutorial conversion preserves code boundaries and uses editable media widgets', () => {
+  const cssRules = [], changes = [];
+  const source = tutorialSource(`<main>
+<h1>A tutorial</h1>
+<p>Compare <code>a &lt; b</code>, then read <strong>this</strong>.</p>
+<pre><code>command()</code></pre>
+<pre><code>{"result": "&lt;value&gt;"}</code></pre>
+<p>Next example:</p>
+<pre><code>next()</code></pre>
+<iframe src="../../#repo=me/project&amp;file=scene.json"></iframe>
+<video controls><source src="demos/example.mp4" type="video/mp4"></video>
+<table><tr><td style="text-align:right">Value</td></tr></table>
+<figure><img src="screenshots/example.png" alt="Example"></figure>
+</main>`, { name: 'example.html', title: 'A tutorial', cssRules, changes });
+  const delta = mdToDelta(source);
+  assert.ok(delta.ops.some(({ attributes }) => attributes?.header === 1));
+  assert.ok(delta.ops.some(({ attributes }) => attributes?.['code-block']));
+  const html = deltaToHtml(delta);
+  assert.equal((html.match(/<pre>/g) || []).length, 3);
+  assert.match(html, /a &lt; b/);
+  assert.match(html, /&quot;result&quot;: &quot;&lt;value&gt;&quot;/);
+  assert.match(html, /sandbox="allow-scripts"/);
+  assert.match(html, /<video src="https:\/\/strataeditor.dev\/about\/tutorials\/demos\/example.mp4"/);
+  assert.match(html, /src="https:\/\/strataeditor.dev\/about\/tutorials\/screenshots\/example.png"/);
+  assert.deepEqual(cssRules, ['.legacy-style-1{text-align:right}']);
+  const video = delta.ops.find(({ insert }) => insert.htmlblock?.includes('wc-video')).insert.htmlblock;
+  assert.equal(video, widgetHtml({ type: 'native-video', title: 'A tutorial: video demonstration', url: 'https://strataeditor.dev/about/tutorials/demos/example.mp4' }));
 });
 
 test('version configuration requires distinct safe prefixes and exactly one default', () => {
