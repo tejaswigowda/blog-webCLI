@@ -39,6 +39,7 @@ import { blogAssetRefs } from '../lib/customize.js';
 import { resolveOrder } from '../lib/order.js';
 import { dueOf, publishText } from '../lib/schedule.js';
 import { readIndex } from '../lib/index-data.js';
+import { buildVersions } from './docs-versions.js';
 
 const exists = (p) => fs.access(p).then(() => true, () => false);
 
@@ -72,18 +73,30 @@ async function load(dir) {
 const github = () => new GitHub(createNet((...a) => globalThis.fetch(...a)));
 
 async function generate(dir, { instead } = {}) {
-  const loaded = await load(dir);
-  const { blog, lock, orderList } = loaded;
-  const posts = instead || loaded.posts;
+  const blogPath = path.join(dir, 'blog.json');
+  if (!(await exists(blogPath))) throw new Refusal('no-blog-json', `no blog.json in ${path.resolve(dir)}`);
+  const blog = await fs.readFile(blogPath, 'utf8');
   const validated = validateBlog(blog);
-  let packs = { theme: null };
-  if (validated.theme && typeof validated.theme === 'object') {
-    console.log('fetching the pinned theme (as data) …');
-    packs = await loadPacks(github(), validated);
+  const loadTheme = async (b) => {
+    if (b.theme && typeof b.theme === 'object') {
+      console.log('fetching the pinned theme (as data) …');
+      return loadPacks(github(), b);
+    }
+    return { theme: null };
+  };
+  let result, posts;
+  if (validated.versions) {
+    if (instead) throw new Refusal('unsupported-version-operation', 'publish-due cannot build version refs before its changes are committed');
+    result = await buildVersions(dir, validated, loadTheme);
+    posts = result.defaultSource?.posts || [];
+  } else {
+    const loaded = await load(dir);
+    posts = instead || loaded.posts;
+    const previousIndex = await readIndex(async (p) => (await exists(path.join(dir, p)) ? fs.readFile(path.join(dir, p), 'utf8') : null));
+    result = buildSite({ blog, posts, lock: loaded.lock, ...(await loadTheme(validated)), orderList: loaded.orderList, previousIndex });
   }
-  const previousIndex = await readIndex(async (p) => (await exists(path.join(dir, p)) ? fs.readFile(path.join(dir, p), 'utf8') : null));
-  const result = buildSite({ blog, posts, lock, ...packs, orderList, previousIndex });
-  if (!result.errors.length) result.outbound = outboundReport(validated, posts);
+  if (validated.versions) result.versionPrefixes = validated.versions.map((v) => `${v.path}/`);
+  if (!result.errors.length) result.outbound = outboundReport(validated, result.defaultSource?.posts || posts);
   return result;
 }
 
@@ -153,8 +166,8 @@ async function links(args) {
   return 0;
 }
 
-async function checkPinnedAsset(dir, required) {
-  const { blog: raw, posts, lock } = await load(dir);
+async function checkPinnedAsset(dir, required, source) {
+  const { blog: raw, posts, lock } = source || await load(dir);
   const blog = validateBlog(raw);
   const refs = new Set(blogAssetRefs(blog));
   for (const file of posts) {
@@ -203,6 +216,10 @@ async function staleDirs(dir, expected) {
   const out = [];
   const walk = async (rel) => {
     for (const ent of await fs.readdir(path.join(dir, rel), { withFileTypes: true })) {
+      if (ent.isFile() && ent.name.endsWith('.html') && ent.name !== 'index.html') {
+        const r = path.posix.join(rel, ent.name);
+        if (!expected.has(r) && !OPTIONAL.includes(r) && ent.name !== '404.html' && (await fs.readFile(path.join(dir, r), 'utf8')).includes(GENERATED_MARK)) out.push(r);
+      }
       if (!ent.isDirectory() || ent.name.startsWith('.') || ent.name === 'node_modules') continue;
       if (!rel && ['posts', 'pages', 'index', ...GENERATED_TREES].includes(ent.name)) continue;
       const r = rel ? `${rel}/${ent.name}` : ent.name;
@@ -218,7 +235,7 @@ async function staleDirs(dir, expected) {
 }
 
 // Every file under a folder the generator owns that the build did not produce.
-async function staleTrees(dir, expected) {
+async function staleTrees(dir, expected, prefixes = []) {
   const out = [];
   const walk = async (rel) => {
     if (!(await exists(path.join(dir, rel)))) return;
@@ -228,7 +245,7 @@ async function staleTrees(dir, expected) {
       else if (!expected.has(r)) out.push(r);
     }
   };
-  for (const t of GENERATED_TREES) await walk(t);
+  for (const prefix of ['', ...prefixes]) for (const t of GENERATED_TREES) await walk(prefix + t);
   return out;
 }
 
@@ -264,11 +281,11 @@ async function build(dir) {
     await removeWithEmptyParents(dir, rel);
     console.log(`removed stale ${rel}`);
   }
-  for (const rel of await staleTrees(dir, expected)) {
+  for (const rel of await staleTrees(dir, expected, r.versionPrefixes)) {
     await removeWithEmptyParents(dir, rel);
     console.log(`removed stale ${rel}`);
   }
-  for (const f of OPTIONAL) if (!expected.has(f) && (await exists(path.join(dir, f)))) {
+  for (const f of ['', ...(r.versionPrefixes || [])].flatMap((prefix) => OPTIONAL.map((name) => prefix + name))) if (!expected.has(f) && (await exists(path.join(dir, f)))) {
     await removeWithEmptyParents(dir, f);
     console.log(`removed stale ${f}`);
   }
@@ -291,13 +308,13 @@ async function check(dir, requireAsset = false) {
     else if (have !== content) diffs.push(`differs  ${rel}`);
   }
   for (const rel of await staleDirs(dir, expected)) diffs.push(`stale    ${rel}`);
-  for (const rel of await staleTrees(dir, expected)) diffs.push(`stale    ${rel}`);
-  for (const f of OPTIONAL) if (!expected.has(f) && (await exists(path.join(dir, f)))) diffs.push(`stale    ${f}`);
+  for (const rel of await staleTrees(dir, expected, r.versionPrefixes)) diffs.push(`stale    ${rel}`);
+  for (const f of ['', ...(r.versionPrefixes || [])].flatMap((prefix) => OPTIONAL.map((name) => prefix + name))) if (!expected.has(f) && (await exists(path.join(dir, f)))) diffs.push(`stale    ${f}`);
   if (diffs.length) {
     console.error('generated output is out of date — run `blog-webcli build` and commit:\n  ' + diffs.join('\n  '));
     return 1;
   }
-  await checkPinnedAsset(dir, requireAsset);
+  await checkPinnedAsset(dir, requireAsset, r.defaultSource);
   console.log(`ok: ${expected.size} generated file(s) match their source`);
   return 0;
 }

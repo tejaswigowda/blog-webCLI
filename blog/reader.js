@@ -115,13 +115,13 @@ function retarget(doc, { parsed, blog, file, site }) {
       continue;
     }
     const p = u.pathname.slice(root.length) || '/';
-    const isPage = (p.endsWith('/') || p.endsWith('/index.html')) && !p.startsWith('/search/');
+    const isPage = (p.endsWith('/') || p.endsWith('.html')) && !p.startsWith('/search/');
     // a page of the blog opens here; a file (the feed, the search page, which needs its own script) opens where it is published
     const segs = p.replace(/index\.html$/, '').split('/').filter(Boolean);
     const known = !segs.length || LISTING_ROOTS.has(segs[0]) || sourceOf(site, fileFor(p)) ||
       (site.index.redirects || []).some((r) => r.from === segs.join('/'));
     // a post or a standalone page keeps the address the reader has always had (&post=slug); the listing pages have a path
-    const href = !isPage || !known ? u.href : segs.length === 1 && !LISTING_ROOTS.has(segs[0]) ? hashFor(parsed, { post: segs[0] }) : hashFor(parsed, { path: segs.join('/') + (segs.length ? '/' : '') });
+    const href = !isPage || !known ? u.href : p.endsWith('.html') && !p.endsWith('/index.html') ? hashFor(parsed, { path: p.slice(1) }) : segs.length === 1 && !LISTING_ROOTS.has(segs[0]) ? hashFor(parsed, { post: segs[0] }) : hashFor(parsed, { path: segs.join('/') + (segs.length ? '/' : '') });
     a.setAttribute('href', href);
   }
   // the reader may post nowhere (its policy says form-action 'none'): a comment or subscribe form is a pointer to the published page, which can

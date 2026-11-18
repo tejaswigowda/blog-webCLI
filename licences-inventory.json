@@ -33,6 +33,7 @@
     ]
   },
   "runtimeBuiltFrom": [
+    "lib/address.js",
     "lib/affiliate.js",
     "lib/aliases.js",
     "lib/animations.js",
@@ -49,6 +50,7 @@
     "lib/datefmt.js",
     "lib/delta.js",
     "lib/disclosure.js",
+    "lib/docs-versions.js",
     "lib/embeds.js",
     "lib/errors.js",
     "lib/frontmatter.js",

@@ -1,0 +1,463 @@
+[
+  {
+    "url": "https://strataeditor.dev/about/tutorials/a-plus-b-cubed.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]",
+      "td[style]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1&file=a%2Bb-cubed.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/animate-a-character.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/area-volume.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=area-volume.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/author-a-face.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/bubble-shooter-scene.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/build-a-scene.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1&file=bus-stop.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/edit-captured-motion.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/fight-arena-scene.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "a[download]",
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/gis-walkway-shade.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "a[target]",
+      "img[alt]",
+      "img[height]",
+      "img[width]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1&file=flux.json&commit=7b9359e3b2226064e9852cbce5d2c721175957a1&play=false&present=true",
+        "title": "Interactive pinned Mesa walkway scene in Strata"
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/hardy-weinberg.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]",
+      "td[style]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1@89f9272c7b891ab7bf798a2b58de4b3a08a36eab&file=hw.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/index.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "nav",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "a[tabindex]",
+      "img[alt]",
+      "img[height]",
+      "img[loading]",
+      "img[width]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/make-your-own-metahuman.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/makeshort.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "source",
+      "style",
+      "var",
+      "video"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/martial-arts-dojo.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/molecule-shapes.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1@e223905dc246ba30bbd233662240a0f6d6f53d9b&file=molecule-shapes.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/paddle-table-view.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/piston.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1@cf7be14bd7500edb71ad94b5b886351627f5fe05&file=piston.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/projectile.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1@3bd6749e4d9d28a292160ce9d5d543df2447dc75&file=projectile.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/racing-circuit-scene.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/render-camera-sequence.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/segment-a-diorama.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/segment-a-mesh.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=avocado.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/segment-a-scene.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/segment-any-mesh.html",
+    "rawTagRefusals": [
+      "footer",
+      "iframe",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": [
+      {
+        "kind": "strata",
+        "src": "https://strataeditor.dev/#repo=tejaswigowda/test1@554a8ee2f39a1fe1b1ebe56208fd382b3bbef8e1&file=duck.json&present=true",
+        "title": ""
+      }
+    ]
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/sparring-from-mocap.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/two-character-dance.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]",
+      "img[width]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/vrm-restyle-explorer.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  },
+  {
+    "url": "https://strataeditor.dev/about/tutorials/wizard-hat-sculpt.html",
+    "rawTagRefusals": [
+      "footer",
+      "main",
+      "script",
+      "style"
+    ],
+    "rawAttributeRefusals": [
+      "img[alt]",
+      "img[loading]"
+    ],
+    "embeds": []
+  }
+]

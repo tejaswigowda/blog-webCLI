@@ -1,7 +1,7 @@
 // Reader and publisher cores. No DOM: the UI calls these, and so do the tests.
 import { Refusal } from '../lib/errors.js';
 import { parseAliases } from '../lib/aliases.js';
-import { addrOf, isDated } from '../lib/permalink.js';
+import { addrOf, addressFile, isDated } from '../lib/permalink.js';
 import { BULK_AT } from './github.js';
 import { CannotRebuild, loadSite } from '../lib/live-render.js';
 import { prepareIncremental } from '../lib/incremental.js';
@@ -27,6 +27,7 @@ import { formToBlog } from '../lib/settings.js';
 import { gitBlobSha } from './github.js';
 import { fmtBytes } from './net.js';
 import { addressFrom } from '../lib/init.js';
+import { versionBlog, versionFiles, versionRootFiles } from '../lib/docs-versions.js';
 
 const enc = new TextEncoder();
 const json = (o) => JSON.stringify(o, null, 2) + '\n';
@@ -70,18 +71,26 @@ export async function listMedia(gh, { blog, lock, index }) {
 const sortLock = (lock) => Object.fromEntries(Object.entries(lock).sort(([a], [b]) => (a < b ? -1 : 1)));
 
 // The site for a blog.json and its posts, with the pinned theme fetched and verified.
-async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, orderText }) {
+async function generate(gh, { repo, prefix, head, tree, blogText, posts, lock, orderText, branch }) {
   const blog = validateBlog(blogText);
+  const version = blog.versions?.find((v) => v.default);
+  if (version && branch !== version.ref) throw new Refusal('unpinned-ref', `the editor only publishes the default version from its branch "${version.ref}"`);
   const packs = await loadPacks(gh, blog);
   // a manual order is an authored file (order.json) beside blog.json; the generator reads it, never writes it
   const order = resolveOrder(blog);
   const orderList = orderText !== undefined ? orderText : order.by === 'manual' && tree.has(order.list) ? await gh.readText(repo, prefix + order.list, head.sha) : null;
-  const previousIndex = tree.has('index/posts.json') ? await readIndex((p) => gh.readText(repo, prefix + p, head.sha)) : null;
-  const site = buildSite({ blog: blogText, posts, lock, ...packs, orderList, previousIndex });
+  const outputPrefix = version ? `${version.path}/` : '';
+  const previousIndex = tree.has(`${outputPrefix}index/posts.json`) ? await readIndex((p) => gh.readText(repo, prefix + outputPrefix + p, head.sha)) : null;
+  const site = buildSite({ blog: version ? versionBlog(blog, version) : blogText, posts, lock, ...packs, orderList, previousIndex, version });
   if (site.errors.length) {
     const e = new Refusal(site.errors[0].code, site.errors.map((x) => x.detail + (x.where ? ` (${x.where})` : '')).join('\n'));
     e.all = site.errors;
     throw e;
+  }
+  if (version) {
+    const output = versionFiles(blog, version, site.files);
+    const oldSitemap = tree.has('sitemap.xml') ? (await gh.readText(repo, prefix + 'sitemap.xml', head.sha)) || '' : '';
+    site.files = { ...versionRootFiles(blog, { [version.path]: output }, oldSitemap), ...output };
   }
   return site;
 }
@@ -91,9 +100,9 @@ export { generate as generateSite };
 // Generated files that disappear when the feature that made them is switched off, and anything left in a folder the
 // generator owns (tags/, archive/, page/, …) that the build no longer writes.
 const isContent = (p) => POST_PATH.test(p) || PAGE_PATH.test(p) || COMMENT_PATH.test(p); // a comments/<slug>.json travels with the posts
-const staleOptional = (site, tree, prefix) =>
+const staleOptional = (site, tree, prefix, outputPrefix = '') =>
   [...tree.keys()]
-    .filter((f) => !(f in site.files) && (OPTIONAL_GENERATED.includes(f) || GENERATED_TREES.some((t) => f.startsWith(`${t}/`))))
+    .filter((f) => f.startsWith(outputPrefix) && !(f in site.files) && (OPTIONAL_GENERATED.includes(f.slice(outputPrefix.length)) || GENERATED_TREES.some((t) => f.startsWith(`${outputPrefix}${t}/`))))
     .sort()
     .map((f) => ({ path: prefix + f, delete: true, size: 0, action: 'delete' }));
 
@@ -165,14 +174,16 @@ async function incrementalChanges(gh, ctx) {
 }
 
 async function computeChanges(gh, ctx) {
-  const inc = await incrementalChanges(gh, ctx);
+  const blog = validateBlog(ctx.blogText);
+  const outputPrefix = blog.versions ? `${blog.versions.find((v) => v.default).path}/` : '';
+  const inc = blog.versions ? null : await incrementalChanges(gh, ctx);
   if (inc) return inc;
   const { blogText, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head } = ctx;
   ctx.others ||= await readPosts(gh, { repo, prefix, head, tree, paths: ctx.otherPaths });
   const others = ctx.others;
   const sidecarPath = `comments/${POST_PATH.exec(newPost.path)?.[1]}.json`;
   const posts = [...(ctx.newComments !== undefined ? others.filter((o) => o.path !== sidecarPath) : others), { path: newPost.path, text: newPost.text }, ...(ctx.newComments ? [{ path: sidecarPath, text: ctx.newComments }] : [])];
-  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, orderText: ctx.orderText });
+  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, orderText: ctx.orderText, branch: ctx.branch });
   const out = { ...site.files, [newPost.path]: newPost.text, ...site.sourceUpdates };
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
   const changes = [];
@@ -180,17 +191,17 @@ async function computeChanges(gh, ctx) {
     const bytes = enc.encode(content);
     if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
   }
-  changes.push(...staleOptional(site, tree, prefix));
+  changes.push(...staleOptional(site, tree, prefix, outputPrefix));
   if (prevIndex) {
     // a post or page that is gone, or back to a draft, loses its generated page
     const now = new Set([...site.index.map((e) => e.path || e.slug), ...(site.pages || []).map((p) => p.path || p.slug)]);
     for (const e of [...(prevIndex.posts || []), ...(prevIndex.pages || [])]) {
-      const p = `${e.path || e.slug}/index.html`;
+      const p = outputPrefix + addressFile(e.path || e.slug);
       if (!now.has(e.path || e.slug) && tree.has(p) && !(p in site.files)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
     }
     // an old address that is no longer listed, or whose page is gone, loses its redirect
     for (const r of prevIndex.redirects || []) {
-      const p = `${r.from}/index.html`;
+      const p = `${outputPrefix}${r.from}/index.html`;
       if (!(p in site.files) && tree.has(p)) changes.push({ path: prefix + p, delete: true, size: 0, action: 'delete' });
     }
   }
@@ -275,7 +286,8 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
     }
   }
 
-  const prevIndex = tree.has('index/posts.json') ? await readIndex((p) => gh.readText(repo, prefix + p, head.sha)) : null;
+  const outputPrefix = blog.versions ? `${blog.versions.find((v) => v.default).path}/` : '';
+  const prevIndex = tree.has(`${outputPrefix}index/posts.json`) ? await readIndex((p) => gh.readText(repo, prefix + outputPrefix + p, head.sha)) : null;
   if (comments !== undefined && comments !== null) parseComments(comments, `comments/${slug}.json`); // judged before anything is built
   // a dated address depends on `date`: editing the date of a published post must not quietly move it
   if (prevIndex && isDated(blog) && newPost.status === 'published' && kind !== 'page' && !remove) {
@@ -285,7 +297,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
       throw new Refusal('permalink-move', `changing the date moves this post from ${was.path || was.slug}/ to ${to}/; add "${was.path || was.slug}" to its aliases if the move is intended, or keep the date`, target);
     }
   }
-  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, orderText, newComments: comments };
+  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, branch, orderText, newComments: comments };
   const { site, changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
   if (comments !== undefined) {
     const cp = `comments/${slug}.json`;
@@ -356,7 +368,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
     lockChanged = true;
   }
 
-  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock });
+  const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, branch });
   const out = { 'blog.json': blogText, ...site.files, ...site.sourceUpdates };
   for (const x of extraPosts) if (!tree.has(x.path)) out[x.path] = x.text;
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
@@ -365,7 +377,7 @@ async function planBlogJson(gh, { where, branch, head, whole, blogText, message,
     const bytes = enc.encode(content);
     if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
   }
-  changes.push(...staleOptional(site, tree, prefix));
+  changes.push(...staleOptional(site, tree, prefix, blog.versions ? `${blog.versions.find((v) => v.default).path}/` : ''));
   const summary = [{ repo, folder, branch, files: changes.length, bytes: changes.reduce((n, f) => n + f.size, 0) }];
   return { repo, folder, branch, mode: 'direct', slug: '', status: 'published', title, message, existed, head, changes, assetGroups: [], summary, ctx: null, lockPlan: {}, pending: [], unlisted: site.unlisted || [], orderFile: resolveOrder(blog).by === 'manual' ? resolveOrder(blog).list : null };
 }
@@ -389,6 +401,7 @@ async function styleOnlyPlan(gh, { where, branch, head, whole, oldBlog, blogText
   const prefix = folder ? `${folder}/` : '';
   let next;
   try { next = JSON.parse(blogText); } catch { return null; }
+  if (oldBlog.versions || next.versions) return null;
   if (oldBlog.stylesheet !== 'linked' || next.stylesheet !== 'linked') return null;
   if (withoutCss(oldBlog) !== withoutCss(next)) return null;
   const blog = validateBlog(blogText);

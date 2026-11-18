@@ -5,6 +5,22 @@ import { mdToDelta, deltaToMd, deltaToMarkdownChecked } from '../lib/markdown.js
 import { deltaEqual, canon } from '../lib/delta.js';
 import { splitFile, joinFile } from '../lib/frontmatter.js';
 import { Refusal } from '../lib/errors.js';
+import { deltaToHtml } from '../lib/html.js';
+import { htmlToDelta } from '../lib/wp-html.js';
+
+test('hard line breaks retain their exact markers without altering WordPress imports', () => {
+  for (const [source, expected] of [
+    ['First  \nSecond\\\nThird\n', '<p>First<br>Second<br>Third</p>'],
+    ['> First   \n> Second\n', '<blockquote><p>First<br>Second</p></blockquote>'],
+    ['**First\\\nSecond**\n', '<p><strong>First<br>Second</strong></p>'],
+  ]) {
+    const delta = mdToDelta(source);
+    assert.equal(deltaToMarkdownChecked(delta).md, source);
+    assert.equal(deltaToHtml(delta), expected);
+  }
+  assert.equal(deltaToHtml(mdToDelta('First\nSecond\n')), '<p>First Second</p>');
+  assert.equal(deltaToMd(htmlToDelta('<p>First<br>Second</p>')), 'First\n\nSecond\n');
+});
 
 test('B2: md -> Delta -> md is byte-identical for every post in the corpus', async () => {
   const posts = await corpus();

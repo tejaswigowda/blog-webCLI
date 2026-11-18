@@ -53,6 +53,22 @@ export async function loadQuill() {
         static formats() { return true; }
       }
       Quill.register(MathInline, true);
+      const Embed = Quill.import('blots/embed');
+      class HardBreak extends Embed {
+        static blotName = 'hardbreak';
+        static tagName = 'SPAN';
+        static className = 'ql-hardbreak';
+        static create(value) {
+          const node = super.create();
+          node.dataset.marker = value === '\\' ? 'backslash' : String(value.length);
+          node.appendChild(document.createElement('br'));
+          return node;
+        }
+        static value(node) {
+          return node.dataset.marker === 'backslash' ? '\\' : ' '.repeat(Number(node.dataset.marker) || 2);
+        }
+      }
+      Quill.register(HardBreak, true);
       const CodeBlock = Quill.import('formats/code-block');
       class LanguageCodeBlock extends CodeBlock {
         static create(value) {
@@ -96,7 +112,7 @@ export async function loadQuill() {
 // how a picture sits: the presets lib/delta.js IMAGE_LAYOUTS names, chosen from a small bar that appears on the picture
 export const IMAGE_PRESETS = [['', 'Default'], ['inline', 'Inline'], ['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['full', 'Full width'], ['left', 'Float left'], ['right', 'Float right']];
 
-export const FORMATS = ['header', 'para', 'layout', 'bold', 'italic', 'strike', 'code', 'math', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'video', 'mdtable', 'htmlblock'];
+export const FORMATS = ['header', 'para', 'layout', 'bold', 'italic', 'strike', 'code', 'math', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'hardbreak', 'video', 'mdtable', 'htmlblock'];
 
 export async function createEditor(el, { onImage, onVideo, chooseImage }) {
   const Quill = await loadQuill();
@@ -106,6 +122,12 @@ export async function createEditor(el, { onImage, onVideo, chooseImage }) {
     theme: 'snow',
     formats: FORMATS,
     modules: {
+      keyboard: { bindings: { hardbreak: { key: 'Enter', shiftKey: true, handler(range, context) {
+        if (context.format['code-block'] || context.format.header || context.format.list || context.offset === 0) return true;
+        this.quill.deleteText(range.index, range.length, 'user');
+        this.quill.insertEmbed(range.index, 'hardbreak', '\\', 'user');
+        this.quill.setSelection(range.index + 1, 0, 'silent');
+      } } } },
       toolbar: {
         container: [[{ header: [1, 2, 3, 4, false] }, { para: [false, 'lead', 'small'] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'slideshow', 'mdtable', 'htmlblock', 'cssclasses', 'widget'], ['clean']],
         handlers: { image: onImage, video: onVideo, slideshow: () => blocks.slideshow(), mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock(), cssclasses: () => blocks.cssclasses(), widget: () => blocks.widget() },

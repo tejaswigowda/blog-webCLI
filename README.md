@@ -4,6 +4,8 @@ Build and publish a text-first website or blog from GitHub repositories. `https:
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-site deployment. This is not a visual or drag-and-drop builder or a template marketplace.
 
+For docs sites, see [versioned documentation, flat page URLs and hard line breaks](docs/versioned-docs.md).
+
 ## 1.x compatibility contract
 
 Before tagging 1.0, new site configs use `"schemaVersion": 1` in `blog.json`. A config without

@@ -475,6 +475,25 @@ test('page hierarchy derives three-level paths and orders sibling menus', () => 
   assert.deepEqual(ok({ search: true }, [...inputs].reverse()).files, files);
 });
 
+test('flat page permalinks preserve hierarchy, navigation, search and reader addresses', async () => {
+  const blog = blogJson({ pagePermalink: '/{slug}.html', search: true });
+  const intro = page('intro', { parent: 'guides', menu: '1', body: '[Guides](../guides/)' });
+  const built = buildSite({ blog, posts: [page('guides', { menu: '1' }), intro], lock: {} });
+  assert.deepEqual(built.errors, []);
+  const file = 'guides/intro.html';
+  assert.ok(built.files['guides.html']);
+  assert.ok(!built.files['guides/intro/index.html']);
+  assert.match(built.files[file], /rel="canonical" href="[^"]+\/guides\/intro\.html"/);
+  assert.match(built.files[file], /href="\.\.\/guides\.html">Guides/);
+  assert.match(built.files['index.html'], /href="\.\/guides\/intro\.html"/);
+  assert.match(built.files['sitemap.xml'], /\/guides\/intro\.html<\/loc>/);
+  assert.equal(JSON.parse(built.files['search.json']).posts.find((p) => p.slug === 'intro').path, file);
+  const map = new Map(Object.entries(built.files));
+  map.set('blog.json', JSON.stringify(blog));
+  const site = await loadSite(async (p) => map.has(p) ? enc.encode(map.get(p)) : null, { anyBlog: true });
+  assert.equal(previewHtml(site, file, { text: intro.text }).html, built.files[file]);
+});
+
 test('page hierarchy refuses missing parents, cycles, and more than three levels', () => {
   const code = (inputs) => build({}, inputs).errors[0]?.code;
   assert.equal(code([page('a', { parent: 'missing' })]), 'no-such-parent');
