@@ -225,6 +225,7 @@ test('widget toolbar forms: validation, all types, lossless editing, source fall
         assert.match(await page.evaluate("document.querySelector('dialog.blk-dialog .blk-msg').textContent"), /scheme/);
       }
       for (const [label, value] of Object.entries(values)) await fill(label, value);
+      if (type === 'embed') await page.evaluate("document.querySelector('dialog.blk-dialog input[type=checkbox]').click()");
       if (type === 'faq') {
         await click('+ Question');
         assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog .primary').disabled"), true, 'new empty question is refused');

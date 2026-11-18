@@ -104,7 +104,13 @@ test('Strata complete migration: every old URL, layout, search, source and norma
         assert.match(html, /https:\/\/strataeditor.dev\/about\/tutorials\/demos\/pyth.mp4/);
       }
       const frames = original(name).match(/<iframe\b/g) || [];
-      assert.equal((html.match(/sandbox="allow-scripts"/g) || []).length, frames.length, name);
+      assert.equal((html.match(/sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"/g) || []).length, frames.length, name);
+      if (frames.length) assert.ok(await page.evaluate(`(() => {
+        const embed = document.querySelector('.wc-embed');
+        const frame = embed.querySelector('iframe').getBoundingClientRect();
+        const link = embed.querySelector('a').getBoundingClientRect();
+        return Math.abs(frame.right-link.right) < 1;
+      })()`), `${name}: embed fallback is not right-aligned`);
     }
     await page.send('Page.navigate', { url: `${origin}/about/tutorials/index.html` });
     await until(page, "document.querySelector('input[type=search]')");

@@ -371,6 +371,10 @@ unlike `video:` references, it is not pinned. The frame uses `sandbox="allow-scr
 `referrerpolicy="no-referrer"`, lazy loading and a source link. The provider can make network
 requests and may block embedding or require sandbox permissions not granted here; use only
 sources you trust. Raw authored `<iframe>` remains disallowed.
+**Allow opening links in new tabs** is off by default. Enabling it adds the
+`allow-popups` class to the widget and grants `allow-popups allow-popups-to-escape-sandbox`
+so links such as Remix can open a normal editor tab. It never grants `allow-same-origin`
+or navigation of the parent page. The source link below the frame is right-aligned.
 
 Unknown `wc-*` classes are refused as `bad-widget`, naming the file, offending class and
 nearest known spelling. Malformed structures are refused, not stripped or silently rendered.

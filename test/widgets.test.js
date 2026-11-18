@@ -68,6 +68,17 @@ test('native video widget preserves the source and renders controls with a fallb
   assert.throws(() => checkHtmlBlock('<video src="https://example.org/demo.mp4"></video>'), /not allowed/);
 });
 
+test('embed popups require an explicit opt-in and retain opaque-origin isolation', () => {
+  const src = widgetHtml({ type: 'embed', title: 'Remixable scene', url: 'https://example.org/', allowPopups: true });
+  assert.equal(deltaToMarkdownChecked(mdToDelta(src + '\n')).md, src + '\n');
+  const rendered = deltaToHtml(mdToDelta(src + '\n'));
+  assert.match(rendered, /sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"/);
+  assert.doesNotMatch(rendered, /allow-same-origin|allow-top-navigation/);
+  const blog = { ...EXAMPLE_BLOG };
+  const post = { path: 'pages/scene.md', text: `---\nslug: scene\ntitle: Scene\nstatus: published\n---\n\n${src}\n` };
+  assert.deepEqual(buildSite({ blog, posts: [post], lock: {} }).errors, []);
+});
+
 test('Markdown widget preserves source, renders the subset, and checks its asset and provider links', () => {
   const src = widgetHtml({ type: 'markdown', markdown: '## Heading\n\nA **bold** [link](https://example.org/).\n' });
   assert.equal(deltaToMarkdownChecked(mdToDelta(src + '\n')).md, src + '\n');

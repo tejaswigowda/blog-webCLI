@@ -46,7 +46,7 @@ export function tutorialSource(html, { name, title, cssRules, changes }) {
       const label = attrs.title || `${title}: ${tag === 'iframe' ? 'interactive example' : 'video demonstration'}`;
       const cls = tag === 'iframe' ? 'wc-embed' : 'wc-video';
       changes.push(`${tag} converted to ${cls}: ${href}`);
-      return widgetHtml({ type: tag === 'iframe' ? 'embed' : 'native-video', title: label, url: href });
+      return widgetHtml({ type: tag === 'iframe' ? 'embed' : 'native-video', title: label, url: href, allowPopups: tag === 'iframe' });
     }
     if (tag === 'footer') {
       tag = 'div';

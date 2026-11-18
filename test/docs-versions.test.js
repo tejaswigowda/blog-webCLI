@@ -62,7 +62,7 @@ test('complete tutorial conversion preserves code boundaries and uses editable m
   assert.equal((html.match(/<pre>/g) || []).length, 3);
   assert.match(html, /a &lt; b/);
   assert.match(html, /&quot;result&quot;: &quot;&lt;value&gt;&quot;/);
-  assert.match(html, /sandbox="allow-scripts"/);
+  assert.match(html, /sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"/);
   assert.match(html, /<video src="https:\/\/strataeditor.dev\/about\/tutorials\/demos\/example.mp4"/);
   assert.match(html, /src="https:\/\/strataeditor.dev\/about\/tutorials\/screenshots\/example.png"/);
   assert.deepEqual(cssRules, ['.legacy-style-1{text-align:right}']);
