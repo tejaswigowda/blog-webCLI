@@ -659,6 +659,14 @@ async function settingsView(repo, r) {
   const select = (key, options) => bind(key, h('select', {}, options.map(([v, t]) => h('option', { value: v, selected: v === f0[key] }, t))));
   const field = (label, el, hint) => h('div', {}, h('label', {}, label), el, hint && hint.nodeType ? hint : hint ? h('div', { class: 'hint' }, hint) : null);
   const section = (title, ...kids) => h('fieldset', {}, h('legend', {}, title), ...kids);
+  const favicon = input('favicon', { 'aria-label': 'Favicon', placeholder: 'asset:images/favicon.png', style: 'flex:1;min-width:0' });
+  const chooseFavicon = h('button', { type: 'button', onclick: () => openImagePicker(repo, r.ref, {
+    title: 'Choose a favicon',
+    onPick: (item) => {
+      favicon.value = item.ref;
+      favicon.dispatchEvent(new Event('input', { bubbles: true }));
+    },
+  }) }, 'Choose from media…');
 
   const swatchCell = (key, fallback) => {
     const text = bind(key, h('input', { value: f0[key], placeholder: fallback }));
@@ -708,7 +716,7 @@ async function settingsView(repo, r) {
   const form = h(
     'form',
     { onsubmit: (e) => e.preventDefault() },
-    section('General', h('div', { class: 'row' }, field('Title', input('title')), field('Author', input('author'))), h('div', { class: 'row' }, field('Description', input('description'))), h('div', { class: 'row' }, field('Address the blog is served at', bind('domain', addr.input), addr.note))),
+    section('General', h('div', { class: 'row' }, field('Title', input('title')), field('Author', input('author'))), h('div', { class: 'row' }, field('Description', input('description'))), h('div', { class: 'row' }, field('Address the blog is served at', bind('domain', addr.input), addr.note)), field('Favicon', h('div', { class: 'actions' }, favicon, chooseFavicon), 'The icon shown in browser tabs. A square PNG works well. Clear the field to remove it.')),
     section(
       'Media repositories',
       h('div', { class: 'row' }, field('Images', input('images', { placeholder: homeFolder('images') })), field('Audio', input('audio', { placeholder: 'owner/name or owner/name/folder' })), field('Video', input('video', { placeholder: homeFolder('videos') }))),
@@ -1123,6 +1131,28 @@ function mediaGrid(items, { onPick = null, onReplace = null } = {}) {
   more.addEventListener('click', () => { shown += PAGE; draw(); });
   draw();
   return { root: h('div', {}, h('div', { class: 'media-bar' }, search, h('label', { class: 'check' }, unusedOnly, ' Unused only'), count), grid, more), search };
+}
+
+async function openImagePicker(repo, ref, { title = 'Choose an image', onPick, onUpload }) {
+  let media;
+  try {
+    media = await working('Looking at the images…', () => loadMedia(repo, ref));
+  } catch (e) {
+    return fail(e);
+  }
+  const dlg = h('dialog', { class: 'media-dialog', 'aria-label': title });
+  const close = () => { dlg.close(); dlg.remove(); };
+  const grid = mediaGrid(media.items, { onPick: (item) => { close(); onPick(item); } });
+  dlg.append(
+    h('h2', {}, title),
+    h('div', { class: 'actions' }, onUpload ? h('button', { type: 'button', class: 'primary', icon: 'upload', onclick: () => { close(); onUpload(); } }, 'Upload a new image…') : null, h('button', { type: 'button', icon: 'x', onclick: close }, 'Cancel')),
+    ...media.problems.map((p) => h('div', { class: 'err' }, p)),
+    grid.root,
+  );
+  dlg.addEventListener('cancel', () => dlg.remove(), { once: true });
+  document.body.append(dlg);
+  dlg.showModal();
+  grid.search.focus();
 }
 
 async function mediaView(repo, r) {
@@ -1589,28 +1619,13 @@ async function editorView(repo, r) {
   }
 
   // The picker: an image already in the images repository (so it is not uploaded twice), or a new one. `use` receives an asset reference.
-  async function chooseImage(use) {
+  function chooseImage(use) {
     const have = Object.keys((blog.assets && blog.assets.repos) || {}).length;
     if (!have) return uploadImage(use);
-    let media;
-    try {
-      media = await working('Looking at the images…', () => loadMedia(repo, r.ref));
-    } catch (e) {
-      return fail(e);
-    }
-    const dlg = h('dialog', { class: 'media-dialog' });
-    const finish = (ref) => { dlg.close(); dlg.remove(); if (ref) use(ref); };
-    const grid = mediaGrid(media.items, { onPick: (it) => { if (it.url) picked.set(it.ref, it.url); finish(it.ref); } });
-    dlg.append(
-      h('h2', {}, 'Choose an image'),
-      h('div', { class: 'actions' }, h('button', { type: 'button', class: 'primary', icon: 'upload', onclick: () => { dlg.close(); dlg.remove(); uploadImage(use); } }, 'Upload a new image…'), h('button', { type: 'button', icon: 'x', onclick: () => finish(null) }, 'Cancel')),
-      media.problems.map((p) => h('div', { class: 'err' }, p)),
-      grid.root,
-    );
-    dlg.addEventListener('cancel', () => dlg.remove(), { once: true });
-    document.body.append(dlg);
-    dlg.showModal();
-    grid.search.focus();
+    return openImagePicker(repo, r.ref, {
+      onPick: (it) => { if (it.url) picked.set(it.ref, it.url); use(it.ref); },
+      onUpload: () => uploadImage(use),
+    });
   }
 
   // A file chooser for a new image; `use` receives the staged asset reference.

@@ -73,6 +73,21 @@ const blogJson = (extra = {}) => JSON.stringify({ title: 'T', description: 'd', 
 const clickText = (page, selector, text) => page.evaluate(`(() => { const button = [...document.querySelectorAll(${JSON.stringify(selector)})].find(b => b.textContent.trim().startsWith(${JSON.stringify(text)})); if (!button) throw new Error('No button: ' + ${JSON.stringify(text)}); button.click(); })()`);
 const fill = (page, selector, value) => page.evaluate(`(() => { const input = document.querySelector(${JSON.stringify(selector)}); input.value = ${JSON.stringify(value)}; input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
 
+test('Settings: choose a favicon from the media library', { skip, timeout: 60000 }, async () => {
+  const { page, close } = await signedIn(blogJson({ repo: 'example/blog', assets: { base: 'https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}', repos: { images: 'example/images' } } }));
+  try {
+    await page.evaluate("location.hash = '#repo=example/blog&settings'; 0");
+    await until(page, 'document.querySelector(\'input[aria-label="Favicon"]\')');
+    await clickText(page, 'form button', 'Choose from media');
+    await until(page, "document.querySelector('dialog.media-dialog[open] .media-tile')");
+    await page.evaluate("document.querySelector('dialog.media-dialog .media-tile[title=\"asset:images/boat.png\"]').click(); 0");
+    assert.equal(await page.evaluate("document.querySelector('input[aria-label=\"Favicon\"]').value"), 'asset:images/boat.png');
+    assert.equal(await page.evaluate("document.querySelector('dialog.media-dialog') === null"), true);
+  } finally {
+    close();
+  }
+});
+
 test('slideshow images: select from Media, upload on save, and discard cancelled uploads without losing slide fields', { skip, timeout: 120000 }, async () => {
   const { page, close } = await signedIn(blogJson({ repo: 'example/blog', assets: { base: 'https://cdn.jsdelivr.net/gh/{owner}/{repo}@{sha}/{path}', repos: { images: 'example/images' } } }));
   try {

@@ -171,6 +171,26 @@ test('settings: a header logo is pinned to its file; one that does not exist is 
   assert.equal(net.ledger.uploaded.bytes, 0);
 });
 
+test('settings: a favicon is pinned, emitted site-wide, and removed when cleared', async () => {
+  const { server, gh } = await world();
+  const form = blogToForm((await loadBlog(gh, 'example/blog')).blog);
+  const save = (favicon) => planSettings(gh, { repo: 'example/blog', branch: 'main', form: { ...form, favicon } });
+  await assert.rejects(save('https://example.com/icon.png'), /"favicon" must be an asset: reference/);
+  await assert.rejects(save('asset:images/missing.png'), (e) => e.code === 'unresolved-asset');
+  await executePlan(gh, await save('asset:images/logo.png'));
+  const after = server.files('example/blog');
+  const sha = server.state['example/images'].branches.main;
+  assert.equal(JSON.parse(after['assets.lock.json'])['images/logo.png'], sha);
+  assert.equal(blogToForm(JSON.parse(after['blog.json'])).favicon, 'asset:images/logo.png');
+  for (const file of ['index.html', 'static-hls-in-git/index.html', 'archive/index.html']) {
+    assert.ok(after[file].includes(`<link rel="icon" href="https://cdn.jsdelivr.net/gh/example/images@${sha}/logo.png">`), file);
+  }
+  await executePlan(gh, await save(''));
+  const cleared = server.files('example/blog');
+  assert.ok(!('favicon' in JSON.parse(cleared['blog.json'])));
+  assert.doesNotMatch(cleared['index.html'], /rel="icon"/);
+});
+
 test('settings: invalid input is refused, and a post that cannot be published blocks the change', async () => {
   const { gh } = await world({ 'posts/broken.md': '---\nslug: broken\ntitle: B\ndate: 2026-01-01\nstatus: published\n---\n\nwrapped\nline\n' });
   const ctx = { blog: await exampleBlog() };

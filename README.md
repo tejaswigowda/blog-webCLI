@@ -1395,6 +1395,11 @@ Two things cost a request each, asked when the page opens: the post's **history*
 **Media** (a button on the blog's page, `#repo=owner/blog&media`) shows the images in the blog's asset repositories, for four jobs and nothing
 more:
 
+Set the browser-tab icon under **Settings → General → Favicon → Choose from media…**.
+Save settings to pin the image and publish it as the site's favicon. Clear the
+field and save to remove it. In `blog.json`, the optional `favicon` field is an
+`asset:` reference.
+
 1. **pick** an image that already exists (the editor's image button, and **Choose…** beside Cover and Share image, open the same grid, with
    *Upload a new image…* for one that does not), so it is not uploaded twice;
 2. **see** what is in the repository;
