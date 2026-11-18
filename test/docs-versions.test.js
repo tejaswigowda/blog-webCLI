@@ -10,6 +10,8 @@ import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
 import { planChange } from '../app/site.js';
 import { fakeGitHub } from './fake-github.js';
+import { nativeTutorialProse } from '../cli/strata-native-prose.mjs';
+import { mdToDelta } from '../lib/markdown.js';
 
 const run = promisify(execFile);
 const root = process.cwd();
@@ -17,6 +19,24 @@ const cli = path.join(root, 'cli/blog.js');
 const versions = [{ path: 'v2', ref: 'main', label: '2.0', default: true }, { path: 'v1', ref: 'v1.0', label: '1.0' }];
 const blog = { title: 'Docs', description: 'Docs site', author: 'A', domain: 'https://example.test/docs', search: true, pagePermalink: '/{slug}.html', versions };
 const post = (body) => `---\nslug: intro\ntitle: Intro\ndate: 2026-01-01\nstatus: published\n---\n\n${body}\n`;
+
+test('Strata migration turns plain prose into native editor ops without flattening custom HTML', () => {
+  const kept = [
+    '<h2><span class="step">1</span> Use the editor</h2>',
+    '<p class="tagline">Keep this style.</p>',
+    '<p>Keep this <a href="./guide.html" rel="author">attributed link</a>.</p>',
+    '<pre><code>  preserve indentation</code></pre>',
+  ];
+  const source = ['<h1>Strata tutorial</h1>', '<p>It\'s <strong>editable</strong> with <code>code</code>.</p>', ...kept].join('\n\n') + '\n';
+  const migrated = nativeTutorialProse(source);
+  assert.equal(migrated.converted, 2);
+  const { ops } = mdToDelta(migrated.body);
+  assert.ok(ops.some(({ insert, attributes }) => insert === '\n' && attributes?.header === 1));
+  assert.ok(ops.some(({ insert, attributes }) => insert === 'editable' && attributes?.bold));
+  assert.ok(ops.some(({ insert, attributes }) => insert === 'code' && attributes?.code));
+  assert.deepEqual(ops.flatMap(({ insert }) => insert.htmlblock ? [insert.htmlblock] : []), kept);
+  assert.deepEqual(nativeTutorialProse(migrated.body), { body: migrated.body, converted: 0 });
+});
 
 test('version configuration requires distinct safe prefixes and exactly one default', () => {
   assert.doesNotThrow(() => validateBlog(blog));

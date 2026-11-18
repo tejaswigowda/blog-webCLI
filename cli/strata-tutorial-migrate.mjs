@@ -1,18 +1,20 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { buildSite, parsePost, renderPost } from '../lib/blog.js';
-import { joinFile, newFront } from '../lib/frontmatter.js';
+import { joinFile, newFront, splitFile } from '../lib/frontmatter.js';
 import { parseHtml } from '../lib/html-tree.js';
 import { escapeHtml } from '../lib/html.js';
 import { canonHtml, tokenizeHtml, ALLOWED_TAGS } from '../lib/rawhtml.js';
 import { decodeHtml } from '../lib/html-entities.js';
+import { nativeTutorialProse, sameTutorialMarkup } from './strata-native-prose.mjs';
 
 const [root, mode] = process.argv.slice(2);
-if (!root || !['--stage', '--check'].includes(mode)) throw new Error('usage: strata-tutorial-migrate.mjs <Strata repository> <--stage|--check>');
+if (!root || !['--stage', '--check', '--native'].includes(mode)) throw new Error('usage: strata-tutorial-migrate.mjs <Strata repository> <--stage|--check|--native>');
+const staging = mode === '--stage';
 const inventory = JSON.parse(await readFile(new URL('../docs/strata-tutorial-inventory.json', import.meta.url), 'utf8'));
 const sourceDir = path.join(root, 'tutorial-source');
 const legacyRoot = path.join(root, 'docs/about/tutorials');
-const blog = mode === '--check' ? JSON.parse(await readFile(path.join(sourceDir, 'blog.json'), 'utf8')) :
+const blog = !staging ? JSON.parse(await readFile(path.join(sourceDir, 'blog.json'), 'utf8')) :
   { schemaVersion: 1, title: 'Strata tutorials', author: 'Strata', description: 'Hands-on Strata tutorials', domain: 'https://strataeditor.dev', pagePermalink: '/{slug}.html' };
 const allowed = new Set(ALLOWED_TAGS);
 const voids = new Set(['br', 'col', 'hr', 'img', 'wbr']);
@@ -20,7 +22,7 @@ const input = (slug, title, parent, body) => ({
   path: `pages/${slug}.md`,
   text: joinFile(newFront({ slug, title, ...(parent ? { parent } : {}), status: 'published' }), body),
 });
-const required = mode === '--check' ? await Promise.all(['pages/about.md', 'pages/tutorials.md']
+const required = !staging ? await Promise.all(['pages/about.md', 'pages/tutorials.md']
   .map(async (name) => ({ path: name, text: await readFile(path.join(sourceDir, name), 'utf8') }))) :
   [input('about', 'About', null, 'About Strata.\n'), input('tutorials', 'Tutorials', 'about', 'Strata tutorials.\n')];
 const stage = [];
@@ -37,7 +39,7 @@ function writeNode(node) {
 }
 
 const manifestPath = path.join(sourceDir, 'migration.json');
-const existing = mode === '--check' ? JSON.parse(await readFile(manifestPath, 'utf8')) : null;
+const existing = !staging ? JSON.parse(await readFile(manifestPath, 'utf8')) : null;
 const retained = existing?.retained || [];
 for (const row of inventory) {
   const name = new URL(row.url).pathname.split('/').at(-1);
@@ -51,7 +53,7 @@ for (const row of inventory) {
   const slug = name.slice(0, -5);
   try {
     let source;
-    if (mode === '--stage') {
+    if (staging) {
       const parsed = parseHtml(interior.replace(footer, '').replace(style, ''));
       const heading = parsed.children.find((n) => n.tag === 'h1');
       if (!heading || heading.children.some((n) => typeof n !== 'string')) throw new Error('cannot derive a plain tutorial title');
@@ -64,15 +66,23 @@ for (const row of inventory) {
     } else {
       source = { path: `pages/${slug}.md`, text: await readFile(path.join(sourceDir, `pages/${slug}.md`), 'utf8') };
     }
-    stage.push({ source, original, filename, name });
+    let converted = 0;
+    if (mode !== '--check') {
+      const { front, body } = splitFile(source.text, source.path);
+      const native = nativeTutorialProse(body);
+      converted = native.converted;
+      if (converted) source.text = joinFile(front, native.body);
+    }
+    stage.push({ source, original, filename, name, converted });
   } catch (e) {
-    if (mode === '--check') throw e;
+    if (!staging) throw e;
     retained.push({ name, reason: e.message });
   }
 }
 const result = buildSite({ blog, lock: {}, posts: [...required, ...stage.map(({ source }) => source)] });
 if (result.errors.length) throw new AggregateError(result.errors, result.errors.map((e) => e.message).join('\n'));
-for (const { source, original, filename, name } of stage) {
+const writes = [];
+for (const { source, original, filename, name, converted } of stage) {
   const parsed = parsePost(source);
   const address = `about/tutorials/${name}`;
   if (!result.files[address]) throw new Error(`generator did not preserve ${address}`);
@@ -83,15 +93,19 @@ for (const { source, original, filename, name } of stage) {
   if (creditsCss) html = html.replace('</head>', `${creditsCss}\n</head>`);
   if (mode === '--check') {
     if (html !== original) throw new Error(`${name}: generated tutorial is stale`);
-  } else {
-    await mkdir(path.join(sourceDir, 'pages'), { recursive: true });
-    await writeFile(path.join(sourceDir, source.path), source.text);
-    await writeFile(filename, html);
+  } else if (mode === '--native' && !sameTutorialMarkup(original, html)) {
+    throw new Error(`${name}: native conversion would change the published markup`);
+  } else if (staging || converted) {
+    writes.push([path.join(sourceDir, source.path), source.text], [filename, html]);
   }
 }
-if (mode === '--stage') {
+if (staging) await mkdir(path.join(sourceDir, 'pages'), { recursive: true });
+for (const [file, text] of writes) await writeFile(file, text);
+if (staging) {
   for (const page of required) await writeFile(path.join(sourceDir, page.path), page.text);
   await writeFile(path.join(sourceDir, 'blog.json'), JSON.stringify(blog, null, 2) + '\n');
   await writeFile(manifestPath, JSON.stringify({ staged: stage.map(({ name }) => name), retained }, null, 2) + '\n');
 }
-console.log(JSON.stringify({ staged: stage.map(({ name }) => name), retained }, null, 2));
+console.log(JSON.stringify({ staged: stage.map(({ name }) => name), retained,
+  ...(mode === '--native' ? { convertedBlocks: stage.reduce((sum, row) => sum + row.converted, 0) } : {}),
+}, null, 2));

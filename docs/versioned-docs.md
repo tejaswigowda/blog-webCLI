@@ -39,6 +39,14 @@ existing `.html` address, allowlist conflicts, and interactive embeds. The
 migration leaves incompatible pages in place; it does not replace working
 iframes or native videos with unverified equivalents.
 
+For an already migrated Strata checkout, run
+`node cli/strata-tutorial-migrate.mjs <Strata repository> --native` to make simple
+headings and prose editable natively in Quill. It updates only migrated
+tutorials and checks that the rendered markup is equivalent. Blocks with custom
+markup that Markdown cannot reproduce (for example numbered step headings and
+styled callouts) stay as HTML. Run the same command with `--check` to verify the
+generated files are current.
+
 To check a staged deployment, run
 `node cli/strata-tutorial-inventory.mjs --verify http://localhost:5597/about/tutorials/`.
 After publication, run `node cli/strata-tutorial-inventory.mjs --verify` against
