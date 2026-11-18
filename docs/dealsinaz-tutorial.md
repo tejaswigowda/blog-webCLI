@@ -58,3 +58,18 @@ This rebuild uses the existing pinned `asset:images/design/hero.png` as the site
 Test historical links and every referenced upload on the new host. Confirm that GitHub Pages is serving the expected commit, and keep a copy of the old WordPress site available while resolving the remaining cutover gaps. Re-run the comparison for later changes; this case study does not set up ongoing synchronization.
 
 [Tutorials and guides](/about/tutorials/) · [Open the editor](/)
+## Affiliate-host review
+
+On the 8,003-post migration snapshot (`5ae3cdb`), `blog-webcli links --suspect`
+flagged 16 of 1,427 outbound hosts, of which five were already marked.
+The 11 unlisted hosts broke down as follows:
+
+| Query signal | Unlisted hosts | Review |
+|---|---|---|
+| `irgwc` (sometimes with `clickid`) | `www.homedepot.com`, `www.basspro.com` | Prioritize for affiliate-domain review. |
+| `ranMID` | `www.vichyusa.com`, `www.lacolombe.com`, `www.laroche-posay.us`, `www.microsoft.com`, `www.sephora.com`, `www.skinceuticals.com` | Retailer links carry an affiliate-network-style merchant ID; prioritize for review. |
+| `awc` | `www.underarmour.com` | Prioritize for affiliate-domain review. |
+| `clickid` alone | `www.redbox.com`, `www.valuemags.com` | Ambiguous: a generic click identifier alone does not establish a paid relationship. |
+
+This was a review of the parameter shortlist, not proof of commission or a clearance
+of the unflagged tail. No domains were added on parameter evidence alone.

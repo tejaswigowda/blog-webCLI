@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 1,
   "title": "Example Blog",
   "description": "A blog that is a GitHub repository, rendered by blog.webcli.app.",
   "author": "Ada Example",

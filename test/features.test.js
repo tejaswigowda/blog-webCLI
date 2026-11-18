@@ -124,6 +124,22 @@ test('affiliate marking and disclosure agree in static, live and reader pages', 
   assert.equal(source.text, post('deal', { body }).text);
 });
 
+test('disclosure suppression uses visible body text and preserves near-misses', async () => {
+  const blog = blogJson({ repo: 'me/blog', content: { base: 'https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}' }, disclosure: { text: 'Default disclosure.', skipIfPresent: 'We earn a commission' } });
+  const existing = post('existing', { body: '<p>WE&nbsp;<strong>earn</strong>   a com<em>mission</em> on some sales.</p>' });
+  const near = post('near', { body: '<p><a title="We earn a commission" href="/offer">Offer</a></p>\n\nWe earn a commissioning fee.' });
+  const built = buildSite({ blog, posts: [existing, near], lock: {} });
+  assert.deepEqual(built.errors, []);
+  const exact = built.files['existing/index.html'];
+  assert.doesNotMatch(exact, /class="affiliate-disclosure"/);
+  assert.match(built.files['near/index.html'], /class="affiliate-disclosure">Default disclosure\./);
+  const map = new Map(Object.entries(built.files));
+  map.set('blog.json', JSON.stringify(blog));
+  const site = await loadSite(async (p) => map.has(p) ? enc.encode(map.get(p)) : null, { anyBlog: true });
+  assert.equal(renderFromSite(site, { slug: 'existing', text: existing.text }).html, exact);
+  assert.equal(previewHtml(site, 'existing/index.html', { text: existing.text }).html, exact);
+});
+
 test('invalid rel names its file, link and offending token', () => {
   const result = build({}, [post('deal', { body: '<p><a rel="license invalid" href="https://shop.example/item">Offer</a></p>' })]);
   assert.equal(result.errors[0]?.code, 'bad-rel');

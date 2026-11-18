@@ -31,7 +31,7 @@ import { splitFile, joinFile } from '../lib/frontmatter.js';
 import { deltaToMd, markdownWidget, mdToDelta, parseInline } from '../lib/markdown.js';
 import { toLines } from '../lib/delta.js';
 import { tokenizeHtml } from '../lib/rawhtml.js';
-import { matchesAffiliate, outboundHost } from '../lib/affiliate.js';
+import { DEFAULT_AFFILIATE_PARAMS, matchesAffiliate, outboundHost } from '../lib/affiliate.js';
 import { collectAssetRefs, parseAssetRef, resolveAsset } from '../lib/assets.js';
 import { collectVideoRefs, parseVideoRef } from '../lib/video.js';
 import { at, parseRepoRef } from '../lib/reporef.js';
@@ -87,11 +87,20 @@ async function generate(dir, { instead } = {}) {
   return result;
 }
 
-function outboundReport(blog, files) {
+function outboundReport(blog, files, suspect = false) {
   const counts = new Map();
+  const wanted = new Set((blog.affiliateParams ?? DEFAULT_AFFILIATE_PARAMS).map((name) => name.toLowerCase()));
   const add = (href) => {
     const host = outboundHost(href, blog.domain + '/');
-    if (host) counts.set(host, (counts.get(host) || 0) + 1);
+    if (!host) return;
+    const entry = counts.get(host) || { host, count: 0, suspectCount: 0, params: new Set(), marked: matchesAffiliate(host, blog.affiliates) };
+    entry.count++;
+    if (suspect) {
+      const params = [...new URL(href, blog.domain + '/').searchParams.keys()].map((name) => name.toLowerCase()).filter((name) => wanted.has(name));
+      if (params.length) entry.suspectCount++;
+      for (const name of params) entry.params.add(name);
+    }
+    counts.set(host, entry);
   };
   const inline = (items) => {
     let previous = null;
@@ -126,19 +135,25 @@ function outboundReport(blog, files) {
     if (post.status !== 'published') continue;
     visit(post.delta);
   }
-  return [...counts].map(([host, count]) => ({ host, count, marked: matchesAffiliate(host, blog.affiliates) }))
-    .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host));
+  return [...counts.values()].filter((entry) => !suspect || entry.suspectCount)
+    .sort((a, b) => (suspect ? b.suspectCount - a.suspectCount : b.count - a.count) || a.host.localeCompare(b.host));
 }
 
-async function links(dir) {
+async function links(args) {
+  const dirs = args.filter((arg) => !arg.startsWith('--'));
+  if (dirs.length > 1 || args.some((arg) => arg.startsWith('--') && arg !== '--suspect')) throw new Refusal('usage', 'blog-webcli links [dir] [--suspect]');
+  const dir = dirs[0] || '.';
+  const suspect = args.includes('--suspect');
   const { blog, posts } = await load(dir);
-  const report = outboundReport(validateBlog(blog), posts);
-  for (const { host, count, marked } of report) console.log(`${host}\t${count}\t${marked ? 'marked affiliate' : 'unmarked'}`);
-  console.log(`${report.length} outbound hosts, ${report.filter((entry) => entry.marked).length} marked affiliate`);
+  const report = outboundReport(validateBlog(blog), posts, suspect);
+  for (const { host, count, marked, suspectCount, params } of report) {
+    console.log(`${host}\t${count}\t${marked ? 'marked affiliate' : 'unmarked'}${suspect ? `\t${suspectCount}\t${[...params].sort().join(',')}` : ''}`);
+  }
+  console.log(`${report.length} ${suspect ? 'suspect' : 'outbound'} hosts, ${report.filter((entry) => entry.marked).length} marked affiliate`);
   return 0;
 }
 
-async function checkPinnedAsset(dir) {
+async function checkPinnedAsset(dir, required) {
   const { blog: raw, posts, lock } = await load(dir);
   const blog = validateBlog(raw);
   const refs = new Set(blogAssetRefs(blog));
@@ -149,6 +164,7 @@ async function checkPinnedAsset(dir) {
   }
   const ref = [...refs].sort()[0] || Object.keys(lock).filter((key) => !key.endsWith('#size')).sort().map((key) => `asset:${key}`)[0];
   if (!ref) {
+    if (required) throw new Refusal('unresolved-asset', 'no pinned assets to check');
     console.log('no pinned assets to check');
     return;
   }
@@ -261,7 +277,7 @@ async function build(dir) {
   return 0;
 }
 
-async function check(dir) {
+async function check(dir, requireAsset = false) {
   const r = await generate(dir);
   report(r);
   if (r.errors.length) return 1;
@@ -281,7 +297,7 @@ async function check(dir) {
     console.error('generated output is out of date — run `blog-webcli build` and commit:\n  ' + diffs.join('\n  '));
     return 1;
   }
-  await checkPinnedAsset(dir);
+  await checkPinnedAsset(dir, requireAsset);
   console.log(`ok: ${expected.size} generated file(s) match their source`);
   return 0;
 }
@@ -466,7 +482,7 @@ async function licences(dir) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-const commands = { sizes: () => sizes(rest), comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest[0] || '.'), links: () => links(rest[0] || '.'), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
+const commands = { sizes: () => sizes(rest), comments: () => commentsCmd(rest), build: () => build(rest[0] || '.'), check: () => check(rest.find((arg) => arg !== '--require-asset') || '.', rest.includes('--require-asset')), links: () => links(rest), fmt: () => fmt(rest[0] || '.'), pin: () => pin(rest[0] || '.'), 'publish-due': () => publishDue(rest.find((a, i) => !a.startsWith('--') && rest[i - 1] !== '--now') || '.', rest), theme: () => theme(rest), licences: () => licences(rest[0] || '.'), import: () => importWordPress(rest) };
 if (!commands[cmd]) {
   console.error('usage: blog-webcli <build|check|links|fmt|publish-due|pin|sizes|comments|theme|licences|import> …');
   process.exit(2);

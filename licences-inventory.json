@@ -48,6 +48,7 @@
     "lib/customize.js",
     "lib/datefmt.js",
     "lib/delta.js",
+    "lib/disclosure.js",
     "lib/embeds.js",
     "lib/errors.js",
     "lib/frontmatter.js",

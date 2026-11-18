@@ -4,6 +4,38 @@ Build and publish a text-first website or blog from GitHub repositories. `https:
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-site deployment. This is not a visual or drag-and-drop builder or a template marketplace.
 
+## 1.x compatibility contract
+
+Before tagging 1.0, new site configs use `"schemaVersion": 1` in `blog.json`. A config without
+the field is read as schema 1; an explicit unsupported version is refused. Adding the field
+to an existing config does not require changing its source or its URLs.
+
+Within 1.x:
+
+- Existing `blog.json` keys keep their meaning. New optional keys do not change existing defaults.
+- The same authored source and configuration produce the same public addresses. An intentional
+  source change, such as a page move, is not a generator-driven URL change.
+- New Markdown syntax cannot reinterpret existing valid source. Bug fixes may correct output
+  to match the documented dialect; generated HTML styling and non-contract bytes can evolve.
+- The reader retains support for the independently versioned `index/posts.json` formats
+  (currently v2 inline and v3 sharded). Incompatible shape changes require a new index version.
+
+The [reference workflow](.github/workflows/references.yml) runs a sample of up to 20
+edge-case posts plus standalone pages on pushes, and the full source weekly. It compares
+generated files against an approved generator using the same inputs, not against potentially
+stale deployed HTML. Intentional generated changes require review before advancing the
+approved commit. It also records build time and uses `check --require-asset` to require
+one anonymous pinned-asset probe per site. This workflow does not deploy Pages.
+Public sources need no extra secret. For private sources, use a fine-grained token for
+each resource owner, scoped only to that owner's reference repositories with Contents:
+read. GitHub does not allow one fine-grained token to span both owners.
+
+For the 1.0 migration workshop, have five participants bring their own WordPress
+sites to a two-hour session. Record elapsed time to obtain a working fine-grained
+token and elapsed time to obtain `wp-content/uploads` separately, including blocked
+attempts. Record every refusal verbatim in the workshop log, never the token itself.
+Check the participants' consent before listing their sites as references.
+
 [About blog-webCLI](about/) and [hands-on tutorials](about/tutorials/): recreate webcli.app, migrate a WordPress site,
 and rebuild a site's look step by step. [webcli.app](https://webcli.app/) is a live showcase. [Lyceum Shorts](https://lyceumshorts.com/)
 is live too, but its blog-webCLI migration is still a prototype: editor publishing bypasses its custom player integration
@@ -430,8 +462,17 @@ not include schemes, ports or wildcards; `amazon.com` matches `www.amazon.com`, 
 `notamazon.com` or `amazon.com.example.net`. An unlisted host does not prevent publishing.
 
 Add **Post disclosure** (`disclosure`) as plain text to show it on every post, including in
-static HTML with JavaScript off. It can appear alongside disclosures already in the post.
-`blog-webcli links` lists outbound hosts in published posts and pages for review.
+static HTML with JavaScript off. To avoid duplicates, use the **Skip disclosure if present**
+setting or set `"disclosure": {"text": "We may earn a commission.", "skipIfPresent": "we may earn a commission"}`.
+The phrase is matched against rendered body text, ignoring case and collapsing whitespace.
+If it does not match, the default disclosure stays visible.
+
+`blog-webcli links [dir]` lists outbound hosts in published posts and pages for review.
+`blog-webcli links [dir] --suspect` shows hosts with matching query parameter names,
+with total links, configured affiliate status, flagged link count, and matching names.
+Names match case-insensitively. `affiliateParams` in `blog.json` replaces the default
+list: `tag`, `subId`, `sscid`, `clickid`, `irgwc`, `ranMID`, `awc`. This is a review
+signal only; it never alters link markup or fails a build.
 The separate legacy **Affiliate domains (strict gate)** (`affiliateDomains`) still refuses
 unmarked links on generated pages and requires a full rebuild. If both settings list a host,
 automatic marking occurs before that gate.
