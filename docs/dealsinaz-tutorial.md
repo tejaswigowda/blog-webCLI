@@ -2,7 +2,7 @@
 
 {.lead} An existing GitHub-backed copy can be brought up to date without replacing its older posts. This case study stages a one-time update, not an automatic WordPress sync.
 
-**Status:** the update was pushed to the destination repository. Do not switch DNS until the new site and the cutover checks below have been verified.
+**Status:** the rebuilt site is published on GitHub Pages. Historical WordPress media and addresses still need a separate cutover audit.
 
 ## 1. Establish the source and destination
 
@@ -24,13 +24,13 @@ This case used a local, one-off comparison and conversion, not a supported reusa
 
 Existing pinned assets were left alone. Four images needed by the four recent posts were copied to the destination repository and pinned to the media commit in `assets.lock.json`. Third-party images remain external links. Check each imported post in the editor and open its images before publishing.
 
-Older posts already contain image URLs, but some point to `https://dealsinaz.com/wp-content/uploads/`. Those URLs depend on the WordPress host. If DNS is moved to GitHub Pages, the old uploads will not automatically be there: move or serve those files and test their URLs before cutover. This update did not copy the older media library.
+Older posts already contain image URLs, but some point to `https://dealsinaz.com/wp-content/uploads/`. Those URLs depended on the WordPress host; after cutover, two sampled upload URLs returned 404. This update did not copy the older media library. Restore or serve those files and audit the remaining URLs separately.
 
 ## 4. Addresses, settings and affiliate links
 
-The four new posts retain their WordPress dated addresses as aliases. Each static alias is a page with a canonical link and refresh, not an HTTP 301. Older posts were outside this five-day update: their historical WordPress URLs have not been comprehensively redirected. Audit and preserve those addresses before switching the domain.
+The four new posts retain their WordPress dated addresses as aliases. Each static alias is a page with a canonical link and refresh, not an HTTP 301. Older posts were outside this five-day update: their historical WordPress URLs have not been comprehensively redirected. Audit and preserve those addresses separately.
 
-The staged settings use `https://dealsinaz.com` as the canonical domain and remove the demo banner and `noindex`. The site owner is responsible for DNS and GitHub Pages domain configuration. Until cutover, the live WordPress site remains the source.
+The settings use `https://dealsinaz.com` as the canonical domain and remove the demo banner and `noindex`. The site owner is responsible for DNS and GitHub Pages domain configuration. The custom domain now serves the generated site.
 
 For the affiliate rebuild, set **Settings → Automatically mark affiliate domains** (`affiliates` in `blog.json`) and a plain-text **Post disclosure** (`disclosure`). The renderer marks matching outbound links in existing posts without changing their Markdown. Hostnames match only themselves and subdomains; the older `affiliateDomains` setting is a separate strict gate and is not required for automatic marking.
 
@@ -55,6 +55,6 @@ Inspect the recent posts, copied images and their pinned commit, existing posts 
 
 This rebuild uses the existing pinned `asset:images/design/hero.png` as the site cover, and `check` tests one pinned asset anonymously. One successful request does not verify every media repository. The post disclosure may duplicate text already present in imported posts.
 
-Before any DNS change, test historical links and every referenced upload on the new host. Confirm that GitHub Pages is serving the expected commit, and keep the old WordPress site available until the cutover has been verified. Re-run the comparison for later changes; this case study does not set up ongoing synchronization.
+Test historical links and every referenced upload on the new host. Confirm that GitHub Pages is serving the expected commit, and keep a copy of the old WordPress site available while resolving the remaining cutover gaps. Re-run the comparison for later changes; this case study does not set up ongoing synchronization.
 
 [Tutorials and guides](/about/tutorials/) · [Open the editor](/)
