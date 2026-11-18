@@ -127,7 +127,12 @@ const clickText = (page, selector, text) => page.evaluate(`(() => { const el = [
 const setValue = (page, selector, value) => page.evaluate(`(() => { const i = document.querySelector(${JSON.stringify(selector)}); i.value = ${JSON.stringify(value)}; i.dispatchEvent(new Event('input')); })()`);
 
 test('editor: the list shows the blog\'s order; a post that is in no list is announced in the pre-flight, then appended', { skip, timeout: 120000 }, async () => {
-  const web = await serve(await editorSite(BLOG, { 'order.json': LIST, ...Object.fromEntries(POSTS.map((p) => [p.path, p.text])) }));
+  const web = await serve(await editorSite(BLOG, {
+    'order.json': LIST,
+    ...Object.fromEntries(POSTS.map((p) => [p.path, p.text])),
+    'pages/about.md': '---\nslug: about\ntitle: About\nstatus: published\n---\n\nAbout.\n',
+    'pages/contact.md': '---\nslug: contact\ntitle: Contact\nstatus: draft\n---\n\nContact.\n',
+  }));
   const chrome = await launch();
   try {
     const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/index.html`);
@@ -164,12 +169,17 @@ test('editor: the list shows the blog\'s order; a post that is in no list is ann
     // the editor's list is in the blog's order, with a sort of its own
     await page.evaluate("location.hash = '#repo=example/course'; 0");
     await until(page, "document.querySelectorAll('#view ul.posts li').length === 4");
+    await until(page, "document.querySelector('[aria-controls=\"tab-pages\"] .chip')?.textContent === '2'");
+    assert.equal(await page.evaluate("document.querySelector('[aria-controls=\"tab-posts\"] .chip').textContent"), '4');
     const list = () => page.evaluate("[...document.querySelectorAll('#view ul.posts li h3 button')].map((b) => b.textContent)");
     assert.deepEqual(await list(), ['Lesson three', 'Lesson one', 'Lesson two', 'Lesson four']);
     await page.evaluate("(() => { const s = document.querySelector('.sortbar select'); s.value = 'oldest'; s.dispatchEvent(new Event('change')); })()");
     await until(page, "document.querySelector('#view ul.posts li h3 button').textContent === 'Lesson one'");
     assert.deepEqual(await list(), ['Lesson one', 'Lesson two', 'Lesson three', 'Lesson four']);
     assert.equal(await page.evaluate('location.hash'), '#repo=example/course', 'a sort changes no URL');
+    await clickText(page, '[role=tab]', 'Pages');
+    await until(page, "document.querySelectorAll('#tab-pages .posts li').length === 2");
+    assert.equal(await page.evaluate("document.querySelector('[aria-controls=\"tab-pages\"] .chip').textContent"), '2');
   } finally {
     chrome.close();
     web.close();

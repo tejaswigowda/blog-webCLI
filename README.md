@@ -2279,6 +2279,7 @@ upload, and nothing is uploaded until you confirm.
   Classic `ghp_` tokens are refused. The token is held per tab unless you tick "remember"
   (then `localStorage`).
 * **Blog page** (`#repo=owner/blog`): **Settings**, **Media** and **View blog** are global buttons above two tabs, **Posts** and **Pages**.
+  Count chips show published posts and standalone pages (including draft pages), independent of the current search.
   The Posts tab has **New post**, **Show drafts** (drafts and scheduled posts, opened above the list), a **Sort** control and a
   **Search posts** box. Search filters as you type, matching every word against a post's title, excerpt and tags (not the full text), and works
   with any sort order; it is for you alone: nothing is written and the address does not change. The Pages tab lists the standalone pages

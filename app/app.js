@@ -1275,8 +1275,17 @@ async function listView(repo, r) {
     !entries.length ? h('p', { class: 'muted' }, 'No published posts yet.') : null);
   const pagesPanel = h('div', { role: 'tabpanel', id: 'tab-pages', hidden: true });
   let pagesLoaded = false;
+  const postCount = h('span', { class: 'chip static', title: 'Published posts' }, entries.length.toLocaleString());
+  const pageCount = h('span', { class: 'chip static', title: 'Pages, including drafts' }, '…');
+  const pageFiles = listPageFiles(gh, repo, r.ref);
+  pageFiles.then((files) => {
+    pageCount.textContent = files.length.toLocaleString();
+  }).catch((error) => {
+    pageCount.textContent = '!';
+    pageCount.title = `Could not count pages: ${error.message}`;
+  });
   const tabs = [['posts', 'Posts', postsPanel], ['pages', 'Pages', pagesPanel]];
-  const buttons = tabs.map(([key, label]) => h('button', { type: 'button', role: 'tab', 'aria-controls': `tab-${key}`, onclick: () => select(key) }, label));
+  const buttons = tabs.map(([key, label]) => h('button', { type: 'button', role: 'tab', 'aria-controls': `tab-${key}`, onclick: () => select(key) }, label, key === 'posts' ? postCount : pageCount));
   const select = (key) => {
     history.replaceState(null, '', link(repo, `${r.ref ? `&ref=${r.ref}` : ''}${key === 'pages' ? '&tab=pages' : ''}`));
     tabs.forEach(([k, , panel], i) => {
@@ -1286,7 +1295,7 @@ async function listView(repo, r) {
     });
     if (key === 'pages' && !pagesLoaded) {
       pagesLoaded = true;
-      showPages(pagesPanel, repo, r.ref, memo);
+      showPages(pagesPanel, repo, r.ref, memo, pageFiles);
     }
   };
   const tablist = h('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Posts and pages' }, ...buttons);
@@ -1352,7 +1361,7 @@ async function showDrafts(btn, repo, ref, box, published, memo) {
 
 // The standalone pages (about, contact, …): not posts, so not in the posts list. Read when the tab is first opened, a request each,
 // and kept for this commit.
-async function showPages(panel, repo, ref, memo) {
+async function showPages(panel, repo, ref, memo, pageFiles) {
   const draw = (metas) => panel.replaceChildren(
     gh.token ? h('div', { class: 'actions' }, h('button', { class: 'primary', icon: 'plus', onclick: () => (location.hash = link(repo, '&newpage')) }, 'New page')) : null,
     metas.length ? h('ul', { class: 'posts' }, metas.map((m) => h('li', { class: 'card-link' }, h('h3', {}, nav(m.status === 'draft' ? `${m.title} (draft)` : m.title, link(repo, `&editpage=${m.slug}`), { class: 'link' })), h('div', { class: 'muted' }, m.menu ? `In the menu, position ${m.menu}` : 'Not in the menu')))) : h('p', { class: 'muted' }, 'No pages yet.'),
@@ -1362,7 +1371,7 @@ async function showPages(panel, repo, ref, memo) {
   const metas = [];
   const { repo: slugRepo, folder } = parseRepoRef(repo);
   try {
-    for (const n of await listPageFiles(gh, repo, ref)) {
+    for (const n of await pageFiles) {
       try {
         const m = parseMeta(splitFile(await gh.readText(slugRepo, at(folder, `pages/${n}`), ref), n).front, n);
         metas.push({ slug: m.slug, title: m.title, status: m.status, menu: m.menu });
