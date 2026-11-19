@@ -47,6 +47,16 @@ node cli/blog.js check /path/to/dealsinaz
 <p>On the 8,003-post migration snapshot (<code>5ae3cdb</code>), <code>blog-webcli links --suspect</code> flagged 16 of 1,427 outbound hosts, of which five were already marked. The 11 unlisted hosts broke down as follows:</p>
 <table><thead><tr><th>Query signal</th><th>Unlisted hosts</th><th>Review</th></tr></thead><tbody><tr><td><code>irgwc</code> (sometimes with <code>clickid</code>)</td><td><code>www.homedepot.com</code>, <code>www.basspro.com</code></td><td>Prioritize for affiliate-domain review.</td></tr><tr><td><code>ranMID</code></td><td><code>www.vichyusa.com</code>, <code>www.lacolombe.com</code>, <code>www.laroche-posay.us</code>, <code>www.microsoft.com</code>, <code>www.sephora.com</code>, <code>www.skinceuticals.com</code></td><td>Retailer links carry an affiliate-network-style merchant ID; prioritize for review.</td></tr><tr><td><code>awc</code></td><td><code>www.underarmour.com</code></td><td>Prioritize for affiliate-domain review.</td></tr><tr><td><code>clickid</code> alone</td><td><code>www.redbox.com</code>, <code>www.valuemags.com</code></td><td>Ambiguous: a generic click identifier alone does not establish a paid relationship.</td></tr></tbody></table>
 <p>This was a review of the parameter shortlist, not proof of commission or a clearance of the unflagged tail. No domains were added on parameter evidence alone.</p>
+<h2>Authored-address triage: November 18, 2026</h2>
+<p>The first owner-authored grocery post has the published slug <code>my-favorite-thanksgiving-week-deals-at-the-grocey-stores</code>. The owner of this work order explicitly chose <strong>keep the existing URL</strong> after the checks below. No rename or second address was created.</p>
+<p>Checks were made against raw origin responses, in this order:</p>
+<ol><li>Facebook and Instagram account pages were reachable, but public responses</li></ol>
+<p>did not establish the absence of a shared link; login restrictions prevent treating them as a complete social-post inventory.</p>
+<ol><li>The site&#39;s Atom feed already carried the typo URL as both entry ID and link.</li><li>The sitemap index led to <code>sitemaps/2026.xml</code>, which already listed the URL.</li></ol>
+<p>No origin request logs were available, so whether a crawler fetched it after the 09:16 publication is <strong>unknown</strong>. Last-Modified is not fetch history.</p>
+<ol><li>The committed index and homepage linked it. The adjacent PetSmart Santa</li></ol>
+<p>post linked it in navigation; a related-posts block is not needed to establish an incoming site link.</p>
+<p>The typo URL returned 200 with a self-canonical; the corrected <code>grocery</code> URL returned 404. The existing feed and incoming links are sufficient reason not to silently move this address. A future deliberate move must record the old path in <code>aliases</code> and regenerate its canonical stub, never hand-write one.</p>
 <footer>blog-webCLI · <a href="https://github.com/tejaswigowda/blog-webCLI">Source and documentation</a></footer>
 </main>
 </body>

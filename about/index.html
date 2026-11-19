@@ -23,14 +23,24 @@
 <p>Publishing is egress: source, generated pages and any selected media are sent to the repositories shown in the pre-flight. The egress ledger makes those requests visible. Nothing is published until you confirm the operation.</p>
 <p>Published content is static HTML and remains readable without scripting. Optional search, live updates and slideshow playback add first-party scripts for those features. Math is rendered at publish time rather than requiring a reader-side math library.</p>
 <p>Comments scripts, analytics and Custom JS CDN links are explicit opt-ins. Custom JS accepts approved HTTPS CDN links with required integrity hashes, never inline JavaScript. These scripts run with the published page&#39;s full powers, not inside a sandbox; they can make further requests. The editor and reader preview do not execute them.</p>
-<h2>Showcases and work in progress</h2>
-<p>Standalone pages, home-page slots, reusable content widgets and Custom CSS make more than chronological blogs possible:</p>
-<ul><li><a href="/about/tutorials/recreate-webcli-app.html">Recreating webcli.app</a>: restore a tool directory with structured data, canonical pages and Custom CSS, without its former client-side rendering dependency.</li><li><a href="/about/tutorials/rebuild-lyceumshorts.html">Rebuilding Lyceum Shorts</a>: a local prototype exploring the shared renderer with a self-hosted HLS player. It is not yet safe to publish from the editor.</li></ul>
-<p><a href="https://webcli.app/" rel="noopener noreferrer">webcli.app</a> is a live example. The current <a href="https://lyceumshorts.com/" rel="noopener noreferrer">Lyceum Shorts</a> site has not been migrated to blog-webCLI.</p>
-<p>The <a href="/about/tutorials/">tutorials and guides</a> also cover the Swim Platform migration, with screenshots and a downloadable theme recipe. For a shorter starting point, read the <a href="/about/WP-MIGRATION-GUIDE.md">WordPress migration guide</a>.</p>
+<h2>Sample sites</h2>
+<p>These four live sites show different shapes blog-webCLI can publish: a film catalogue, a structured tool directory, a deep tutorial library and a large WordPress-imported blog. Screenshots were captured November 18, 2026; each image links to its live site.</p>
+<h3>Lyceum Shorts</h3>
+<p><a href="https://lyceumshorts.com/" rel="noopener noreferrer"><img src="tutorials/lyceumshorts-home.jpg" alt="Lyceum Shorts film catalogue, with grouped films and links to their source scenes and tutorials" loading="lazy"></a></p>
+<p>A film catalogue where each entry connects a short film to the editable scene that produced it and a tutorial. The live catalogue is the sample; the separate <a href="/about/tutorials/rebuild-lyceumshorts.html">editor integration prototype</a> is not yet safe to use for publishing because its custom player integration is incomplete.</p>
+<h3>webcli.app</h3>
+<p><a href="https://webcli.app/" rel="noopener noreferrer"><img src="tutorials/webcli-home.jpg" alt="webCLI tool directory showing its contract and grouped browser tools" loading="lazy"></a></p>
+<p>A product index rebuilt from structured tool data and static pages, with its repeated cards generated at build time. Read the <a href="/about/tutorials/recreate-webcli-app.html">rebuild case study</a>.</p>
+<h3>Strata tutorials</h3>
+<p><a href="https://strataeditor.dev/about/tutorials/" rel="noopener noreferrer"><img src="tutorials/strata-tutorials.jpg" alt="Strata tutorial library showing 27 tutorials, topic filters and search" loading="lazy"></a></p>
+<p>A hierarchical, searchable library of 27 hands-on tutorials, grouped by scenes, games, animation, characters and motion capture.</p>
+<h3>Deals in AZ</h3>
+<p><a href="https://dealsinaz.com/" rel="noopener noreferrer"><img src="tutorials/dealsinaz-home.jpg" alt="Deals in AZ home page with its branded navigation and latest deals" loading="lazy"></a></p>
+<p>An actively updated commercial blog imported from WordPress, with more than 8,000 posts and owner-published updates. The <a href="/about/tutorials/update-dealsinaz.html">case study</a> records the update and address checks.</p>
+<p>The <a href="/about/tutorials/">tutorials and guides</a> also cover the Swim Platform migration, with additional screenshots and a downloadable theme recipe. For a shorter starting point, read the <a href="/about/WP-MIGRATION-GUIDE.md">WordPress migration guide</a>.</p>
 <h2>Inspect the implementation</h2>
 <p>The shared lib code is used by the generator and live renderer so that publishing and rebuilding follow the same rules. Tests cover round trips, validation, generated output, runtime boundaries and browser workflows.</p>
-<p>The <a href="https://github.com/tejaswigowda/blog-webCLI#readme" rel="noopener noreferrer">README</a> describes the markdown dialect, configuration, commands, limitations and verification gates. The <a href="https://github.com/tejaswigowda/blog-webCLI" rel="noopener noreferrer">source repository</a> holds the implementation and issue tracker.</p>
+<p>The <a href="https://github.com/tejaswigowda/blog-webCLI/blob/main/docs/reference.md" rel="noopener noreferrer">technical reference</a> describes the Markdown dialect, configuration, commands, limitations and verification gates. The <a href="https://github.com/tejaswigowda/blog-webCLI" rel="noopener noreferrer">source repository</a> holds the implementation and issue tracker.</p>
 <h2>Licences and contributions</h2>
 <p>The runtime library and generated-page code are MIT-licensed. The editor, reader and command-line tool are GPL-3.0-only. Third-party components retain their own licences; see <a href="/#licences">Licences and dependencies</a> for the generated inventory and the repository&#39;s licence files for the terms.</p>
 <p>Report a problem or propose an improvement through <a href="https://github.com/tejaswigowda/blog-webCLI/issues" rel="noopener noreferrer">GitHub issues</a>. A useful report names the command or editor action, expected result and refusal or error, without including tokens or other secrets.</p>

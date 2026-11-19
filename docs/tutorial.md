@@ -146,4 +146,4 @@ The family's [ledger.json](https://webcli.app/ledger.json) measures a different 
 - Test without scripting, at phone and desktop widths, before publishing.
 - Record exceptions and measurements alongside the result.
 
-[About blog-webCLI](/about/) · [Read the full documentation](https://github.com/tejaswigowda/blog-webCLI#readme) · [Explore the rebuilt site](https://webcli.app/)
+[About blog-webCLI](/about/) · [Read the technical reference](https://github.com/tejaswigowda/blog-webCLI/blob/main/docs/reference.md) · [Explore the rebuilt site](https://webcli.app/)

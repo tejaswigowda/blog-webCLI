@@ -105,7 +105,23 @@ export function fakeGitHub(repos, { tags = {}, aliases = {}, pages = {}, builds 
       const sha = resolveRef(S, rest[1]);
       return sha ? json({ sha, commit: { tree: { sha: S.commits[sha].tree } } }) : notFound();
     }
-    if (rest[0] === 'commits') return json(treeAt(S, 'main').has(u.searchParams.get('path')) ? [{ sha: S.branches.main }] : []);
+    if (rest[0] === 'commits') {
+      let sha = resolveRef(S, u.searchParams.get('sha') || 'main');
+      if (!sha) return notFound();
+      const path = u.searchParams.get('path');
+      const history = [];
+      while (sha) {
+        const commit = S.commits[sha];
+        const parent = commit.parents?.[0];
+        const now = S.trees[commit.tree].get(path)?.sha;
+        const before = parent ? S.trees[S.commits[parent].tree].get(path)?.sha : undefined;
+        if (!path || now !== before) history.push({ sha, commit: { message: commit.msg } });
+        sha = parent;
+      }
+      const limit = Number(u.searchParams.get('per_page')) || 30;
+      const page = Number(u.searchParams.get('page')) || 1;
+      return json(history.slice((page - 1) * limit, page * limit));
+    }
     if (rest[0] === 'contents') {
       const path = rest.slice(1).join('/');
       const refName = u.searchParams.get('ref') || 'main';

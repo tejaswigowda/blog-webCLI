@@ -352,8 +352,8 @@ export class GitHub {
   }
 
   // The commits that touched a file, newest first (at most `limit`): how often a post was edited, and by whom.
-  fileHistory(repo, path, branch, limit = 100) {
-    return this.api('GET', `/repos/${repo}/commits?path=${encodeURIComponent(path)}&per_page=${limit}${branch ? `&sha=${encodeURIComponent(branch)}` : ''}`);
+  fileHistory(repo, path, branch, limit = 100, page = 1) {
+    return this.api('GET', `/repos/${repo}/commits?path=${encodeURIComponent(path)}&per_page=${limit}${branch ? `&sha=${encodeURIComponent(branch)}` : ''}${page > 1 ? `&page=${page}` : ''}`);
   }
 
   // The latest GitHub Pages build (status queued|building|built|errored, commit, error), for the deployment state.

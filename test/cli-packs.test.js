@@ -108,10 +108,10 @@ test('CLI: links counts outbound authored anchors, sorted, including pages but n
   await fs.writeFile(path.join(d, 'posts', 'draft.md'), '---\nslug: draft\ntitle: Draft\ndate: 2026-01-01\nstatus: draft\n---\n\n[Hidden](https://hidden.test/)\n');
   const result = await cli(['links', d]);
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /^www\.shop\.test\t2\tmarked affiliate\nother\.test\t1\tunmarked\n2 outbound hosts, 1 marked affiliate\n$/);
+  assert.match(result.stdout, /^www\.shop\.test\t2\tmarked affiliate\nother\.test\t1\tunmarked\n2 outbound hosts, 1 marked affiliate\n0 aliases \(0 published, 0 inactive\)\n$/);
   const suspect = await cli(['links', '--suspect', d]);
   assert.equal(suspect.code, 0, suspect.stderr);
-  assert.match(suspect.stdout, /^www\.shop\.test\t2\tmarked affiliate\t1\ttag\n1 suspect hosts, 1 marked affiliate\n$/);
+  assert.match(suspect.stdout, /^www\.shop\.test\t2\tmarked affiliate\t1\ttag\n1 suspect hosts, 1 marked affiliate\n0 aliases \(0 published, 0 inactive\)\n$/);
   const built = await cli(['build', d]);
   assert.equal(built.code, 0, built.stderr);
   assert.match(built.stdout, /2 outbound hosts, 1 marked affiliate/);
@@ -119,4 +119,24 @@ test('CLI: links counts outbound authored anchors, sorted, including pages but n
   await fs.writeFile(conf, JSON.stringify({ ...JSON.parse(await fs.readFile(conf, 'utf8')), affiliateParams: ['my-ref', 'TAG'] }));
   const configured = await cli(['links', d, '--suspect']);
   assert.match(configured.stdout, /^www\.shop\.test\t2\tmarked affiliate\t2\tmy-ref,tag\n/);
+  for (const [file, aliases] of [['posts/a.md', '[z-old, /a-old/]'], ['pages/b.md', '[old/about]'], ['posts/draft.md', '[unpublished-old]']]) {
+    const source = path.join(d, file);
+    await fs.writeFile(source, (await fs.readFile(source, 'utf8')).replace('\nstatus:', `\naliases: ${aliases}\nstatus:`));
+  }
+  for (const args of [['links', d], ['links', '--suspect', d]]) {
+    const aliases = await cli(args);
+    assert.equal(aliases.code, 0, aliases.stderr);
+    assert.match(aliases.stdout, /alias\ta-old\tposts\/a\.md\tpublished\nalias\told\/about\tpages\/b\.md\tpublished\nalias\tunpublished-old\tposts\/draft\.md\tdraft\nalias\tz-old\tposts\/a\.md\tpublished\n4 aliases \(3 published, 1 inactive\)\n$/);
+  }
+  await fs.writeFile(conf, JSON.stringify({ ...JSON.parse(await fs.readFile(conf, 'utf8')), archiveAliases: { tags: ['category'], dates: true } }));
+  const source = path.join(d, 'posts', 'a.md');
+  await fs.writeFile(source, (await fs.readFile(source, 'utf8')).replace('\nstatus:', '\ntags: [saving]\nstatus:'));
+  const archives = await cli(['links', d]);
+  assert.equal(archives.code, 0, archives.stderr);
+  assert.match(archives.stdout, /alias\tcategory\/saving\tblog.json\tpublished\ttags\/saving\//);
+  assert.match(archives.stdout, /7 aliases \(6 published, 1 inactive\)/);
+  assert.equal((await cli(['build', d])).code, 0);
+  const index = JSON.parse(await fs.readFile(path.join(d, 'index', 'posts.json'), 'utf8'));
+  assert.equal(index.redirects.length, 6);
+  for (const alias of index.redirects) assert.ok(archives.stdout.includes(`alias\t${alias.from}\t`), alias.from);
 });

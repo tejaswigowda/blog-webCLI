@@ -20,22 +20,41 @@ Published content is static HTML and remains readable without scripting. Optiona
 
 Comments scripts, analytics and Custom JS CDN links are explicit opt-ins. Custom JS accepts approved HTTPS CDN links with required integrity hashes, never inline JavaScript. These scripts run with the published page's full powers, not inside a sandbox; they can make further requests. The editor and reader preview do not execute them.
 
-## Showcases and work in progress
+## Sample sites
 
-Standalone pages, home-page slots, reusable content widgets and Custom CSS make more than chronological blogs possible:
+These four live sites show different shapes blog-webCLI can publish: a film catalogue, a structured tool directory, a deep tutorial library and a large WordPress-imported blog. Screenshots were captured November 18, 2026; each image links to its live site.
 
-- [Recreating webcli.app](/about/tutorials/recreate-webcli-app.html): restore a tool directory with structured data, canonical pages and Custom CSS, without its former client-side rendering dependency.
-- [Rebuilding Lyceum Shorts](/about/tutorials/rebuild-lyceumshorts.html): a local prototype exploring the shared renderer with a self-hosted HLS player. It is not yet safe to publish from the editor.
+### Lyceum Shorts
 
-[webcli.app](https://webcli.app/) is a live example. The current [Lyceum Shorts](https://lyceumshorts.com/) site has not been migrated to blog-webCLI.
+[![Lyceum Shorts film catalogue, with grouped films and links to their source scenes and tutorials](tutorials/lyceumshorts-home.jpg)](https://lyceumshorts.com/)
 
-The [tutorials and guides](/about/tutorials/) also cover the Swim Platform migration, with screenshots and a downloadable theme recipe. For a shorter starting point, read the [WordPress migration guide](/about/WP-MIGRATION-GUIDE.md).
+A film catalogue where each entry connects a short film to the editable scene that produced it and a tutorial. The live catalogue is the sample; the separate [editor integration prototype](/about/tutorials/rebuild-lyceumshorts.html) is not yet safe to use for publishing because its custom player integration is incomplete.
+
+### webcli.app
+
+[![webCLI tool directory showing its contract and grouped browser tools](tutorials/webcli-home.jpg)](https://webcli.app/)
+
+A product index rebuilt from structured tool data and static pages, with its repeated cards generated at build time. Read the [rebuild case study](/about/tutorials/recreate-webcli-app.html).
+
+### Strata tutorials
+
+[![Strata tutorial library showing 27 tutorials, topic filters and search](tutorials/strata-tutorials.jpg)](https://strataeditor.dev/about/tutorials/)
+
+A hierarchical, searchable library of 27 hands-on tutorials, grouped by scenes, games, animation, characters and motion capture.
+
+### Deals in AZ
+
+[![Deals in AZ home page with its branded navigation and latest deals](tutorials/dealsinaz-home.jpg)](https://dealsinaz.com/)
+
+An actively updated commercial blog imported from WordPress, with more than 8,000 posts and owner-published updates. The [case study](/about/tutorials/update-dealsinaz.html) records the update and address checks.
+
+The [tutorials and guides](/about/tutorials/) also cover the Swim Platform migration, with additional screenshots and a downloadable theme recipe. For a shorter starting point, read the [WordPress migration guide](/about/WP-MIGRATION-GUIDE.md).
 
 ## Inspect the implementation
 
 The shared lib code is used by the generator and live renderer so that publishing and rebuilding follow the same rules. Tests cover round trips, validation, generated output, runtime boundaries and browser workflows.
 
-The [README](https://github.com/tejaswigowda/blog-webCLI#readme) describes the markdown dialect, configuration, commands, limitations and verification gates. The [source repository](https://github.com/tejaswigowda/blog-webCLI) holds the implementation and issue tracker.
+The [technical reference](https://github.com/tejaswigowda/blog-webCLI/blob/main/docs/reference.md) describes the Markdown dialect, configuration, commands, limitations and verification gates. The [source repository](https://github.com/tejaswigowda/blog-webCLI) holds the implementation and issue tracker.
 
 ## Licences and contributions
 

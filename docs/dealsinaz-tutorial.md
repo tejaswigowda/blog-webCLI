@@ -73,3 +73,28 @@ The 11 unlisted hosts broke down as follows:
 
 This was a review of the parameter shortlist, not proof of commission or a clearance
 of the unflagged tail. No domains were added on parameter evidence alone.
+
+## Authored-address triage: November 18, 2026
+
+The first owner-authored grocery post has the published slug
+`my-favorite-thanksgiving-week-deals-at-the-grocey-stores`. The owner of this
+work order explicitly chose **keep the existing URL** after the checks below.
+No rename or second address was created.
+
+Checks were made against raw origin responses, in this order:
+
+1. Facebook and Instagram account pages were reachable, but public responses
+   did not establish the absence of a shared link; login restrictions prevent
+   treating them as a complete social-post inventory.
+2. The site's Atom feed already carried the typo URL as both entry ID and link.
+3. The sitemap index led to `sitemaps/2026.xml`, which already listed the URL.
+   No origin request logs were available, so whether a crawler fetched it
+   after the 09:16 publication is **unknown**. Last-Modified is not fetch history.
+4. The committed index and homepage linked it. The adjacent PetSmart Santa
+   post linked it in navigation; a related-posts block is not needed to
+   establish an incoming site link.
+
+The typo URL returned 200 with a self-canonical; the corrected `grocery` URL
+returned 404. The existing feed and incoming links are sufficient reason not
+to silently move this address. A future deliberate move must record the old
+path in `aliases` and regenerate its canonical stub, never hand-write one.

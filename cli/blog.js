@@ -2,7 +2,7 @@
 // blog-webcli — generate, verify and normalise a blog repo.
 //   build [dir]   regenerate index, pages and feed (refuses on any error)
 //   check [dir]   regenerate in memory and fail on any difference (CI, gate B8)
-//   links [dir]   list outbound hosts in published posts and pages
+//   links [dir]   list outbound hosts and authored aliases
 //   fmt   [dir]   rewrite posts into canonical markdown
 //   publish-due [dir] [--now <ISO time>]   publish the scheduled posts whose time has come, then build (the schedule workflow runs this)
 //   pin   [dir]   pin unpinned asset: references to commits, and verify video: release tags, via the GitHub API
@@ -40,6 +40,9 @@ import { resolveOrder } from '../lib/order.js';
 import { dueOf, publishText } from '../lib/schedule.js';
 import { readIndex } from '../lib/index-data.js';
 import { buildVersions } from './docs-versions.js';
+import { parseAliases } from '../lib/aliases.js';
+import { archiveStubs } from '../lib/archive-aliases.js';
+import { siteModel } from '../lib/site-model.js';
 
 const exists = (p) => fs.access(p).then(() => true, () => false);
 
@@ -96,12 +99,14 @@ async function generate(dir, { instead } = {}) {
     result = buildSite({ blog, posts, lock: loaded.lock, ...(await loadTheme(validated)), orderList: loaded.orderList, previousIndex });
   }
   if (validated.versions) result.versionPrefixes = validated.versions.map((v) => `${v.path}/`);
-  if (!result.errors.length) result.outbound = outboundReport(validated, result.defaultSource?.posts || posts);
+  if (!result.errors.length) result.outbound = linkReport(validated, result.defaultSource?.posts || posts).hosts;
   return result;
 }
 
-function outboundReport(blog, files, suspect = false) {
+function linkReport(blog, files, suspect = false) {
   const counts = new Map();
+  const aliases = [];
+  const entries = [];
   const wanted = new Set((blog.affiliateParams ?? DEFAULT_AFFILIATE_PARAMS).map((name) => name.toLowerCase()));
   const add = (href) => {
     const host = outboundHost(href, blog.domain + '/');
@@ -145,11 +150,17 @@ function outboundReport(blog, files, suspect = false) {
   for (const file of files) {
     if (!/^(posts|pages)\/[^/]+\.md$/.test(file.path)) continue;
     const post = parsePost(file);
+    for (const from of parseAliases(post.meta, file.path)) aliases.push({ from, path: file.path, status: post.status });
     if (post.status !== 'published') continue;
+    if (file.path.startsWith('posts/')) entries.push({ slug: post.slug, date: post.meta.date, tags: post.meta.tags || [], author: post.meta.author || blog.author });
     visit(post.delta);
   }
-  return [...counts.values()].filter((entry) => !suspect || entry.suspectCount)
-    .sort((a, b) => (suspect ? b.suspectCount - a.suspectCount : b.count - a.count) || a.host.localeCompare(b.host));
+  for (const { from, to } of archiveStubs({ blog, entries, site: siteModel(blog, { entries }) })) aliases.push({ from, path: 'blog.json', status: 'published', to });
+  return {
+    hosts: [...counts.values()].filter((entry) => !suspect || entry.suspectCount)
+      .sort((a, b) => (suspect ? b.suspectCount - a.suspectCount : b.count - a.count) || a.host.localeCompare(b.host)),
+    aliases: aliases.sort((a, b) => a.from.localeCompare(b.from) || a.path.localeCompare(b.path)),
+  };
 }
 
 async function links(args) {
@@ -158,11 +169,14 @@ async function links(args) {
   const dir = dirs[0] || '.';
   const suspect = args.includes('--suspect');
   const { blog, posts } = await load(dir);
-  const report = outboundReport(validateBlog(blog), posts, suspect);
+  const { hosts: report, aliases } = linkReport(validateBlog(blog), posts, suspect);
   for (const { host, count, marked, suspectCount, params } of report) {
     console.log(`${host}\t${count}\t${marked ? 'marked affiliate' : 'unmarked'}${suspect ? `\t${suspectCount}\t${[...params].sort().join(',')}` : ''}`);
   }
   console.log(`${report.length} ${suspect ? 'suspect' : 'outbound'} hosts, ${report.filter((entry) => entry.marked).length} marked affiliate`);
+  for (const { from, path: source, status, to } of aliases) console.log(`alias\t${from}\t${source}\t${status}${to ? `\t${to}/` : ''}`);
+  const published = aliases.filter((alias) => alias.status === 'published').length;
+  console.log(`${aliases.length} aliases (${published} published, ${aliases.length - published} inactive)`);
   return 0;
 }
 

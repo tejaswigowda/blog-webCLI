@@ -1,5 +1,27 @@
 # Versioned documentation
 
+## Verification rule and withdrawn findings
+
+**DOCS_FIXES_WORKORDER section A, DOC12 and DOC13 are withdrawn (November 18,
+2026). Do not implement them.** The reported YAML body and missing head tags
+were artifacts of an HTML-to-Markdown conversion, not established origin
+defects. The converter synthesized metadata-looking frontmatter and consumed
+head elements; this is not evidence that flat-permalink generation skipped
+head assembly.
+
+DOC14's assertions remain useful, but must inspect raw origin response bytes.
+DOC15, DOC16, DOC17, DOC18, DOC19, DOC20 and DOC21 remain standing; this withdrawal
+does not implement or close them.
+
+**Standing verification rule:** a defect seen through a tool that transforms
+the artifact is a hypothesis, not a finding. Before changing code, fetch raw
+origin bytes (for example with `curl` or `fetch(...).text()`) and verify the
+claimed defect there. Check generated metadata in the raw head and body
+separately. A missing tag in converted Markdown, or synthetic frontmatter in
+that representation, is not grounds for a generator fix.
+
+## Configuration
+
 Set `versions` in `blog.json`:
 
 ```json

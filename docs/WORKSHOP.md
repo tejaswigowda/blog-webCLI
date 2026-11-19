@@ -16,12 +16,16 @@ Two hours, five people, each migrating their own WordPress site. It is five user
 |---|---|
 | person, site | an id, not a name |
 | clock | wall time of the event, to the second |
-| step | `export`, `sign-in`, `token`, `import-sources`, `import-pictures`, `commit`, `pages`, `look`, `live` |
+| step | `export`, `sign-in`, `token`, `uploads`, `import-sources`, `import-pictures`, `first-post`, `commit`, `pages`, `look`, `live` |
 | outcome | `ok`, `stall`, `refusal`, `gave up`, `helped` |
 | refusal | the exact refusal code and message the app showed (`bad-token`, `pre-flight`, …) |
 | note | what the person said, tried and expected, in their words |
 
 **Time the token step separately.** Start the clock when the person is told they need access; stop it when the app accepts a token and shows their repositories. Record what they tried first (the classic token, the wrong scopes, the wrong repository, an expiry), and whether they used "Sign in with GitHub" if it is configured on the build in use.
+
+**Time obtaining uploads separately.** Start when they are asked for `wp-content/uploads`; stop when they have a usable copy, or record that they could not obtain one. Record who controls hosting access, what they tried and any refusal, without credentials. Do not combine this with the token or picture-import timings.
+
+**Observe the first authored post.** Record the derived slug, the slug they publish, whether they would want to change it, whether the guard appeared and whether they accepted it. Record when they noticed any unwanted address: before publication, after publication but before sharing, or after sharing. Do not prompt them to inspect the slug before observing whether they notice it themselves.
 
 **Record every refusal that fires.** The app refuses by name; the names are the data. Copy the code and message verbatim, not a paraphrase, and say whether the person understood it and acted on it.
 
@@ -42,6 +46,8 @@ Each person: a live address (yes or no), total time from export to live, and thr
 | reached a live site | n of 5 |
 | median time, export to live | |
 | median time of the token step, and its share of the total | |
+| median time obtaining uploads, its share of the total, and how many could not obtain them | |
+| first posts with unwanted slugs; noticed before publication / before sharing / after sharing; guard accepted / ignored | |
 | the step with the most stall-minutes | |
 | refusals fired, by code, with counts | |
 | the stall that ended with "gave up" | |

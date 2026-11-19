@@ -6,7 +6,7 @@ import { BULK_AT } from './github.js';
 import { CannotRebuild, loadSite } from '../lib/live-render.js';
 import { prepareIncremental } from '../lib/incremental.js';
 import { readIndex } from '../lib/index-data.js';
-import { joinFile, setMeta, splitFile } from '../lib/frontmatter.js';
+import { SLUG_RE, joinFile, parseMeta, setMeta, splitFile } from '../lib/frontmatter.js';
 import { PAGE_PATH, POST_PATH, GENERATED_TREES, OPTIONAL_GENERATED, parsePost, validateBlog, buildSite } from '../lib/blog.js';
 import { COMMENT_PATH, parseComments } from '../lib/comments.js';
 import { loadPacks, readThemeToPin } from './packs.js';
@@ -134,6 +134,7 @@ async function incrementalChanges(gh, ctx) {
     throw e;
   }
   const slugs = new Set([...tree.keys()].map((p) => (POST_PATH.exec(p) || PAGE_PATH.exec(p) || [])[1]).filter(Boolean));
+  if (ctx.oldPath) slugs.delete(POST_PATH.exec(ctx.oldPath)[1]);
   const slug = POST_PATH.exec(newPost.path)[1];
   slugs.add(slug);
   const prep = prepareIncremental({ site: ctx.site, change: { path: newPost.path, text: newPost.text, ...(ctx.newComments !== undefined ? { comments: ctx.newComments } : {}) }, lock, slugs, existing: new Set(tree.keys()) });
@@ -177,7 +178,10 @@ async function computeChanges(gh, ctx) {
   const blog = validateBlog(ctx.blogText);
   const outputPrefix = blog.versions ? `${blog.versions.find((v) => v.default).path}/` : '';
   const inc = blog.versions ? null : await incrementalChanges(gh, ctx);
-  if (inc) return inc;
+  if (inc) {
+    if (ctx.oldPath) inc.changes.push({ path: (ctx.prefix || '') + ctx.oldPath, delete: true, size: 0, action: 'delete' });
+    return inc;
+  }
   const { blogText, newPost, lock, lockChanged, tree, prevIndex, prefix = '', repo, head } = ctx;
   ctx.others ||= await readPosts(gh, { repo, prefix, head, tree, paths: ctx.otherPaths });
   const others = ctx.others;
@@ -185,12 +189,14 @@ async function computeChanges(gh, ctx) {
   const posts = [...(ctx.newComments !== undefined ? others.filter((o) => o.path !== sidecarPath) : others), { path: newPost.path, text: newPost.text }, ...(ctx.newComments ? [{ path: sidecarPath, text: ctx.newComments }] : [])];
   const site = await generate(gh, { repo, prefix, head, tree, blogText, posts, lock, orderText: ctx.orderText, branch: ctx.branch });
   const out = { ...site.files, [newPost.path]: newPost.text, ...site.sourceUpdates };
+  if (ctx.orderText !== undefined) out[resolveOrder(blog).list] = ctx.orderText;
   if (lockChanged) out['assets.lock.json'] = json(sortLock(lock));
   const changes = [];
   for (const [path, content] of Object.entries(out)) {
     const bytes = enc.encode(content);
     if (tree.get(path) !== (await gitBlobSha(bytes))) changes.push({ path: prefix + path, content, size: bytes.length, action: tree.has(path) ? 'update' : 'add' });
   }
+  if (ctx.oldPath) changes.push({ path: prefix + ctx.oldPath, delete: true, size: 0, action: 'delete' });
   changes.push(...staleOptional(site, tree, prefix, outputPrefix));
   if (prevIndex) {
     // a post or page that is gone, or back to a draft, loses its generated page
@@ -208,12 +214,28 @@ async function computeChanges(gh, ctx) {
   return { site, changes };
 }
 
+export async function draftSlugEditable(gh, { repo: where, ref, slug }) {
+  const { repo, folder } = parseRepoRef(where);
+  const path = at(folder, `posts/${slug}.md`);
+  for (let page = 1; ; page++) {
+    const history = await gh.fileHistory(repo, path, ref, 100, page);
+    if (page === 1 && !history.length) throw new Refusal('missing-source', `cannot verify publication history for ${path}; keep its slug`);
+    for (const commit of history) {
+      const text = await gh.readText(repo, path, commit.sha);
+      if (text === null) continue; // deletion; earlier revisions still decide whether the address was published
+      const status = parseMeta(splitFile(text, path).front, path).status;
+      if (status !== 'draft' && status !== 'scheduled') return false;
+    }
+    if (history.length < 100) return true;
+  }
+}
+
 // staged: [{ key, path, bytes: Uint8Array }] images the author added and has not uploaded.
 // kind: 'post' (posts/<slug>.md) or 'page' (pages/<slug>.md, a standalone page).
 // remove: delete posts/<slug>.md (or pages/<slug>.md). It is planned as the post going back to a draft, which already takes a post out of the
 // index, the listings, the feed, the sitemap and search, and removes its generated page and redirects; then the source file goes too.
 // comments: the post's comments/<slug>.json as it will be (text), or null to remove it; undefined leaves them as committed.
-export async function planChange(gh, { repo: where, branch, slug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, lockPatch = {}, comments }) {
+export async function planChange(gh, { repo: where, branch, slug, fromSlug, text, staged = [], mode = 'direct', create = false, kind = 'post', remove = false, lockPatch = {}, comments }) {
   const { repo, folder } = parseRepoRef(where);
   const prefix = folder ? `${folder}/` : '';
   const head = await gh.headCommit(repo, branch);
@@ -225,11 +247,25 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const blog = validateBlog(blogText);
   const lock = tree.has('assets.lock.json') ? JSON.parse(await gh.readText(repo, prefix + 'assets.lock.json', head.sha)) : {};
   const target = `${kind === 'page' ? 'pages' : 'posts'}/${slug}.md`;
-  if (create && tree.has(target)) throw new Refusal('slug-collision', `${target} already exists; a slug is set once and never reused`);
+  const renaming = fromSlug !== undefined && fromSlug !== slug;
+  if ((create || renaming) && tree.has(target)) throw new Refusal('slug-collision', `${target} already exists; a slug cannot replace another source`);
   // a post and a page share one address space: the second to claim a slug is refused
   const other = `${kind === 'page' ? 'posts' : 'pages'}/${slug}.md`;
-  if (create && tree.has(other)) throw new Refusal('slug-collision', `${other} already uses "${slug}"; posts and pages share one address space`);
+  if ((create || renaming) && tree.has(other)) throw new Refusal('slug-collision', `${other} already uses "${slug}"; posts and pages share one address space`);
   let orderText;
+  let oldPath;
+  if (renaming) {
+    if (kind !== 'post' || remove || mode !== 'direct' || !SLUG_RE.test(fromSlug)) throw new Refusal('permalink-move', 'only an unpublished post can change its slug in the editor');
+    oldPath = `posts/${fromSlug}.md`;
+    if (!tree.has(oldPath)) throw new Refusal('missing-source', `${oldPath} does not exist, so it cannot be renamed`);
+    if (!(await draftSlugEditable(gh, { repo: where, ref: head.sha, slug: fromSlug }))) throw new Refusal('permalink-move', `"${fromSlug}" was already published; its slug is frozen`, oldPath);
+    if (tree.has(`comments/${fromSlug}.json`)) throw new Refusal('permalink-move', `${oldPath} has a comments file; keep its slug so those comments stay attached`, oldPath);
+    const order = resolveOrder(blog);
+    if (order.by === 'manual' && tree.has(order.list)) {
+      const list = JSON.parse(await gh.readText(repo, prefix + order.list, head.sha));
+      if (Array.isArray(list.order) && list.order.includes(fromSlug)) orderText = json({ ...list, order: list.order.map((s) => s === fromSlug ? slug : s) });
+    }
+  }
   if (remove) {
     if (!tree.has(target)) throw new Refusal('missing-source', `${target} does not exist, so there is nothing to delete`);
     const was = await gh.readText(repo, prefix + target, head.sha);
@@ -247,7 +283,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
   const newPost = parsePost({ path: target, text });
   if (newPost.lossy) throw newPost.lossy.at(target);
 
-  const otherPaths = [...tree.keys()].filter((p) => isContent(p) && p !== target);
+  const otherPaths = [...tree.keys()].filter((p) => isContent(p) && p !== target && p !== oldPath);
 
   const stagedByKey = new Map(staged.map((s) => [`${s.key}/${s.path}`, s]));
   const pending = [];
@@ -297,7 +333,7 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
       throw new Refusal('permalink-move', `changing the date moves this post from ${was.path || was.slug}/ to ${to}/; add "${was.path || was.slug}" to its aliases if the move is intended, or keep the date`, target);
     }
   }
-  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, branch, orderText, newComments: comments };
+  const ctx = { blogText, otherPaths, others: null, newPost: { path: target, text }, tree, prevIndex, prefix, repo, head, branch, orderText, oldPath, newComments: comments };
   const { site, changes } = await computeChanges(gh, { ...ctx, lock: lockPlan, lockChanged });
   if (comments !== undefined) {
     const cp = `comments/${slug}.json`;
@@ -309,7 +345,6 @@ export async function planChange(gh, { repo: where, branch, slug, text, staged =
     const gone = changes.findIndex((c) => c.path === prefix + target);
     if (gone >= 0) changes.splice(gone, 1);
     changes.push({ path: prefix + target, delete: true, size: 0, action: 'delete' });
-    if (orderText !== undefined) changes.push({ path: prefix + resolveOrder(blog).list, content: orderText, size: enc.encode(orderText).length, action: 'update' });
   }
 
   // Related posts make a page depend on every post sharing a tag with it: say how many pages this one change rewrites.

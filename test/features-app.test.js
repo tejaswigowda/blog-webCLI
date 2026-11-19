@@ -10,10 +10,11 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createNet } from '../app/net.js';
 import { GitHub } from '../app/github.js';
-import { executePlan, listPageFiles, loadBlog, loadPost, planChange, planSettings } from '../app/site.js';
+import { draftSlugEditable, executePlan, listPageFiles, loadBlog, loadPost, planChange, planSettings } from '../app/site.js';
 import { buildSite, validateBlog } from '../lib/blog.js';
 import { attrsToText, blogToForm, formToBlog, parseAttrs } from '../lib/settings.js';
 import { fakeGitHub } from './fake-github.js';
+import { INCREMENTAL_MIN_POSTS } from '../lib/incremental.js';
 
 const run = promisify(execFile);
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,6 +36,88 @@ async function world() {
 }
 const ABOUT = (extra = '', status = 'published') => `---\nslug: about\ntitle: About\nstatus: ${status}\n${extra}---\n\nWho writes this.\n`;
 const sorted = (plan) => plan.changes.map((c) => `${c.delete ? '-' : '+'}${c.path}`).sort();
+
+test('draft slugs: rename atomically before publication, but never after publication or unpublishing', async () => {
+  const { server, gh } = await world();
+  const source = (slug, status) => `---\nslug: ${slug}\ntitle: Grocery\ndate: 2026-11-18\nstatus: ${status}\n---\n\nSavings.\n`;
+  await executePlan(gh, await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'grocey', text: source('grocey', 'draft'), create: true }));
+  assert.equal(await draftSlugEditable(gh, { repo: 'example/blog', ref: 'main', slug: 'grocey' }), true);
+  await assert.rejects(planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'markdown-is-the-format', fromSlug: 'grocey', text: source('markdown-is-the-format', 'draft') }), (e) => e.code === 'slug-collision');
+  const rename = await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'grocery', fromSlug: 'grocey', text: source('grocery', 'published') });
+  assert.ok(rename.changes.some((c) => c.path === 'posts/grocey.md' && c.delete));
+  await executePlan(gh, rename);
+  let files = server.files('example/blog');
+  assert.ok(!files['posts/grocey.md'] && !files['grocey/index.html']);
+  assert.match(files['grocery/index.html'], /rel="canonical" href="https:\/\/example\.github\.io\/blog\/grocery\/"/);
+  assert.equal(await draftSlugEditable(gh, { repo: 'example/blog', ref: 'main', slug: 'grocery' }), false);
+  await executePlan(gh, await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'grocery', text: source('grocery', 'draft') }));
+  assert.equal(await draftSlugEditable(gh, { repo: 'example/blog', ref: 'main', slug: 'grocery' }), false);
+  await assert.rejects(planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'moved', fromSlug: 'grocery', text: source('moved', 'published') }), (e) => e.code === 'permalink-move');
+  files = server.files('example/blog');
+  assert.ok(files['posts/grocery.md'] && !files['posts/moved.md']);
+});
+
+test('draft rename keeps a manual order entry consistent', async () => {
+  const { server, gh } = await world();
+  const source = (slug) => `---\nslug: ${slug}\ntitle: Grocery\ndate: 2026-11-18\nstatus: draft\n---\n\nSavings.\n`;
+  await executePlan(gh, await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'grocey', text: source('grocey'), create: true }));
+  const head = await gh.headCommit('example/blog', 'main');
+  const blog = JSON.parse(server.files('example/blog')['blog.json']);
+  await gh.commit('example/blog', { branch: 'main', parent: head.sha, baseTree: head.treeSha, message: 'Set a manual order', files: [
+    { path: 'blog.json', content: JSON.stringify({ ...blog, order: { by: 'manual', list: 'order.json' } }) },
+    { path: 'order.json', content: JSON.stringify({ order: ['grocey', 'markdown-is-the-format', 'static-hls-in-git'] }) },
+  ] });
+  await executePlan(gh, await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'grocery', fromSlug: 'grocey', text: source('grocery') }));
+  const files = server.files('example/blog');
+  assert.deepEqual(JSON.parse(files['order.json']).order, ['grocery', 'markdown-is-the-format', 'static-hls-in-git']);
+  assert.ok(!files['posts/grocey.md'] && files['posts/grocery.md']);
+});
+
+test('draft slug history reaches past the first page and refuses an unverifiable history', async () => {
+  const pages = [];
+  const gh = {
+    fileHistory: async (repo, path, ref, limit, page) => {
+      pages.push(page);
+      return page === 1 ? Array.from({ length: 100 }, (_, i) => ({ sha: `draft-${i}` })) : [{ sha: 'published' }];
+    },
+    readText: async (repo, path, sha) => `---\nslug: grocery\ntitle: Grocery\ndate: 2026-11-18\nstatus: ${sha === 'published' ? 'published' : 'draft'}\n---\n\nWords.\n`,
+  };
+  assert.equal(await draftSlugEditable(gh, { repo: 'example/blog', ref: 'main', slug: 'grocery' }), false);
+  assert.deepEqual(pages, [1, 2]);
+  gh.fileHistory = async () => [];
+  await assert.rejects(draftSlugEditable(gh, { repo: 'example/blog', ref: 'main', slug: 'grocery' }), (e) => e.code === 'missing-source');
+});
+
+test('a large-blog draft rename stays incremental and survives image-upload regeneration', async () => {
+  const blog = { title: 'T', description: 'D', author: 'A', repo: 'example/blog', domain: 'https://example.test', stylesheet: 'linked', assets: {
+    base: 'https://raw.githubusercontent.com/{owner}/{repo}/{sha}/{path}', repos: { images: 'example/images' },
+  } };
+  const source = (slug, status, extra = '', body = 'Words.') => ({ path: `posts/${slug}.md`, text: `---\nslug: ${slug}\ntitle: Grocery\ndate: 2026-11-18\nstatus: ${status}\n${extra}---\n\n${body}\n` });
+  const posts = Array.from({ length: INCREMENTAL_MIN_POSTS + 1 }, (_, i) => source(`entry-${i}`, 'published'));
+  const before = [...posts, source('grocey', 'draft')];
+  const built = buildSite({ blog, posts: before, lock: {} });
+  assert.deepEqual(built.errors, []);
+  const server = fakeGitHub({ 'example/blog': { ...built.files, 'blog.json': JSON.stringify(blog), ...Object.fromEntries(before.map((p) => [p.path, p.text])) }, 'example/images': { 'README.md': 'Images' } });
+  await server.ready;
+  const gh = new GitHub(createNet(server.fetch), { token: 'github_pat_test' });
+  const readMany = gh.readMany.bind(gh);
+  let sourceReads = 0;
+  gh.readMany = (repo, files, options) => {
+    sourceReads += files.filter((f) => f.path.startsWith('posts/')).length;
+    return readMany(repo, files, options);
+  };
+  const next = source('grocery', 'published', 'aliases: [grocey]\n', '![Picture](asset:images/new.png)');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6V9kAAAAASUVORK5CYII=', 'base64');
+  const plan = await planChange(gh, { repo: 'example/blog', branch: 'main', slug: 'grocery', fromSlug: 'grocey', text: next.text, staged: [{ key: 'images', path: 'new.png', bytes: png }] });
+  await executePlan(gh, plan);
+  const files = server.files('example/blog');
+  assert.ok(!files['posts/grocey.md'] && files['posts/grocery.md']);
+  assert.match(files['grocey/index.html'], /rel="canonical" href="https:\/\/example.test\/grocery\/"/);
+  assert.ok(sourceReads < posts.length, `reads affected posts, not the whole corpus: ${sourceReads}`);
+  const want = buildSite({ blog, posts: [...posts, next], lock: JSON.parse(files['assets.lock.json']) });
+  assert.deepEqual(want.errors, []);
+  for (const [file, text] of Object.entries(want.files)) assert.ok(files[file] === text, `${file} equals a full build`);
+});
 
 test('settings form: the new sections round-trip, write only what is set, and blank removes them', async () => {
   const base = JSON.parse(await fs.readFile(path.join(EXAMPLE, 'blog.json'), 'utf8'));

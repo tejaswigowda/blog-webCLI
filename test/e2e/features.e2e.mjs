@@ -176,6 +176,133 @@ const commit = async (page) => {
   await until(page, "document.querySelector('.toast.success')");
 };
 
+test('editor: slug suggestions are optional, aliases are authored, and published title edits keep the address', { skip, timeout: 180000 }, async () => {
+  const copy = await appSite();
+  const web = await serve(copy);
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/index.html`);
+    await until(page, "document.querySelector('#top button')");
+    await page.evaluate(`(async () => { ${INSTALL} })()`);
+    await clickText(page, '#top button', 'Sign in');
+    await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
+    await clickText(page, 'dialog button', 'Sign in');
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
+    const title = '#view input[placeholder=Title]';
+    const slug = '#view input[aria-label=Slug]';
+    const setStatus = (status) => page.evaluate(`(() => { const s = [...document.querySelectorAll('#view select')].find(x => [...x.options].some(o => o.value === 'published')); s.value = ${JSON.stringify(status)}; s.dispatchEvent(new Event('change')); })()`);
+    const published = () => setStatus('published');
+
+    await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
+    await until(page, "document.querySelector('.ql-editor') && !document.querySelector('[data-slug-guard]').textContent.includes('Checking')");
+    await setValue(page, title, 'My Favorite Grocery Deals');
+    assert.equal(await page.evaluate(`document.querySelector(${JSON.stringify(slug)}).value`), 'my-favorite-grocery-deals');
+    assert.equal(await page.evaluate(`(() => { const a = document.querySelector(${JSON.stringify(title)}).getBoundingClientRect(); const b = document.querySelector(${JSON.stringify(slug)}).getBoundingClientRect(); return a.width > 0 && b.width > 0 && Math.abs(a.top - b.top) < 1; })()`), true, 'the editable slug is visible beside the title');
+    await setValue(page, slug, 'my-favorite-grocey-deals');
+    await until(page, "document.querySelector('[data-slug-guard] button')");
+    assert.match(await page.evaluate("document.querySelector('[data-slug-guard]').textContent"), /grocey.*grocery/);
+    await clickText(page, '#view button', 'Save draft');
+    await commit(page);
+    await until(page, "location.hash.endsWith('&edit=my-favorite-grocey-deals')");
+    await page.evaluate("location.hash = '#repo=example/blog'; 0");
+    await until(page, "!document.querySelector('.ql-editor')");
+    await page.evaluate("location.hash = '#repo=example/blog&edit=my-favorite-grocey-deals'; 0");
+    await until(page, "document.querySelector('[data-slug-guard] button') && !document.querySelector('input[aria-label=Slug]').disabled");
+    await clickText(page, '[data-slug-guard] button', 'Use slug: my-favorite-grocery-deals');
+    await setValue(page, title, 'More Grocery Deals');
+    assert.equal(await page.evaluate(`document.querySelector(${JSON.stringify(slug)}).value`), 'my-favorite-grocery-deals', 'accepting a suggestion authors the slug; later title edits do not replace it');
+    assert.equal(await page.evaluate("document.querySelector('[data-slug-guard]').textContent"), '');
+    await page.evaluate("document.querySelector('details.more').open = true; 0");
+    await setValue(page, '#view textarea[aria-label="Old addresses (aliases)"]', 'old-grocey\n2020/05/old-deal');
+    await published();
+    await clickText(page, '#view button', 'Publish');
+    await commit(page);
+    await until(page, "location.hash.endsWith('&edit=my-favorite-grocery-deals')");
+    const first = await page.evaluate("window.__fake.files('example/blog')");
+    assert.ok(!first['posts/my-favorite-grocey-deals.md'], 'publishing the corrected draft atomically removes its former source path');
+    assert.match(first['posts/my-favorite-grocery-deals.md'], /\naliases: \[old-grocey, "?2020\/05\/old-deal"?\]/);
+    for (const from of ['old-grocey', '2020/05/old-deal']) {
+      assert.match(first[`${from}/index.html`], /<link rel="canonical" href="https:\/\/example\.github\.io\/blog\/my-favorite-grocery-deals\/">/);
+      assert.match(first[`${from}/index.html`], /<meta http-equiv="refresh"/);
+    }
+
+    assert.equal(await page.evaluate(`document.querySelector(${JSON.stringify(slug)}).disabled`), true);
+    await setValue(page, title, 'A Corrected Headline');
+    await setValue(page, '#view textarea[aria-label="Old addresses (aliases)"]', '');
+    await clickText(page, '#view button', 'Publish');
+    await commit(page);
+    const edited = await page.evaluate("window.__fake.files('example/blog')");
+    assert.match(edited['posts/my-favorite-grocery-deals.md'], /\ntitle: A Corrected Headline\n/);
+    assert.match(edited['my-favorite-grocery-deals/index.html'], /rel="canonical" href="https:\/\/example\.github\.io\/blog\/my-favorite-grocery-deals\/"/);
+    assert.ok(!edited['posts/a-corrected-headline.md'] && !edited['a-corrected-headline/index.html'], 'a title correction never creates another address');
+    assert.doesNotMatch(edited['posts/my-favorite-grocery-deals.md'], /\naliases:/);
+    assert.ok(!edited['old-grocey/index.html'] && !edited['2020/05/old-deal/index.html'], 'clearing the aliases field removes its generated stubs');
+    await setStatus('draft');
+    await clickText(page, '#view button', 'Save draft');
+    await commit(page);
+    await until(page, "!document.querySelector('#view button.primary').disabled");
+    await page.evaluate("location.hash = '#repo=example/blog'; 0");
+    await until(page, "!document.querySelector('.ql-editor')");
+    await page.evaluate("location.hash = '#repo=example/blog&edit=my-favorite-grocery-deals'; 0");
+    await until(page, "document.querySelector('.ql-editor')");
+    assert.equal(await page.evaluate(`document.querySelector(${JSON.stringify(slug)}).disabled`), true, 'unpublishing and reopening cannot unlock an address that was once public');
+
+    await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
+    await until(page, "document.querySelector('.ql-editor') && !document.querySelector('#view input[placeholder=Title]').value");
+    await setValue(page, title, 'Shopping');
+    await setValue(page, slug, 'grocey');
+    assert.equal(await page.evaluate("document.querySelector('[data-slug-guard]').textContent"), '', 'no warning without evidence in this document');
+    await page.evaluate("document.querySelector('.ql-editor').innerHTML = '<p>Grocery savings.</p>'; 0");
+    await until(page, "document.querySelector('[data-slug-guard] button')");
+    await published();
+    await clickText(page, '#view button', 'Publish');
+    await until(page, "document.querySelector('dialog[open] .preflight')");
+    assert.match(await page.evaluate("document.querySelector('dialog').textContent"), /Possible URL typo: "grocey" could be "grocery"/);
+    await commit(page);
+    const intentional = await page.evaluate("window.__fake.files('example/blog')");
+    assert.match(intentional['posts/grocey.md'], /\nslug: grocey\n/);
+    assert.match(intentional['grocey/index.html'], /rel="canonical" href="https:\/\/example\.github\.io\/blog\/grocey\/"/);
+    assert.ok(!intentional['grocery/index.html'], 'ignoring the advisory publishes exactly the authored address');
+  } finally {
+    chrome.close();
+    web.close();
+    await rm(copy, { recursive: true, force: true });
+  }
+});
+
+test('editor: unavailable slug word data is reported without blocking publication', { skip, timeout: 120000 }, async () => {
+  const copy = await appSite();
+  const web = await serve(copy);
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/index.html`);
+    await until(page, "document.querySelector('#top button')");
+    await page.evaluate(`(async () => {
+      ${INSTALL}
+      const normalFetch = window.fetch;
+      window.fetch = (url, options) => new URL(url, location.href).pathname.endsWith('/vendor/word-list/words.txt')
+        ? Promise.resolve(new Response('Unavailable', { status: 503 })) : normalFetch(url, options);
+    })()`);
+    await clickText(page, '#top button', 'Sign in');
+    await page.evaluate("document.querySelector('dialog input[name=token]').value = 'github_pat_' + 'b'.repeat(30); 0");
+    await clickText(page, 'dialog button', 'Sign in');
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
+    await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
+    await until(page, "document.querySelector('.ql-editor') && document.querySelector('[data-slug-guard]').textContent.includes('unavailable')");
+    assert.match(await page.evaluate("document.body.innerText"), /Slug word list returned HTTP 503/);
+    await setValue(page, '#view input[placeholder=Title]', 'Grocery');
+    await setValue(page, '#view input[aria-label=Slug]', 'grocey');
+    await page.evaluate("(() => { const s = [...document.querySelectorAll('#view select')].find(x => [...x.options].some(o => o.value === 'published')); s.value = 'published'; s.dispatchEvent(new Event('change')); })()");
+    await clickText(page, '#view button', 'Publish');
+    await commit(page);
+    assert.match(await page.evaluate("window.__fake.files('example/blog')['posts/grocey.md']"), /\nstatus: published\n/);
+  } finally {
+    chrome.close();
+    web.close();
+    await rm(copy, { recursive: true, force: true });
+  }
+});
+
 test('editor: a standalone page is written and published; a post has search and sharing fields; settings turn the features on', { skip, timeout: 180000 }, async () => {
   const web = await serve(await appSite());
   const chrome = await launch();

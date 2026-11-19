@@ -1,6 +1,6 @@
 import { createNet, fmtBytes } from './net.js';
 import { BULK_AT, GitHub, assertToken } from './github.js';
-import { NotFound, describePlan, detectAddress, executeMedia, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planInit, planSettings, planLook, planThemeFile, planMedia, planTheme } from './site.js';
+import { NotFound, describePlan, detectAddress, draftSlugEditable, executeMedia, executePlan, listPageFiles, listPostFiles, listMedia, listVideoReleases, loadBlog, loadIndex, loadIndexFull, loadPost, parseRepo, planChange, planInit, planSettings, planLook, planThemeFile, planMedia, planTheme } from './site.js';
 import { describeRelease, executeRelease, listReleaseFolders, planTagRelease, videoRepositories } from './release.js';
 import { insertionPoint } from '../lib/selection.js';
 import { licenceRecords } from '../lib/licences.js';
@@ -33,7 +33,9 @@ import { validateBlog } from '../lib/blog.js';
 import { indexBody, postBody } from '../lib/contracts.js';
 import { loadPinnedTheme, readThemeToPin } from './packs.js';
 import { heroHtml } from '../lib/theme-pack.js';
-import { deltaToHtml } from '../lib/html.js';
+import { deltaToHtml, plainLines } from '../lib/html.js';
+import { parseAliases } from '../lib/aliases.js';
+import { slugWarnings } from '../lib/slug-guard.js';
 import { loadRegistry } from './registry-client.js';
 import { highlightedTextarea } from './highlight.js';
 import { config } from './config.js';
@@ -1443,6 +1445,11 @@ async function deleteContent(repo, { slug, kind, ref, button }) {
 }
 
 const slugify = (t) => t.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+let slugWordsPromise;
+const loadSlugWords = () => slugWordsPromise ||= fetch(new URL('../vendor/word-list/words.txt', import.meta.url)).then(async (response) => {
+  if (!response.ok) throw new Error(`Slug word list returned HTTP ${response.status}`);
+  return new Set((await response.text()).trim().split('\n'));
+});
 const hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 const empty = (v) => v == null || v === '' || (Array.isArray(v) && !v.length);
 
@@ -1460,6 +1467,16 @@ async function editorView(repo, r) {
   let isNew = r.mode === 'new';
   let existing = isNew ? null : await loadPost(gh, repo, r.post, branch, cache, { allowDraft: true, kind });
   let { blog } = cache;
+  let slugEditable = isNew;
+  let slugHistoryError = '';
+  if (!isNew && !isPageKind && !correcting && existing.post.status !== 'published') {
+    try {
+      slugEditable = await draftSlugEditable(gh, { repo, ref: (await gh.headCommit(plainRepo, branch)).sha, slug: existing.post.slug });
+    } catch (error) {
+      slugHistoryError = 'Publication history could not be verified, so the slug stays fixed.';
+      fail(error);
+    }
+  }
   const staged = new Map();
   const canPush = !!(info.permissions && info.permissions.push);
   const deploy = deployPanel({ gh, repo: plainRepo, hasPages: !!info.has_pages });
@@ -1479,7 +1496,8 @@ async function editorView(repo, r) {
   const m = existing ? existing.post.meta : { status: 'draft', date: isPageKind ? '' : today(), cover: isPageKind ? '' : 'auto' }; // a new post's cover is its first image, else its first video's poster, else the blog's
   const f = {
     title: h('input', { value: m.title || '', placeholder: 'Title', disabled: correcting }),
-    slug: h('input', { value: m.slug || '', placeholder: 'set once, never changes', disabled: !isNew }),
+    slug: h('input', { value: m.slug || '', placeholder: isPageKind ? 'set once, never changes' : 'set once, freezes on publication', disabled: !slugEditable, 'aria-label': 'Slug' }),
+    aliases: h('textarea', { value: parseAliases(m).join('\n'), rows: 2, disabled: correcting, 'aria-label': 'Old addresses (aliases)', placeholder: '2020/05/old-post\nprevious-slug', style: 'width:100%' }),
     date: h('input', { type: 'date', value: (m.date || '').slice(0, 10), disabled: correcting }),
     // the time orders the posts of one day (newest first); a new post gets the time it was started, an old post keeps what it had
     time: h('input', { type: 'time', value: (m.date || '').length > 10 ? m.date.slice(11) : isNew && !isPageKind ? nowTime() : '', disabled: correcting, title: 'Orders the posts of one day; not shown on the page', 'aria-label': 'Time of day' }),
@@ -1542,11 +1560,13 @@ async function editorView(repo, r) {
   refreshLabel();
 
   const editorEl = h('div', { id: 'editor' });
+  const slugNotice = h('div', { class: 'hint', 'aria-live': 'polite', 'data-slug-guard': '' });
   // what a search engine and a shared link show; all optional
   const sharing = h('details', { class: 'more' },
     h('summary', {}, 'Search and sharing'),
     h('div', { class: 'row' }, field('Search title', f.seo_title, 'The title search engines and shared links show. Defaults to the title.'), field('Share image', h('div', { style: 'display:flex;gap:.4rem' }, f.image, imageUpload), 'Defaults to the cover.')),
     h('div', { class: 'row' }, field('Canonical address', f.canonical, 'Only for a post first published elsewhere: search engines will treat that address as the original.'), field('Keep out of search', h('label', { class: 'check' }, f.noindex, ' noindex this page'), 'The page still exists and is in the feed; it asks search engines to skip it and stays out of the sitemap.')),
+    field('Old addresses (aliases)', f.aliases, 'One old path per line, below this blog. The generator writes a canonical redirect stub for each published alias; never write stubs by hand.'),
   );
   const node = h(
     'div',
@@ -1555,7 +1575,8 @@ async function editorView(repo, r) {
     h('h1', {}, correcting ? `Correct: ${m.title}` : isNew ? `New ${word}` : `Edit: ${m.title}`),
     h('div', { class: 'cols' },
       h('div', {},
-        h('div', { class: 'row' }, field('Title', f.title), field(isPageKind ? 'Slug (page ID — never changes)' : 'Slug (the URL — never changes)', f.slug)),
+        h('div', { class: 'row' }, field('Title', f.title), field(isPageKind ? 'Slug (page ID — never changes)' : 'Slug (freezes at first publication)', f.slug, slugHistoryError || (slugEditable ? 'Check this before publishing or sharing. You can edit it here.' : 'Saved address: changing the title never changes this slug.'))),
+        slugNotice,
         h('div', { class: 'row' }, field('Cover', h('div', { style: 'display:flex;gap:.4rem' }, f.cover, coverUpload, coverAuto), 'Upload an image, or auto: the post\'s first image, else the poster of its first video, else the blog\'s cover. It is the preview when the post is shared.'), field('Description', f.description)),
         sharing,
         editorEl,
@@ -1575,11 +1596,39 @@ async function editorView(repo, r) {
   view.replaceChildren(node);
   const quill = await createEditor(editorEl, { onImage: () => pickImage(), onVideo: () => pickVideo(), chooseImage });
   quill.setContents(existing ? existing.post.delta.ops : mdToDelta('').ops, 'silent');
+  let knownWords = null;
+  const currentSlugWarnings = () => slugEditable && knownWords ? slugWarnings({
+    slug: f.slug.value.trim(), title: f.title.value, body: plainLines(quill.getContents()).map((line) => line.text).join('\n'),
+  }, knownWords) : [];
+  const refreshSlugGuard = () => {
+    if (!knownWords && slugEditable) return;
+    slugNotice.replaceChildren(...currentSlugWarnings().map(({ token, corrections }) => h('div', {},
+      `Possible URL typo: "${token}". `,
+      corrections.map((correction) => {
+        const proposed = f.slug.value.trim().split('-').map((part) => part === token ? correction : part).join('-');
+        return h('span', {}, `"${correction}" appears in this post. `, h('button', { type: 'button', class: 'link', onclick: () => {
+          f.slug.value = proposed;
+          f.slug.dispatchEvent(new Event('input'));
+        } }, `Use slug: ${proposed}`), ' ');
+      }),
+      'Optional: you can publish the current slug unchanged.',
+    )));
+  };
+  if (slugEditable) {
+    slugNotice.textContent = 'Checking the slug locally...';
+    loadSlugWords().then((words) => { knownWords = words; refreshSlugGuard(); }, (error) => {
+      slugNotice.textContent = 'Slug suggestions are unavailable. Publishing is still available; check the address yourself.';
+      fail(error);
+    });
+  }
+  f.title.addEventListener('input', refreshSlugGuard);
+  f.slug.addEventListener('input', refreshSlugGuard);
+  quill.on('text-change', refreshSlugGuard);
   // beside the Publish card: what can be said about the post (lib/post-stats.js), and its history and whether the live page is this version
   const readFields = () => ({
     title: f.title.value, slug: f.slug.value.trim(), date: f.date.value ? (f.time.value ? `${f.date.value}T${f.time.value}` : f.date.value) : '', status: f.status.value,
     tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), description: f.description.value, seo_title: f.seo_title.value, image: f.image.value,
-    canonical: f.canonical.value, noindex: f.noindex.checked, cover: f.cover.value, parent: isPageKind ? f.parent.value.trim() : undefined, aliases: existing ? existing.post.meta.aliases : undefined,
+    canonical: f.canonical.value, noindex: f.noindex.checked, cover: f.cover.value, parent: isPageKind ? f.parent.value.trim() : undefined, aliases: f.aliases.value.split('\n').map((path) => path.trim()).filter(Boolean),
   });
   const stats = createStatsPanel({
     h, gh, where: repo, repo: plainRepo, folder, branch, blog, lock: cache.lock, kind, hasPages: !!info.has_pages, link,
@@ -1679,6 +1728,7 @@ async function editorView(repo, r) {
 
   function buildText() {
     const { md } = deltaToMarkdownChecked({ ops: quill.getContents().ops });
+    const aliases = f.aliases.value.split('\n').map((path) => path.trim()).filter(Boolean);
     const common = {
       title: f.title.value.trim(),
       status: f.status.value,
@@ -1689,16 +1739,18 @@ async function editorView(repo, r) {
       image: f.image.value.trim(),
       canonical: f.canonical.value.trim(),
       noindex: f.noindex.checked ? 'true' : '',
+      aliases: aliases.length ? aliases : undefined,
     };
     // a page has a menu position and nothing dated; a post has a date, tags and an author
     const vals = isPageKind
       ? { ...common, parent: f.parent.value.trim(), menu: f.menu.value.trim() }
       : { ...common, date: f.date.value && f.time.value ? `${f.date.value}T${f.time.value}` : f.date.value, tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), author: f.author.value.trim() };
-    const slug = existing ? existing.post.slug : f.slug.value.trim();
+    const slug = slugEditable ? f.slug.value.trim() : existing.post.slug;
     if (!SLUG_RE.test(slug)) throw new Refusal('bad-frontmatter', `slug "${slug}" must be lowercase letters, digits and hyphens`);
     let front;
     if (existing) {
       front = existing.post.front;
+      if (slug !== existing.post.slug) front = setMeta(front, 'slug', slug);
       for (const k of Object.keys(vals)) {
         const was = existing.post.meta[k];
         if (JSON.stringify(empty(was) ? null : was) !== JSON.stringify(empty(vals[k]) ? null : vals[k])) front = setMeta(front, k, empty(vals[k]) ? null : vals[k]);
@@ -1712,8 +1764,12 @@ async function editorView(repo, r) {
     try {
       const creating = isNew;
       const { slug, text, md } = buildText();
+      const fromSlug = existing && slug !== existing.post.slug ? existing.post.slug : undefined;
       const used = new Set(collectAssetRefs(quill.getContents(), readFields()));
-      const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, text, kind, staged: [...staged.values()].filter((s) => used.has(`asset:${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew }), { button: go });
+      const plan = await heavy('Preparing the pre-flight…', () => planChange(gh, { repo, branch, slug, fromSlug, text, kind, staged: [...staged.values()].filter((s) => used.has(`asset:${s.key}/${s.path}`)), mode: correcting ? 'pr' : 'direct', create: isNew }), { button: go });
+      if (fromSlug) plan.headline = [`Rename unpublished draft "${fromSlug}" to "${slug}". No public address is being moved.`];
+      const warnings = currentSlugWarnings();
+      if (warnings.length) plan.headline = [...(plan.headline || []), ...warnings.map(({ token, corrections }) => `Possible URL typo: "${token}" could be ${corrections.map((word) => `"${word}"`).join(' or ')} from this post. Publishing unchanged is allowed; cancel to edit the slug.`)];
       if (!plan.changes.length && !plan.assetGroups.length) {
         noted('Nothing to publish: the repository already matches.');
         return;
@@ -1729,7 +1785,9 @@ async function editorView(repo, r) {
       const path = `${isPageKind ? 'pages' : 'posts'}/${slug}.md`;
       existing = { post: parsePost({ path, text }) };
       isNew = false;
-      f.slug.disabled = true;
+      slugEditable = slugEditable && !isPageKind && f.status.value !== 'published';
+      f.slug.disabled = !slugEditable;
+      refreshSlugGuard();
       if (!correcting) {
         cache = null;
         cache = { repo, ref: r.ref, ...(await working('Refreshing the blog…', () => loadBlog(gh, repo, r.ref))) };

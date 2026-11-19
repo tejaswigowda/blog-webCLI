@@ -553,6 +553,19 @@
       "paths": [
         "vendor/temml/"
       ]
+    },
+    {
+      "name": "word-list",
+      "version": "4.1.0",
+      "licence": "MIT",
+      "upstream": "https://github.com/sindresorhus/word-list",
+      "kind": "vendored",
+      "surfaces": [
+        "tool"
+      ],
+      "paths": [
+        "vendor/word-list/"
+      ]
     }
   ]
 }

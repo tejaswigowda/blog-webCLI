@@ -1,0 +1,11 @@
+{
+  "name": "word-list",
+  "version": "4.1.0",
+  "licence": "MIT",
+  "upstream": "https://github.com/sindresorhus/word-list",
+  "licenceFile": "LICENSE",
+  "files": ["words.txt"],
+  "source": "https://registry.npmjs.org/word-list/-/word-list-4.1.0.tgz",
+  "integrity": "sha512-4vtKyH8lGfaY8DHLTKQDfDxPixdK6BC/2W38TsPE07Wc8uPrMIbEO3quxBFSa2BfsDyG6pW47UEN/9tfYxN6BA==",
+  "note": "Unmodified English word data, fetched only by the compose editor. No post text is sent to a spelling service."
+}
