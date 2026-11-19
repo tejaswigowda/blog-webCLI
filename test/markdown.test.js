@@ -7,6 +7,31 @@ import { splitFile, joinFile } from '../lib/frontmatter.js';
 import { Refusal } from '../lib/errors.js';
 import { deltaToHtml } from '../lib/html.js';
 import { htmlToDelta } from '../lib/wp-html.js';
+import { CODE_LANGUAGES, highlightedCode, supportsCodeLanguage } from '../lib/code-highlight.js';
+
+test('fenced code highlights safely without changing its Markdown or unknown languages', () => {
+  const snippets = {
+    html: '<div>hello</div>', css: 'a { color: red; }', javascript: 'const x = 1;',
+    typescript: 'const x: number = 1;', json: '{"x": 1}', python: 'def f(): pass',
+    bash: 'if true; then echo hi; fi', java: 'public class X {}', c: 'int x = 1;',
+    cpp: 'class X {};', csharp: 'public class X {}', go: 'func main() {}',
+    rust: 'fn main() {}', sql: 'SELECT * FROM users',
+  };
+  for (const [language] of CODE_LANGUAGES.slice(1)) {
+    assert.ok(supportsCodeLanguage(language), language);
+    assert.match(highlightedCode(snippets[language], language), /<span class="hljs-/, language);
+  }
+  for (const language of ['', 'javascript', 'unknown-language']) {
+    const source = `\`\`\`${language}\n  const x = "<img onerror=alert(1)>";\n\n  x++;\n\n\`\`\`\n`;
+    const delta = mdToDelta(source);
+    assert.equal(deltaToMarkdownChecked(delta).md, source);
+    const html = deltaToHtml(delta);
+    assert.doesNotMatch(html, /<img|onerror=alert\(1\)>/);
+    assert.match(html, /&lt;img/);
+    if (language === 'javascript') assert.match(html, /class="hljs-keyword"/);
+    else assert.doesNotMatch(html, /class="hljs-/);
+  }
+});
 
 test('hard line breaks retain their exact markers without altering WordPress imports', () => {
   for (const [source, expected] of [

@@ -41,6 +41,7 @@
     "lib/assets.js",
     "lib/blockrefs.js",
     "lib/blog.js",
+    "lib/code-highlight.js",
     "lib/comments.js",
     "lib/content.js",
     "lib/contracts.js",
@@ -102,6 +103,7 @@
     "lib/widgets.js",
     "lib/xml.js",
     "vendor/animate/animate.esm.js",
+    "vendor/highlight/highlight.esm.js",
     "vendor/moment/moment.esm.js",
     "vendor/temml/temml.esm.js"
   ],
@@ -511,6 +513,20 @@
       ],
       "paths": [
         "vendor/animate/"
+      ]
+    },
+    {
+      "name": "highlight.js",
+      "version": "11.11.1",
+      "licence": "BSD-3-Clause",
+      "upstream": "https://github.com/highlightjs/highlight.js",
+      "kind": "vendored",
+      "surfaces": [
+        "runtime",
+        "tool"
+      ],
+      "paths": [
+        "vendor/highlight/"
       ]
     },
     {

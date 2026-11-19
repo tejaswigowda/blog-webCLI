@@ -1,0 +1,7 @@
+{
+  "name": "highlight.js",
+  "version": "11.11.1",
+  "licence": "BSD-3-Clause",
+  "upstream": "https://github.com/highlightjs/highlight.js",
+  "licenceFile": "LICENSE"
+}

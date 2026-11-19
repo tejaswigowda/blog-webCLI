@@ -19,6 +19,7 @@ export function readWidget(src) {
   else if (has('wc-note')) w = { type: 'note', variant: ['note', 'warning', 'tip'].find((c) => has(c)), text: ps(root) };
   else if (has('wc-columns')) w = { type: 'columns', columns: [...root.children].map(ps) };
   else if (has('wc-figure')) w = { type: 'figure', ...figureOf(root) };
+  else if (root.tagName === 'FIGURE') w = { type: 'figure-caption', ...figureOf(root) };
   else if (has('wc-button')) w = { type: 'button', url: root.getAttribute('href') || '', label: root.textContent };
   else if (has('wc-quote')) w = { type: 'quote', text: ps(root), citation: root.querySelector('cite')?.textContent || '' };
   else if (has('wc-steps') && root.tagName === 'OL') w = { type: 'steps', items: [...root.children].map(ps) };
@@ -81,6 +82,7 @@ export function editWidget(initial, chooseImage) {
         nodes = repeat(w.columns, 'Column', () => '', (_, i) => field(w.columns, i, `Column ${i + 1}`, true), 2);
         break;
       case 'figure': nodes = image(w, 'Figure', true); break;
+      case 'figure-caption': nodes = image(w, 'Figure'); break;
       case 'button': nodes = [field(w, 'url', 'Link address'), field(w, 'label', 'Link label')]; break;
       case 'quote': nodes = [field(w, 'text', 'Quote', true), field(w, 'citation', 'Citation (optional)')]; break;
       case 'steps': nodes = repeat(w.items, 'Step', () => '', (_, i) => field(w.items, i, `Step ${i + 1}`, true)); break;

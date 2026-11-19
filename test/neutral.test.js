@@ -14,7 +14,7 @@ import { checkPageTreeNeutral } from '../cli/build-live.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENTRIES = ['lib/blog.js', 'lib/live-render.js', 'lib/preview.js'].map((f) => path.join(root, f));
-const RUNTIME_DIRS = ['lib/', 'vendor/moment/', 'vendor/animate/', 'vendor/temml/'];
+const RUNTIME_DIRS = ['lib/', 'vendor/moment/', 'vendor/animate/', 'vendor/temml/', 'vendor/highlight/'];
 const GLOBALS = ['document', 'window', 'self', 'localStorage', 'sessionStorage', 'navigator', 'DOMParser', 'XMLHttpRequest', 'HTMLElement', 'process', 'Buffer', 'require', '__dirname', '__filename', 'global'];
 
 test('the page tree build guard refuses Node imports and DOM globals', async () => {

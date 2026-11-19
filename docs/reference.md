@@ -187,6 +187,17 @@ it (`lossy-round-trip`) instead of rewriting it; `blog-webcli fmt` normalises it
 On save the editor drops empty paragraphs and moves formatting off edge whitespace, then
 **proves** the round trip before anything is sent.
 
+### Code blocks
+
+Choose **Insert or edit a code block** in the toolbar. With the cursor in an existing code block,
+it edits that block; otherwise it inserts one before the current paragraph. The code editor shows
+syntax highlighting and offers None, HTML, CSS, JavaScript, TypeScript, JSON, Python, Bash, Java,
+C, C++, C#, Go, Rust and SQL. Custom language identifiers are retained; recognized aliases are
+highlighted and other identifiers render as plain text. Published highlighting is static and needs
+no reader-side JavaScript. Use None rather than the reserved identifier `plain`. The special
+`math` identifier remains a display equation, not code. Code lines starting with three backticks
+cannot be represented by this Markdown dialect and are refused before applying.
+
 ### LaTeX math
 
 Use `\( ... \)` inline, or a code fence whose language is exactly `math` for a display equation:
@@ -342,6 +353,8 @@ instead of **Edit slideshow**, so reopening the form cannot silently discard cus
 Choose **Insert a widget** in Quill, select a type, fill its fields, then **Apply**.
 FAQ questions, columns, steps and definitions can be added, removed and reordered.
 Figures and comparisons use the existing Media picker, including staged uploads.
+**Figure with caption** keeps a plain `figure` with an image and caption; **Figure with credit**
+adds a separate credit line. Figures with rich captions or extra attributes stay in the HTML editor.
 Reopen with **Edit widget**; **Edit HTML** is always available for rich content.
 Forms use plain text (blank lines separate paragraphs), preserve relative links such as
 `./products/`, validate immediately, and prove the Markdown/Delta round-trip before applying.

@@ -18,6 +18,7 @@ const RUNTIME = [
   { dir: 'vendor/moment/', licence: /Permission is hereby granted, free of charge/ },
   { dir: 'vendor/animate/', licence: /Permission is hereby granted, free of charge/ },
   { dir: 'vendor/temml/', licence: /Permission is hereby granted, free of charge/ },
+  { dir: 'vendor/highlight/', licence: /Redistribution and use in source and binary forms/ },
 ];
 
 test('R3: a generated page\'s scripts are built only from the runtime directories', async () => {

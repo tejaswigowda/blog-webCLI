@@ -135,6 +135,7 @@ test('incremental: every kind of edit gives exactly the files a full build gives
     'a canonical elsewhere': make(58, { canonical: 'https://elsewhere.test/58/' }),
     'a cover': make(59, { cover: 'asset:images/b.png' }),
     'a post with its first picture linked': make(60, { body: '![x](https://old.test/first.png) text' }),
+    'highlighted code': { ...make(61), text: make(61).text + '\n```javascript\nconst x = 1;\n```\n' },
     'the newest post': make(0, { date: '2035-01-01' }),
     'a post in the feed': posts.find((p) => p.path === 'posts/p3.md') && make(3, { body: 'edited, and in the newest' }),
   };

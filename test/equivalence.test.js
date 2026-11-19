@@ -138,6 +138,20 @@ test('R10: an edited post (a page the live copy is newer than) is rendered as th
   assert.equal(normalise(renderFromSite(site, { slug: 'unicode', text: post.text }).html), normalise(next.files['unicode/index.html']));
 });
 
+test('highlighted code has the same static and live rendering', async () => {
+  const { loadSite, renderFromSite } = await browserRenderer();
+  const original = (await goldenPosts()).find((p) => slugOf(p) === 'unicode');
+  const post = { ...original, text: original.text + '\n```javascript\nconst x = "<img>";\n```\n' };
+  const { blog, lock } = await blogFor([post]);
+  const result = buildSite({ blog, posts: [post], lock });
+  assert.deepEqual(result.errors, []);
+  const generated = result.files['unicode/index.html'];
+  assert.match(generated, /class="hljs-keyword">const<\/span>/);
+  assert.match(generated, /pre code \.hljs-keyword/);
+  const site = await loadSite(repoOf(blog, lock, [post], result.files));
+  assert.equal(normalise(renderFromSite(site, { slug: 'unicode', text: post.text }).html), normalise(generated));
+});
+
 test('R10: a post the generator refuses is refused by the client too, with the same code', async () => {
   const { loadSite, renderFromSite, CannotRebuild } = await browserRenderer();
   const all = await goldenPosts();

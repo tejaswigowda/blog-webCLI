@@ -52,11 +52,11 @@ An introduction to the tools.
 <h2>4. Generate the repeating cards</h2>
 <p>The site&#39;s renderer reads tools.json and writes the two home pages. Each tool becomes an allowlisted HTML block with a heading, badges, a definition list, limitations and a source link.</p>
 <p>For example:</p>
-<pre><code class="language-html">&lt;article class=&quot;tool&quot; id=&quot;tool-example&quot;&gt;
-&lt;h4&gt;&lt;a href=&quot;https://example.com/&quot;&gt;example&lt;/a&gt;&lt;/h4&gt;
-&lt;dl&gt;&lt;dt&gt;in&lt;/dt&gt;&lt;dd&gt;A local file&lt;/dd&gt;&lt;dt&gt;out&lt;/dt&gt;&lt;dd&gt;A downloadable artifact&lt;/dd&gt;&lt;/dl&gt;
-&lt;p class=&quot;caveat&quot;&gt;Its current limitations.&lt;/p&gt;
-&lt;/article&gt;
+<pre><code class="language-html"><span class="hljs-tag">&lt;<span class="hljs-name">article</span> <span class="hljs-attr">class</span>=<span class="hljs-string">&quot;tool&quot;</span> <span class="hljs-attr">id</span>=<span class="hljs-string">&quot;tool-example&quot;</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">h4</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">a</span> <span class="hljs-attr">href</span>=<span class="hljs-string">&quot;https://example.com/&quot;</span>&gt;</span>example<span class="hljs-tag">&lt;/<span class="hljs-name">a</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">h4</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dl</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">dt</span>&gt;</span>in<span class="hljs-tag">&lt;/<span class="hljs-name">dt</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">dd</span>&gt;</span>A local file<span class="hljs-tag">&lt;/<span class="hljs-name">dd</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">dt</span>&gt;</span>out<span class="hljs-tag">&lt;/<span class="hljs-name">dt</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">dd</span>&gt;</span>A downloadable artifact<span class="hljs-tag">&lt;/<span class="hljs-name">dd</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">dl</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">p</span> <span class="hljs-attr">class</span>=<span class="hljs-string">&quot;caveat&quot;</span>&gt;</span>Its current limitations.<span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">article</span>&gt;</span>
 </code></pre>
 <p>Keep all of a raw HTML block&#39;s tags together, without blank lines inside it. blog-webCLI validates and re-serializes the markup. Scripts, event handlers and inline styles are not allowed in authored HTML.</p>
 <p>The renderer escapes manifest text before inserting it into HTML. An input description containing angle brackets remains text, not markup.</p>
@@ -64,19 +64,19 @@ An introduction to the tools.
 <h2>5. Put presentation in Custom CSS</h2>
 <p>In Settings, choose system typography, width and text size, then use Custom CSS for the rest. The restoration uses a 52rem width and 16px system typography, monospace tool names and separate light/dark colors.</p>
 <p>This simplified example shows how the card classes connect to its appearance:</p>
-<pre><code class="language-css">.tool {
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  padding: .8rem 1rem;
-  margin: .8rem 0;
+<pre><code class="language-css"><span class="hljs-selector-class">.tool</span> {
+  <span class="hljs-attribute">border</span>: <span class="hljs-number">1px</span> solid <span class="hljs-built_in">var</span>(--rule);
+  <span class="hljs-attribute">border-radius</span>: <span class="hljs-number">8px</span>;
+  <span class="hljs-attribute">padding</span>: .<span class="hljs-number">8rem</span> <span class="hljs-number">1rem</span>;
+  <span class="hljs-attribute">margin</span>: .<span class="hljs-number">8rem</span> <span class="hljs-number">0</span>;
 }
-.tool dl {
-  display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
-  gap: .15rem .6rem;
+<span class="hljs-selector-class">.tool</span> <span class="hljs-selector-tag">dl</span> {
+  <span class="hljs-attribute">display</span>: grid;
+  <span class="hljs-attribute">grid-template-columns</span>: <span class="hljs-number">5.5rem</span> <span class="hljs-built_in">minmax</span>(<span class="hljs-number">0</span>, <span class="hljs-number">1</span>fr);
+  <span class="hljs-attribute">gap</span>: .<span class="hljs-number">15rem</span> .<span class="hljs-number">6rem</span>;
 }
-@media (max-width: 30rem) {
-  .tool dl { grid-template-columns: minmax(0, 1fr); }
+<span class="hljs-keyword">@media</span> (<span class="hljs-attribute">max-width</span>: <span class="hljs-number">30rem</span>) {
+  <span class="hljs-selector-class">.tool</span> <span class="hljs-selector-tag">dl</span> { <span class="hljs-attribute">grid-template-columns</span>: <span class="hljs-built_in">minmax</span>(<span class="hljs-number">0</span>, <span class="hljs-number">1</span>fr); }
 }
 </code></pre>
 <p>The actual rules also handle screenshot floats, badge colors, focus indicators and the phone layout. HTML supplies structure; CSS supplies appearance. Custom CSS cannot fetch resources: imports, external fonts, URL functions and scripting hooks are refused.</p>
@@ -87,12 +87,12 @@ An introduction to the tools.
 <p>There is one site-specific build step worth recording: the generator includes a Font Awesome CDN stylesheet link. webcli.app removes that exact tag after generation, then refuses any remaining third-party resource reference. Do not copy a no-third-party-request claim without checking the actual output.</p>
 <h2>7. Build with an exact generator version</h2>
 <p>The site&#39;s .blog-webcli-ref pins blog-webCLI to a published commit. With Git and Node.js 22 or newer, the workflow from a fresh checkout is:</p>
-<pre><code class="language-sh">git clone https://github.com/tejaswigowda/webcli.app.git
-cd webcli.app
-git clone https://github.com/tejaswigowda/blog-webCLI.git .blog-webcli
-git -C .blog-webcli checkout --detach &quot;$(cat .blog-webcli-ref)&quot;
+<pre><code class="language-sh">git <span class="hljs-built_in">clone</span> https://github.com/tejaswigowda/webcli.app.git
+<span class="hljs-built_in">cd</span> webcli.app
+git <span class="hljs-built_in">clone</span> https://github.com/tejaswigowda/blog-webCLI.git .blog-webcli
+git -C .blog-webcli checkout --detach <span class="hljs-string">&quot;<span class="hljs-subst">$(cat .blog-webcli-ref)</span>&quot;</span>
 npm run build
-npm test
+npm <span class="hljs-built_in">test</span>
 npm run check:page
 </code></pre>
 <p>The build writes the home markdown, runs the pinned generator, removes the Font Awesome link and checks resource references. The browser check needs Chrome.</p>

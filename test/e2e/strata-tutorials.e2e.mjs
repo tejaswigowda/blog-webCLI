@@ -13,6 +13,8 @@ import { fakeGitHub } from '../fake-github.js';
 import { createNet } from '../../app/net.js';
 import { GitHub } from '../../app/github.js';
 import { planChange } from '../../app/site.js';
+import { serve } from '../../cli/serve.js';
+import { LYCEUM_TUTORIALS } from '../../cli/lyceum-tutorial-primitives.mjs';
 
 const checkout = process.env.STRATA_CHECKOUT;
 const skip = !checkout ? 'Set STRATA_CHECKOUT to the migrated Strata checkout' : !chromePath() ? 'Chrome is not installed' : false;
@@ -38,6 +40,41 @@ const codeBlocks = (html) => {
   visit(parseHtml(html));
   return found;
 };
+
+test('Lyceum tutorials round-trip through real Quill with editable code and figures', { skip, timeout: 120000 }, async () => {
+  const server = await serve(path.resolve(new URL('../../', import.meta.url).pathname));
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${server.address().port}/index.html`);
+    await page.evaluate(`(async () => {
+      const { createEditor } = await import('/app/editor.js');
+      const host = document.createElement('div');
+      document.body.append(host);
+      window.__tutorialEditor = await createEditor(host, { onImage:()=>{}, onVideo:()=>{}, chooseImage:()=>{} });
+    })()`);
+    for (const slug of LYCEUM_TUTORIALS) {
+      const file = await readFile(path.join(checkout, folder, 'pages', `${slug}.md`), 'utf8');
+      const body = splitFile(file).body;
+      const delta = mdToDelta(body);
+      const expectedCode = (body.match(/^```javascript$/gm) || []).length;
+      const expectedFigures = delta.ops.filter((op) => op.insert?.htmlblock?.startsWith('<figure>\n<img ')).length;
+      const actual = await page.evaluate(`(async () => {
+        const { deltaToMarkdownChecked } = await import('/lib/markdown.js');
+        const q = window.__tutorialEditor;
+        q.setContents(${JSON.stringify(delta)}, 'api');
+        const saved = deltaToMarkdownChecked(q.getContents()).md;
+        const figures = [...q.root.querySelectorAll('.ql-htmlblock')].filter(n => n.querySelector('.blk-edit')?.textContent === 'Edit widget');
+        return { same:saved === ${JSON.stringify(body)}, figures:figures.filter(n => n.getAttribute('data-htmlblock').startsWith('<figure>\\n<img ')).length, code:q.root.querySelectorAll('.ql-code-block').length };
+      })()`);
+      assert.equal(actual.same, true, `${slug}: Quill changed the source`);
+      assert.equal(actual.figures, expectedFigures, `${slug}: figure widgets`);
+      assert.ok(actual.code >= expectedCode, `${slug}: code blocks`);
+    }
+  } finally {
+    await chrome.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
 
 test('Strata complete migration: every old URL, layout, search, source and normal editor publishing', { skip, timeout: 180000 }, async () => {
   const inventory = JSON.parse(await readFile(new URL('../../docs/strata-tutorial-inventory.json', import.meta.url), 'utf8'));
@@ -70,6 +107,28 @@ test('Strata complete migration: every old URL, layout, search, source and norma
   const chrome = await launch();
   try {
     const page = await openPage(chrome, `${origin}/about/tutorials/index.html`);
+    await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+    await page.send('Emulation.setScriptExecutionDisabled', { value: true });
+    await page.send('Page.navigate', { url: `${origin}/about/tutorials/a-plus-b-cubed.html` });
+    await until(page, "location.pathname.endsWith('/a-plus-b-cubed.html') && !!document.querySelector('pre code .hljs-keyword') && !!document.querySelector('link[rel=stylesheet]')?.sheet");
+    const contrast = await page.evaluate(`(() => {
+      const luminance = color => {
+        const values = color.match(/\\d+/g).slice(0,3).map(Number).map(v => {
+          v /= 255;
+          return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+        });
+        return .2126 * values[0] + .7152 * values[1] + .0722 * values[2];
+      };
+      const pre = document.querySelector('pre code .hljs-keyword').closest('pre');
+      const bg = luminance(getComputedStyle(pre).backgroundColor);
+      return ['.hljs-keyword', '.hljs-string'].map(s => {
+        const fg = luminance(getComputedStyle(document.querySelector('pre code ' + s)).color);
+        return (Math.max(fg,bg)+.05)/(Math.min(fg,bg)+.05);
+      });
+    })()`);
+    assert.ok(contrast.every((ratio) => ratio >= 4.5), `static code must be readable on the dark tutorial theme: ${contrast}`);
+    await page.send('Emulation.setScriptExecutionDisabled', { value: false });
+    await page.send('Emulation.setEmulatedMedia', { features: [] });
     const measure = `(() => {
       const main = document.querySelector('main');
       const heading = [...main.querySelectorAll('h1')].find((n) => n.getBoundingClientRect().height);

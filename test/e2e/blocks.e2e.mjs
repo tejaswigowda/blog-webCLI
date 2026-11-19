@@ -50,6 +50,125 @@ const until = async (page, expr, ms = 15000) => {
 const clickText = (page, selector, text) => page.evaluate(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find((e) => e.textContent.trim().startsWith(${JSON.stringify(text)})); if (!el) throw new Error('no ' + ${JSON.stringify(text)}); el.click(); })()`);
 const fill = (page, selector, value) => page.evaluate(`(() => { const i = document.querySelector(${JSON.stringify(selector)}); i.value = ${JSON.stringify(value)}; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
 
+test('a captioned figure opens as an editable widget without losing rich figures', { skip, timeout: 90000 }, async () => {
+  const web = await serve(await site());
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/index.html`);
+    const result = await page.evaluate(`(async () => {
+      const { readWidget } = await import('/app/widgets.js');
+      const { widgetHtml } = await import('/lib/widget-markup.js');
+      const original = widgetHtml({ type:'figure-caption', image:'https://example.com/a.png', alt:'Example', caption:'First caption' });
+      return { widget:readWidget(original), rich:readWidget(original.replace('First caption','<em>First</em> caption')) };
+    })()`);
+    assert.equal(result.widget.type, 'figure-caption');
+    assert.equal(result.widget.caption, 'First caption');
+    assert.equal(result.rich, null);
+    await until(page, "document.querySelector('#top button')");
+    await page.evaluate(`(async () => { ${INSTALL} })()`);
+    await clickText(page, '#top button', 'Sign in');
+    await fill(page, 'dialog input[name=token]', `github_pat_${'b'.repeat(30)}`);
+    await clickText(page, 'dialog button', 'Sign in');
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
+    await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
+    await until(page, "document.querySelector('.ql-editor')");
+    await page.evaluate(`(async () => {
+      const { widgetHtml } = await import('/lib/widget-markup.js');
+      const q = Quill.find(document.querySelector('.ql-container'));
+      q.setContents({ops:[{insert:{htmlblock:widgetHtml({type:'figure-caption',image:'https://example.com/a.png',alt:'Example',caption:'First caption'})}},{insert:'\\n'}]});
+      document.querySelector('.ql-editor .blk-edit').click();
+    })()`);
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    assert.equal(await page.evaluate("document.querySelector('dialog select[aria-label=\"Widget type\"]').value"), 'figure-caption');
+    await fill(page, 'dialog input[aria-label="Figure caption"]', 'New caption');
+    await clickText(page, 'dialog.blk-dialog button', 'Apply');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    assert.match(await page.evaluate("document.querySelector('.ql-editor .ql-htmlblock').getAttribute('data-htmlblock')"), /New caption/);
+    assert.deepEqual(await page.evaluate('window.__alerts'), []);
+  } finally {
+    await chrome.close();
+    await new Promise((resolve) => web.close(resolve));
+  }
+});
+
+test('code widget inserts and edits fenced code without executing it', { skip, timeout: 90000 }, async () => {
+  const web = await serve(await site());
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/index.html`);
+    await until(page, "document.querySelector('#top button')");
+    await page.evaluate(`(async () => { ${INSTALL} })()`);
+    await clickText(page, '#top button', 'Sign in');
+    await fill(page, 'dialog input[name=token]', `github_pat_${'b'.repeat(30)}`);
+    await clickText(page, 'dialog button', 'Sign in');
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
+    await page.evaluate("location.hash = '#repo=example/blog&new'; 0");
+    await until(page, "document.querySelector('.ql-editor')");
+    await page.evaluate("window.__q = Quill.find(document.querySelector('.ql-container')); __q.setText('Keep this paragraph.\\nAfter.\\n'); __q.getModule('history').clear(); __q.setSelection(5, 0); document.querySelector('button.ql-codewidget').click()");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    await page.evaluate(`(() => { const s = document.querySelector('dialog select[aria-label="Code language"]'); s.value = 'javascript'; s.dispatchEvent(new Event('change', {bubbles:true})); })()`);
+    const code = 'const x = "<img onerror=alert(1)>";\n\n  x++;\n';
+    await fill(page, 'dialog textarea[aria-label=Code]', code);
+    assert.equal(await page.evaluate("document.querySelector('dialog .hl-pre').textContent"), code + '\n');
+    assert.ok(await page.evaluate("document.querySelector('dialog .hl-pre .hljs-keyword')"));
+    assert.equal(await page.evaluate("document.querySelectorAll('dialog .hl-pre img, dialog .hl-pre script').length"), 0);
+    await clickText(page, 'dialog button', 'Apply');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    assert.ok((await page.evaluate('__q.getText()')).includes('Keep this paragraph.\nAfter.\n'));
+    await page.evaluate("__q.getModule('history').undo()");
+    assert.equal(await page.evaluate('__q.getText()'), 'Keep this paragraph.\nAfter.\n');
+    await page.evaluate("__q.getModule('history').redo(); __q.setSelection(0, 0)");
+    await page.evaluate("document.querySelector('button.ql-codewidget').click()");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    assert.equal(await page.evaluate("document.querySelector('dialog textarea[aria-label=Code]').value"), code);
+    assert.equal(await page.evaluate("document.querySelector('dialog select[aria-label=\"Code language\"]').value"), 'javascript');
+    await fill(page, 'dialog textarea[aria-label=Code]', '```\nnot representable');
+    assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog button.primary').disabled"), true, await page.evaluate("document.querySelector('dialog.blk-dialog .blk-msg').textContent"));
+    await fill(page, 'dialog textarea[aria-label=Code]', code);
+    await page.evaluate(`(() => { const s = document.querySelector('dialog select[aria-label="Code language"]'); s.value = ''; s.dispatchEvent(new Event('change', {bubbles:true})); })()`);
+    assert.equal(await page.evaluate("document.querySelectorAll('dialog .hl-pre .hljs-keyword').length"), 0);
+    await clickText(page, 'dialog button', 'Apply');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    await page.evaluate("document.querySelector('button.ql-codewidget').click()");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    assert.equal(await page.evaluate("document.querySelector('dialog select[aria-label=\"Code language\"]').value"), '', await page.evaluate("document.querySelector('dialog input[aria-label=\"Custom code language\"]').value"));
+    assert.equal(await page.evaluate("document.querySelector('dialog textarea[aria-label=Code]').value"), code);
+    await page.evaluate(`(() => { const s = document.querySelector('dialog select[aria-label="Code language"]'); s.value = '__custom__'; s.dispatchEvent(new Event('change', {bubbles:true})); })()`);
+    await fill(page, 'dialog input[aria-label="Custom code language"]', 'plain');
+    assert.equal(await page.evaluate("document.querySelector('dialog.blk-dialog button.primary').disabled"), true, await page.evaluate("document.querySelector('dialog.blk-dialog .blk-msg').textContent"));
+    await fill(page, 'dialog input[aria-label="Custom code language"]', 'my-language');
+    assert.match(await page.evaluate("document.querySelector('dialog .hint').textContent"), /without highlighting/);
+    await clickText(page, 'dialog button', 'Apply');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    await fill(page, '#view input[placeholder=Title]', 'Code post');
+    await fill(page, '#view input[placeholder^="set once"]', 'code-post');
+    await clickText(page, '#view button', 'Save draft');
+    await until(page, "document.querySelector('dialog[open] .preflight')");
+    await clickText(page, 'dialog button', 'Commit and push');
+    await until(page, "document.querySelector('.toast.success')", 30000);
+    const saved = (await page.evaluate("window.__fake.files('example/blog')"))['posts/code-post.md'];
+    assert.ok(saved.includes('```my-language\n' + code + '\n```'), saved);
+    assert.ok(saved.includes('Keep this paragraph.\n\nAfter.'), saved);
+    await page.evaluate("location.hash = '#repo=example/blog&edit=code-post'; 0");
+    await until(page, "document.querySelector('.ql-editor .ql-code-block')");
+    await page.evaluate("document.querySelector('.ql-editor .ql-code-block').click(); document.querySelector('button.ql-codewidget').click()");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    assert.equal(await page.evaluate("document.querySelector('dialog input[aria-label=\"Custom code language\"]').value"), 'my-language');
+    assert.equal(await page.evaluate("document.querySelector('dialog textarea[aria-label=Code]').value"), code);
+    await fill(page, 'dialog textarea[aria-label=Code]', 'discarded');
+    await clickText(page, 'dialog.blk-dialog button', 'Cancel');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    await page.evaluate("document.querySelector('button.ql-codewidget').click()");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    assert.equal(await page.evaluate("document.querySelector('dialog textarea[aria-label=Code]').value"), code);
+    await clickText(page, 'dialog.blk-dialog button', 'Cancel');
+    assert.deepEqual(await page.evaluate('window.__alerts'), []);
+  } finally {
+    await chrome.close();
+    await new Promise((resolve) => web.close(resolve));
+  }
+});
+
 test('tables and HTML blocks: inserted, edited, drawn as data, refused when unsafe, saved as readable markdown', { skip, timeout: 180000 }, async () => {
   const web = await serve(await site());
   const chrome = await launch();

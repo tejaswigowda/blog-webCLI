@@ -18,6 +18,7 @@ export const examples = [
   ...['note', 'warning', 'tip'].map((variant) => ({ type: 'note', variant, text: 'Read this.\n\nAnd this.' })),
   { type: 'columns', columns: ['Left', 'Middle', 'Right'] },
   { type: 'figure', ...image, credit: 'Photographer' },
+  { type: 'figure-caption', ...image },
   { type: 'button', url: './products/?a=1&b=2', label: 'Shop & explore' },
   { type: 'quote', text: 'A quote.\n\nMore quoted text.', citation: 'Author' },
   { type: 'steps', items: ['First', 'Second\n\nWith more detail.'] },
@@ -36,7 +37,7 @@ test('every widget round-trips Markdown → Delta → Markdown byte-identically 
     const md = `${src}\n`;
     const checked = deltaToMarkdownChecked(mdToDelta(md));
     assert.equal(checked.md, md, w.type);
-    assert.match(deltaToHtml(checked.delta), new RegExp(w.type === 'definitions' ? '<dl>' : 'class="wc-'));
+    assert.match(deltaToHtml(checked.delta), new RegExp(w.type === 'definitions' ? '<dl>' : w.type === 'figure-caption' ? '<figure>' : 'class="wc-'));
   }
   checkHtmlBlock('<div class="wc-steps"><ol><li>One</li></ol></div>');
   checkHtmlBlock('<div class="author-class"><p>Untouched</p></div>');

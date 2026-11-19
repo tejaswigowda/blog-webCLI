@@ -15,6 +15,7 @@ import { mdToDelta } from '../lib/markdown.js';
 import { tutorialSource } from '../cli/strata-tutorial-site.mjs';
 import { deltaToHtml } from '../lib/html.js';
 import { widgetHtml } from '../lib/widget-markup.js';
+import { convertLyceumTutorial } from '../cli/lyceum-tutorial-primitives.mjs';
 
 const run = promisify(execFile);
 const root = process.cwd();
@@ -68,6 +69,27 @@ test('complete tutorial conversion preserves code boundaries and uses editable m
   assert.deepEqual(cssRules, ['.legacy-style-1{text-align:right}']);
   const video = delta.ops.find(({ insert }) => insert.htmlblock?.includes('wc-video')).insert.htmlblock;
   assert.equal(video, widgetHtml({ type: 'native-video', title: 'A tutorial: video demonstration', url: 'https://strataeditor.dev/about/tutorials/demos/example.mp4' }));
+});
+
+test('Lyceum tutorial conversion preserves code and makes simple figures editable', () => {
+  const source = [
+    '<h1>Title</h1>',
+    '<p>A <strong>paragraph</strong>.</p>',
+    '<pre><code>const x = &quot;&lt;img&gt;&quot;;&#10;&#10;  x++;</code></pre>',
+    '<figure>&#10;  <img src="https://example.test/a.png" alt="Example">&#10;  <figcaption>A caption &amp; detail.</figcaption>&#10;</figure>',
+    '<figure><img src="https://example.test/b.png" alt="Other"><figcaption>Keep <em>rich</em> text.</figcaption></figure>',
+    '<pre><code>```&#10;cannot fence</code></pre>',
+  ].join('\n\n') + '\n';
+  const converted = convertLyceumTutorial(source);
+  assert.equal(converted.report.prose, 2);
+  assert.equal(converted.report.code, 1);
+  assert.equal(converted.report.figures, 1);
+  assert.equal(converted.report.retained.length, 2);
+  assert.match(converted.body, /```javascript\nconst x = "<img>";\n\n  x\+\+;\n```/);
+  assert.ok(converted.body.includes(widgetHtml({ type: 'figure-caption', image: 'https://example.test/a.png', alt: 'Example', caption: 'A caption & detail.' })));
+  assert.match(converted.body, /<figcaption>Keep <em>rich<\/em> text\.<\/figcaption>/);
+  assert.match(converted.body, /<pre><code>```&#10;cannot fence<\/code><\/pre>/);
+  assert.equal(convertLyceumTutorial(converted.body).body, converted.body);
 });
 
 test('version configuration requires distinct safe prefixes and exactly one default', () => {

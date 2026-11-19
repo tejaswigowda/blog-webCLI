@@ -13,11 +13,37 @@ import { sha256 } from '../lib/sha256.js';
 import { GENERATOR_ID } from '../lib/page.js';
 import { loadTheme, pinFor, themeDigest, themeFilePaths } from '../lib/theme-pack.js';
 import { EX, corpus, readDirFiles, stripData } from './helpers.js';
+import { parse } from 'acorn';
 
 const enc = new TextEncoder();
 const here = path.dirname(new URL(import.meta.url).pathname);
 const root = path.join(here, '..');
 const BASE = 'https://content.test/example/blog/HEAD/';
+
+// Language keyword lists contain these words as data, not API or storage accesses.
+function withoutGrammarWords(source) {
+  const ast = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
+  const edits = [];
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'ArrayExpression') {
+      const values = new Set(node.elements.map((e) => e?.value));
+      const sql = ['asensitive', 'atomic', 'authorization'].every((v) => values.has(v));
+      const js = ['arguments', 'super', 'localStorage', 'sessionStorage'].every((v) => values.has(v));
+      for (const e of node.elements) {
+        if (e?.type === 'Literal' && (sql && e.value === 'authorization' || js && e.value === 'localStorage')) edits.push(e);
+      }
+    }
+    for (const value of Object.values(node)) {
+      if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === 'object') visit(value);
+    }
+  };
+  visit(ast);
+  for (const e of edits.sort((a, b) => b.start - a.start)) source = source.slice(0, e.start) + '""' + source.slice(e.end);
+  return source;
+}
+const liveWithoutGrammarWords = withoutGrammarWords(LIVE_SOURCE);
 
 const exampleBlog = async (patch = {}) => ({ ...JSON.parse(await fs.readFile(path.join(EX, 'blog', 'blog.json'), 'utf8')), content: { base: 'https://content.test/{owner}/{repo}/{ref}/{path}' }, ...patch });
 
@@ -341,7 +367,7 @@ test('L6: a request is a plain GET of a file, with no credentials, and the URL i
     assert.equal(s.init.headers, undefined, 'no Authorization or any other header of ours');
     assert.equal(s.init.method, undefined, 'a GET');
   }
-  assert.ok(!/api\.github\.com|authorization|bearer|github_pat|ghp_|sessionStorage\.getItem\(["']blog\.webcli\.token/i.test(LIVE_SOURCE), 'the script knows no API and holds no token');
+  assert.ok(!/api\.github\.com|authorization|bearer|github_pat|ghp_|sessionStorage\.getItem\(["']blog\.webcli\.token/i.test(liveWithoutGrammarWords), 'the script knows no API and holds no token');
 });
 
 test('L9: no provider hostname is built into the generator or the script: the content base is blog.json\'s', async () => {
@@ -358,7 +384,7 @@ test('L9: no provider hostname is built into the generator or the script: the co
 
 test('the script has no way to run text as code, load another script or write to GitHub', () => {
   for (const [re, what] of [[/\beval\s*\(/, 'eval'], [/new Function\s*\(/, 'new Function'], [/createElement\(\s*["']script["']/, 'creating a script'], [/importScripts|document\.write\s*\(/, 'importScripts/document.write'], [/method\s*:\s*["'](?:POST|PUT|PATCH|DELETE)/i, 'a write request'], [/localStorage/, 'localStorage']]) {
-    assert.ok(!re.test(LIVE_SOURCE), `the live script has ${what}`);
+    assert.ok(!re.test(liveWithoutGrammarWords), `the live script has ${what}`);
   }
 });
 

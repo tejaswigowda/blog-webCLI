@@ -1,4 +1,5 @@
 import { registerBlocks, wireBlocks } from './blocks.js';
+import { wireCodeWidget } from './code-widget.js';
 
 // Quill as a *view over markdown*. Only what markdown can express is offered; the
 // image blot keeps the logical `asset:` reference in the document and shows a
@@ -74,9 +75,19 @@ export async function loadQuill() {
         static create(value) {
           const node = super.create(value);
           if (typeof value === 'string' && value !== 'plain') node.setAttribute('data-language', value);
+          else node.removeAttribute('data-language');
           return node;
         }
-        static formats(node) { return node.getAttribute('data-language') || true; }
+        static formats(node) {
+          const value = node.getAttribute('data-language');
+          return !value || value === 'plain' ? true : value;
+        }
+        format(name, value) {
+          if (name === 'code-block' && value === true) {
+            super.format(name, 'plain');
+            this.domNode.removeAttribute('data-language');
+          } else super.format(name, value);
+        }
       }
       Quill.register('formats/code-block', LanguageCodeBlock, true);
 
@@ -129,12 +140,13 @@ export async function createEditor(el, { onImage, onVideo, chooseImage }) {
         this.quill.setSelection(range.index + 1, 0, 'silent');
       } } } },
       toolbar: {
-        container: [[{ header: [1, 2, 3, 4, false] }, { para: [false, 'lead', 'small'] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'slideshow', 'mdtable', 'htmlblock', 'cssclasses', 'widget'], ['clean']],
-        handlers: { image: onImage, video: onVideo, slideshow: () => blocks.slideshow(), mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock(), cssclasses: () => blocks.cssclasses(), widget: () => blocks.widget() },
+        container: [[{ header: [1, 2, 3, 4, false] }, { para: [false, 'lead', 'small'] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block', 'codewidget'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'slideshow', 'mdtable', 'htmlblock', 'cssclasses', 'widget'], ['clean']],
+        handlers: { image: onImage, video: onVideo, codewidget: () => blocks.codewidget(), slideshow: () => blocks.slideshow(), mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock(), cssclasses: () => blocks.cssclasses(), widget: () => blocks.widget() },
       },
     },
   });
   Object.assign(blocks, wireBlocks(quill, Quill, { chooseImage }));
+  blocks.codewidget = wireCodeWidget(quill, Quill);
   // a paragraph style and another block format (heading, list, quote, code) cannot share a line: the one applied last wins
   const OTHER = ['header', 'list', 'blockquote', 'code-block', 'indent'];
   quill.getModule('toolbar').addHandler('para', (v) => {
@@ -154,7 +166,7 @@ export async function createEditor(el, { onImage, onVideo, chooseImage }) {
     }
   });
   const bar = quill.getModule('toolbar').container;
-  for (const [name, title] of [['mdtable', 'Insert a table'], ['htmlblock', 'Insert an HTML block'], ['slideshow', 'Insert a slideshow'], ['cssclasses', 'Group with CSS classes'], ['widget', 'Insert a widget']]) {
+  for (const [name, title] of [['codewidget', 'Insert or edit a code block'], ['mdtable', 'Insert a table'], ['htmlblock', 'Insert an HTML block'], ['slideshow', 'Insert a slideshow'], ['cssclasses', 'Group with CSS classes'], ['widget', 'Insert a widget']]) {
     const b = bar.querySelector(`.ql-${name}`);
     if (b) {
       b.title = title;

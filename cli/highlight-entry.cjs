@@ -1,0 +1,16 @@
+const hljs = require('../vendor/highlight/lib/core.js');
+hljs.registerLanguage('xml', require('../vendor/highlight/lib/languages/xml.js'));
+hljs.registerLanguage('css', require('../vendor/highlight/lib/languages/css.js'));
+hljs.registerLanguage('javascript', require('../vendor/highlight/lib/languages/javascript.js'));
+hljs.registerLanguage('typescript', require('../vendor/highlight/lib/languages/typescript.js'));
+hljs.registerLanguage('json', require('../vendor/highlight/lib/languages/json.js'));
+hljs.registerLanguage('python', require('../vendor/highlight/lib/languages/python.js'));
+hljs.registerLanguage('bash', require('../vendor/highlight/lib/languages/bash.js'));
+hljs.registerLanguage('java', require('../vendor/highlight/lib/languages/java.js'));
+hljs.registerLanguage('c', require('../vendor/highlight/lib/languages/c.js'));
+hljs.registerLanguage('cpp', require('../vendor/highlight/lib/languages/cpp.js'));
+hljs.registerLanguage('csharp', require('../vendor/highlight/lib/languages/csharp.js'));
+hljs.registerLanguage('go', require('../vendor/highlight/lib/languages/go.js'));
+hljs.registerLanguage('rust', require('../vendor/highlight/lib/languages/rust.js'));
+hljs.registerLanguage('sql', require('../vendor/highlight/lib/languages/sql.js'));
+module.exports = hljs;

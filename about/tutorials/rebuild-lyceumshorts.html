@@ -40,12 +40,12 @@ films/piston/
 <h2>5. Prototype build and verification</h2>
 <p>These commands describe the local prototype; its migration files are not on the public repository, so cloning the repository alone does not reproduce it.</p>
 <p>The repository pins the shared renderer by commit in <code>.blog-webcli-ref</code>. From a checkout:</p>
-<pre><code class="language-sh">git clone https://github.com/tejaswigowda/lyceumshorts.com.git
-cd lyceumshorts.com
-git clone https://github.com/tejaswigowda/blog-webCLI.git .blog-webcli
-git -C .blog-webcli checkout --detach &quot;$(cat .blog-webcli-ref)&quot;
+<pre><code class="language-sh">git <span class="hljs-built_in">clone</span> https://github.com/tejaswigowda/lyceumshorts.com.git
+<span class="hljs-built_in">cd</span> lyceumshorts.com
+git <span class="hljs-built_in">clone</span> https://github.com/tejaswigowda/blog-webCLI.git .blog-webcli
+git -C .blog-webcli checkout --detach <span class="hljs-string">&quot;<span class="hljs-subst">$(cat .blog-webcli-ref)</span>&quot;</span>
 npm run build
-npm test
+npm <span class="hljs-built_in">test</span>
 npm run check:page
 </code></pre>
 <p>The build verifies the pinned generator, reads Markdown and settings, regenerates static pages, then installs the player integration. <code>npm test</code> checks reproducibility, the Lyceum metadata/media/accessibility gates, and local paths. <code>npm run check:page</code> exercises the rendered index and film player in Chrome, including responsive layout and transcript seeking.</p>

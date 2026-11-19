@@ -266,6 +266,7 @@ export function registerBlocks(Quill) {
   icons.slideshow = ICONS.slideshow;
   icons.cssclasses = ICONS.cssclasses;
   icons.widget = ICONS.widget;
+  icons.codewidget = '<svg viewBox="0 0 18 18"><polyline class="ql-stroke" fill="none" points="6 4 2 9 6 14"/><polyline class="ql-stroke" fill="none" points="12 4 16 9 12 14"/><line class="ql-stroke" x1="10" x2="8" y1="3" y2="15"/></svg>';
 }
 
 // Insert and edit from the toolbar and by clicking a block's Edit button.

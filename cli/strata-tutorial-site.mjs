@@ -199,7 +199,7 @@ SOFTWARE.
   return report;
 }
 
-export async function buildTutorialSite(root, ref, { check = false } = {}) {
+export async function buildTutorialSite(root, ref, { check = false, preserveBlog = false } = {}) {
   if (!/^[a-f0-9]{40}$/.test(ref || '')) throw new Error('theme/script ref must be a full committed SHA');
   const folder = path.join(root, FOLDER);
   const theme = JSON.parse(await readFile(path.join(folder, 'theme/theme.json'), 'utf8'));
@@ -224,7 +224,7 @@ export async function buildTutorialSite(root, ref, { check = false } = {}) {
       { src: `${cdn}/tutorial-enhancements.js`, integrity: sri(script) },
     ],
   };
-  const blog = check ? JSON.parse(await readFile(path.join(folder, 'blog.json'), 'utf8')) : initialBlog;
+  const blog = check || preserveBlog ? JSON.parse(await readFile(path.join(folder, 'blog.json'), 'utf8')) : initialBlog;
   const posts = [];
   const lock = (await readdir(folder)).includes('assets.lock.json') ? JSON.parse(await readFile(path.join(folder, 'assets.lock.json'), 'utf8')) : {};
   for (const key of ['site/favicon.svg', 'site/demo.png']) lock[key] ||= ref;

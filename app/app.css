@@ -124,6 +124,12 @@ textarea.mono{font:.85rem/1.5 ui-monospace,monospace}
 .hl-input:focus{border-color:var(--accent)}
 .tk-cm{color:#64748b;font-style:italic}.tk-st{color:#86efac}.tk-at{color:#c4b5fd}.tk-se{color:#5eead4}.tk-pr{color:#93c5fd}
 .tk-nu{color:#fbbf24}.tk-co{color:#fbbf24}.tk-fn{color:#f9a8d4}.tk-im{color:#ef4444;font-weight:600}.tk-pu{color:#94a3b8}
+.hl-pre .hljs-comment,.hl-pre .hljs-quote{color:#94a3b8;font-style:italic}
+.hl-pre .hljs-keyword,.hl-pre .hljs-selector-tag,.hl-pre .hljs-literal{color:#f4a8d7}
+.hl-pre .hljs-string,.hl-pre .hljs-attr,.hl-pre .hljs-regexp{color:#86efac}
+.hl-pre .hljs-number,.hl-pre .hljs-symbol,.hl-pre .hljs-bullet{color:#fbbf24}
+.hl-pre .hljs-title,.hl-pre .hljs-section,.hl-pre .hljs-function{color:#93c5fd}
+.hl-pre .hljs-built_in,.hl-pre .hljs-type,.hl-pre .hljs-tag,.hl-pre .hljs-name,.hl-pre .hljs-attribute{color:#e8bc78}
 details summary{cursor:pointer;margin:.5rem 0}
 details.more{margin:.25rem 0 1rem}
 
