@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildSite, parsePost } from '../lib/blog.js';
+import { buildSite, parsePost, renderPost, validateBlog } from '../lib/blog.js';
 import { autoCover, isCoverValue } from '../lib/cover.js';
 import { parseMeta, splitFile, validateMeta } from '../lib/frontmatter.js';
 
@@ -62,14 +62,34 @@ test('auto: with nothing to pick, the blog\'s cover, or a warning when there is 
   assert.ok(none.warnings.some((w) => /cover is auto but the post has no image or video/.test(w)));
 });
 
-test('an explicit cover is unchanged: drawn on the page and used for the preview', async () => {
-  const out = await build('Words.', { cover: 'asset:images/other.png' });
+test('an explicit post cover is used for cards and sharing, not drawn inside the post', async () => {
+  const out = await build(`Words.\n\n${IMG}`, { cover: 'asset:images/other.png', patch: { customize: { list: { layout: 'cards' } } } });
   const html = out.files['p-one/index.html'];
-  assert.match(html, /<p class="cover"><img src="[^"]*other\.png"/);
+  assert.ok(!html.includes('class="cover"'));
+  assert.match(html, /<img src="[^"]*diagram\.png" alt="d"/);
   assert.match(ogImage(html), /other\.png$/);
   assert.equal(JSON.parse(out.files['index/posts.json']).posts[0].cover, 'asset:images/other.png');
+  assert.match(out.files['index.html'], /<img src="[^"]*other\.png"/);
   const noCover = await build('Words.', { cover: undefined });
   assert.ok(!noCover.files['p-one/index.html'].includes('class="cover"'));
+});
+
+test('an explicit standalone page cover remains visible', async () => {
+  const page = { path: 'pages/intro.md', text: '---\nslug: intro\ntitle: Intro\nstatus: published\ncover: asset:images/other.png\n---\n\nWords.\n' };
+  const out = buildSite({ blog: await blogJson(), lock: LOCK, posts: [page] });
+  assert.deepEqual(out.errors, []);
+  assert.match(out.files['intro/index.html'], /<p class="cover"><img src="[^"]*other\.png"/);
+});
+
+test('classic theme contracts also omit explicit covers from posts', async () => {
+  const blog = validateBlog(await blogJson());
+  const source = parsePost(post(IMG, 'asset:images/other.png'));
+  for (const contract of ['wordpress-classic', 'wordpress-classic-2']) {
+    const html = renderPost(blog, source, LOCK, { contract }).html;
+    assert.doesNotMatch(html, /class="post-thumbnail"/);
+    assert.match(html, /<img src="[^"]*diagram\.png" alt="d"/);
+    assert.match(ogImage(html), /other\.png$/);
+  }
 });
 
 test('auto: a post that picks an image that is not pinned is refused like any unresolved image', async () => {

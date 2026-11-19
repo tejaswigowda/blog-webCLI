@@ -117,8 +117,10 @@ description: optional; defaults to the first paragraph
 Body in markdown…
 ```
 
-**Cover.** `cover: asset:images/x.png` names the cover: it is drawn above the post and is the
-preview image when the post is shared (`og:image`, `twitter:image`). In the editor the Cover field
+**Cover.** `cover: asset:images/x.png` names the cover used for post cards and the
+preview image when the post is shared (`og:image`, `twitter:image`). It is not drawn inside a post;
+add an image to the body if it should appear there. An explicit standalone-page cover is still drawn above the page.
+In the editor the Cover field
 has **Upload…** (the image is staged and committed to the images repository when you publish, like an
 image in the body; the post names it by a logical `asset:` reference, never a provider) and **Auto**.
 In a **card layout** (`customize.list.layout: "cards"`), a post with no cover of its own shows the **first picture in its text** on its card (an `asset:` reference or an image linked from another site, found in paragraphs, tables and HTML blocks, in order); the index records it as `thumb`, and other layouts are unchanged.

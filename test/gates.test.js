@@ -43,7 +43,7 @@ const exampleInputs = async () => {
   return { blog, lock, posts };
 };
 
-test('contents: blog defaults, frontmatter overrides, cover placement and reader/build parity', async () => {
+test('contents: blog defaults, frontmatter overrides, post covers and reader/build parity', async () => {
   const { blog: raw, lock } = await exampleInputs();
   const base = JSON.parse(raw);
   const body = '## First\n\n### Second\n\n## Third\n\n#### Not in contents\n';
@@ -55,8 +55,7 @@ test('contents: blog defaults, frontmatter overrides, cover placement and reader
     const html = result.files['navigation/index.html'];
     assert.equal(html.includes('class="toc"'), visible);
     if (visible) {
-      const cover = html.indexOf('class="cover"');
-      assert.ok(cover >= 0 && cover < html.indexOf('class="toc"'));
+      assert.ok(!html.includes('class="cover"'));
       const toc = /<nav class="toc"[\s\S]*?<\/nav>/.exec(html)[0];
       assert.equal([...toc.matchAll(/<li>/g)].length, 3);
       assert.doesNotMatch(toc, /Not in contents/);

@@ -1577,7 +1577,7 @@ async function editorView(repo, r) {
       h('div', {},
         h('div', { class: 'row' }, field('Title', f.title), field(isPageKind ? 'Slug (page ID — never changes)' : 'Slug (freezes at first publication)', f.slug, slugHistoryError || (slugEditable ? 'Check this before publishing or sharing. You can edit it here.' : 'Saved address: changing the title never changes this slug.'))),
         slugNotice,
-        h('div', { class: 'row' }, field('Cover', h('div', { style: 'display:flex;gap:.4rem' }, f.cover, coverUpload, coverAuto), 'Upload an image, or auto: the post\'s first image, else the poster of its first video, else the blog\'s cover. It is the preview when the post is shared.'), field('Description', f.description)),
+        h('div', { class: 'row' }, field('Cover', h('div', { style: 'display:flex;gap:.4rem' }, f.cover, coverUpload, coverAuto), isPageKind ? 'Upload an image, or auto: the first image, else the poster of its first video, else the blog\'s cover. An explicit cover is also shown on the page.' : 'For cards and sharing, not shown inside the post. Upload an image, or auto: the first image, else the poster of its first video, else the blog\'s cover.'), field('Description', f.description)),
         sharing,
         editorEl,
         h('p', { class: 'hint' }, 'The toolbar offers only what markdown can express. Images are uploaded to the assets repository at publish time, not before.'),
