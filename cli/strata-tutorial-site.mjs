@@ -166,7 +166,7 @@ main>.hentry>.entry-content>div[class^="strata-tutorial-"]{display:none}
   };
   await writeFile(path.join(themeDir, 'theme.json'), json(theme));
   await writeFile(path.join(themeDir, 'tutorials.css'), css);
-  await writeFile(path.join(themeDir, 'skeleton.html'), '<main>{{content}}</main>\n');
+  await writeFile(path.join(themeDir, 'skeleton.html'), '<main>{{page-heading}}{{content}}</main>\n');
   await writeFile(path.join(themeDir, 'LICENSE'), `MIT License
 
 Copyright (c) 2026 Strata contributors

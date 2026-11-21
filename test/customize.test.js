@@ -34,6 +34,10 @@ test('customize: a complete valid block is accepted', () => {
 });
 
 test('customize: unknown settings and values outside closed sets are refused, not guessed', () => {
+  refused({ pageHeading: 'Strata\nInjected' });
+  refused({ pageHeading: 'x'.repeat(121) });
+  refused({ pageHeading: 42 });
+  assert.doesNotThrow(() => validateCustomize({ pageHeading: 'Strata' }));
   refused({ colour: {} });
   refused({ colors: { accent: 'red' } });
   refused({ colors: { accent: 'url(x)' } });

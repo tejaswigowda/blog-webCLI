@@ -139,6 +139,15 @@ test('applySkeleton leaves a page alone when it is not in the classic structure'
   assert.equal(applySkeleton({ html: GOOD, bodyClass: 'y' }, built, { blog: BLOG, home: './' }), built);
 });
 
+test('pageHeading fills the skeleton\'s page-heading hole, escaped; with no heading the hole is empty', () => {
+  const spec = { html: '<main>{{page-heading}}{{content}}</main>', bodyClass: '' };
+  const built = { bodyClass: '', html: '<main id="main" class="site-main"><article>Body</article></main>' };
+  const withHeading = applySkeleton(spec, built, { blog: { ...BLOG, customize: { pageHeading: 'Strata & co' } }, home: './' });
+  assert.equal(withHeading.html, '<main><h1 class="page-heading">Strata &amp; co</h1><article>Body</article></main>');
+  const without = applySkeleton(spec, built, { blog: BLOG, home: './' });
+  assert.equal(without.html, '<main><article>Body</article></main>');
+});
+
 // ---------- the bootstrap kit ----------
 import { heroHtml } from '../lib/theme-pack.js';
 
