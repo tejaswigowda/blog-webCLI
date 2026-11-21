@@ -28,7 +28,7 @@ test('makeBlogJson: minimal by default; sections only for what was asked for; al
   const bare = makeBlogJson('me/notes', FIELDS);
   assert.deepEqual(Object.keys(bare), ['schemaVersion', 'title', 'description', 'author', 'domain', 'repo', 'theme', 'content', 'search']);
   assert.equal(bare.schemaVersion, 1);
-  assert.throws(() => validateBlog({ ...bare, schemaVersion: 2 }), /unsupported-blog-schema/);
+  assert.throws(() => validateBlog({ ...bare, schemaVersion: 3 }), /unsupported-blog-schema/);
   assert.equal(bare.content.base, DEFAULT_CONTENT_BASE, 'a new blog says where its live copy is read from');
   assert.equal(bare.search, true, 'and has search, the one feature that ships a script by default');
   assert.doesNotThrow(() => validateBlog(bare));

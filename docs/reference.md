@@ -4,7 +4,8 @@ Build and publish a text-first website or blog from GitHub repositories. `https:
 renders it; the same app edits it when you sign in. No hosting, no accounts, no
 per-site deployment. This is not a visual or drag-and-drop builder or a template marketplace.
 
-For docs sites, see [versioned documentation, flat page URLs and hard line breaks](versioned-docs.md).
+For docs sites, see [versioned documentation, flat page URLs and hard line breaks](versioned-docs.md). For declared, source-ordered numbering,
+see [Counters](counters.md).
 
 [Documentation map](README.md) · [About and four screenshot examples](../about/) ·
 [WordPress migration guide](../about/WP-MIGRATION-GUIDE.md) · [All tutorials](../about/tutorials/)
@@ -14,6 +15,9 @@ For docs sites, see [versioned documentation, flat page URLs and hard line break
 Before tagging 1.0, new site configs use `"schemaVersion": 1` in `blog.json`. A config without
 the field is read as schema 1; an explicit unsupported version is refused. Adding the field
 to an existing config does not require changing its source or its URLs.
+Schema 2 is an explicit opt-in for [counters](counters.md) and must set
+`minGeneratorVersion` to a supported version, so an older generator refuses instead of
+silently publishing blank placeholders.
 
 Within 1.x:
 

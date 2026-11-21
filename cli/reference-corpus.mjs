@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveOrder } from '../lib/order.js';
+import { VERSION } from '../lib/version.js';
 
 const [site, tier, reference, baseline] = process.argv.slice(2);
 if (!/^[a-z]+(?:-[a-z]+)?$/.test(site || '') || !['fixture', 'full'].includes(tier) || !reference || !baseline) {
@@ -12,6 +13,8 @@ if (!/^[a-z]+(?:-[a-z]+)?$/.test(site || '') || !['fixture', 'full'].includes(ti
 }
 const candidate = fileURLToPath(new URL('./blog.js', import.meta.url));
 const approved = path.resolve(baseline, 'cli/blog.js');
+const previousVersion = process.env.REFERENCE_ALLOW_VERSION_FROM;
+if (previousVersion && !/^\d+\.\d+\.\d+$/.test(previousVersion)) throw new Error('REFERENCE_ALLOW_VERSION_FROM must be a version such as 0.5.0');
 const scratch = await mkdtemp(path.join(tmpdir(), 'webcli-reference-'));
 const line = async (value) => {
   console.log(value);
@@ -71,8 +74,19 @@ async function snapshot(dir, prefix = '', files = new Map()) {
     const name = path.posix.join(prefix, entry.name);
     if (entry.isDirectory()) await snapshot(dir, name, files);
     // Runtime bytes are already covered by check:live and browser tests; still compare their presence.
-    else files.set(name, /^webcli-(live|math|search|slideshow)\.js$/.test(name) ? 'runtime' :
-      createHash('sha256').update(await readFile(path.join(dir, name))).digest('hex'));
+    else if (/^webcli-(live|math|search|slideshow)\.js$/.test(name)) files.set(name, 'runtime');
+    else {
+      let bytes = await readFile(path.join(dir, name));
+      if (previousVersion && (name.endsWith('.html') || /^index\/posts(?:-\d+)?\.json$/.test(name))) {
+        let text = bytes.toString('utf8');
+        for (const version of [previousVersion, VERSION]) {
+          text = text.replaceAll(`<meta name="x-generator" content="blog-webcli@${version}">`, '<meta name="x-generator" content="blog-webcli@VERSION">')
+            .replaceAll(`"generatorId": "blog-webcli@${version}"`, '"generatorId": "blog-webcli@VERSION"');
+        }
+        bytes = Buffer.from(text);
+      }
+      files.set(name, createHash('sha256').update(bytes).digest('hex'));
+    }
   }
   return files;
 }

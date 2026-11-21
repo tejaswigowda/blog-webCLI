@@ -15,15 +15,69 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const skip = chromePath() ? false : 'Chrome is not installed (set CHROME=/path/to/chrome)';
 const BLOG = JSON.stringify({ title: 'T', description: 'd', author: 'A', domain: 'https://example.github.io/blog', repo: 'example/blog', theme: 'default' });
 
-async function site() {
+async function site({ blog = BLOG, files = {} } = {}) {
   const copy = await mkdtemp(path.join(os.tmpdir(), 'blog-blocks-'));
   for (const d of ['app', 'lib', 'blog', 'vendor']) await cp(path.join(root, d), path.join(copy, d), { recursive: true });
   await cp(path.join(root, 'index.html'), path.join(copy, 'index.html'));
   await mkdir(path.join(copy, 'test'));
   await cp(path.join(root, 'test', 'fake-github.js'), path.join(copy, 'test', 'fake-github.js'));
-  await writeFile(path.join(copy, 'data.js'), `export const data = ${JSON.stringify({ 'example/blog': { 'blog.json': Buffer.from(BLOG).toString('base64') } })};\n`);
+  const contents = { 'blog.json': blog, ...files };
+  await writeFile(path.join(copy, 'data.js'), `export const data = ${JSON.stringify({ 'example/blog': Object.fromEntries(Object.entries(contents).map(([name, text]) => [name, Buffer.from(text).toString('base64')])) })};\n`);
   return copy;
 }
+
+test('declared counters insert in Quill and preview resolved numbers', { skip, timeout: 90000 }, async () => {
+  const blog = JSON.stringify({ ...JSON.parse(BLOG), schemaVersion: 2, minGeneratorVersion: '0.5.1' });
+  const body = '## First\n\nSecond\n';
+  const source = `---\nslug: demo\ntitle: Demo\nstatus: draft\n---\n\n${body}`;
+  const web = await serve(await site({ blog, files: { 'pages/demo.md': source } }));
+  const chrome = await launch();
+  try {
+    const page = await openPage(chrome, `http://127.0.0.1:${web.address().port}/index.html`);
+    await until(page, "document.querySelector('#top button')");
+    await page.evaluate(`(async () => { ${INSTALL} })()`);
+    await clickText(page, '#top button', 'Sign in');
+    await fill(page, 'dialog input[name=token]', `github_pat_${'b'.repeat(30)}`);
+    await clickText(page, 'dialog button', 'Sign in');
+    await until(page, "(document.querySelector('#top .signed') || {}).title === 'Signed in as tester'");
+    await page.evaluate("location.hash = '#repo=example/blog&editpage=demo'; 0");
+    try {
+      await until(page, "document.querySelector('.ql-editor') && document.querySelector('.ql-counter')");
+      await fill(page, 'textarea[aria-label=Counters]', 'step: { start: 5, style: decimal }');
+    } catch (error) {
+      throw new Error(`${error.message}: ${await page.evaluate("document.querySelector('#view').innerText.slice(0,1000)")} ${JSON.stringify(await page.evaluate('window.__alerts'))}`);
+    }
+    const original = await page.evaluate(`(async () => {
+      const { deltaToMarkdownChecked } = await import('/lib/markdown.js');
+      window.__q = Quill.find(document.querySelector('.ql-container'));
+      return deltaToMarkdownChecked(__q.getContents(), { counters: true }).md;
+    })()`);
+    assert.equal(original, body);
+    await page.evaluate("__q.setSelection(__q.getLength() - 1, 0); document.querySelector('button.ql-counter').click()");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    assert.equal(await page.evaluate("document.querySelector('dialog select[aria-label=Counter]').value"), 'step');
+    await clickText(page, 'dialog.blk-dialog button', 'Insert');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    assert.deepEqual(await page.evaluate("[...document.querySelectorAll('details.more span.wc-count-step')].map(e => e.textContent)"), ['5']);
+    await page.evaluate("__q.setSelection(__q.getLength() - 1, 0); document.querySelector('button.ql-counter').click()");
+    await until(page, "document.querySelector('dialog.blk-dialog[open]')");
+    await clickText(page, 'dialog.blk-dialog button', 'Insert');
+    await until(page, "!document.querySelector('dialog.blk-dialog')");
+    assert.deepEqual(await page.evaluate("[...document.querySelectorAll('details.more span.wc-count-step')].map(e => e.textContent)"), ['5', '6']);
+    await clickText(page, '#view button', 'Save draft');
+    await until(page, "document.querySelector('dialog[open] .preflight')");
+    await clickText(page, 'dialog button', 'Commit and push');
+    await until(page, "document.querySelector('.toast.success')", 30000);
+    assert.equal(await page.evaluate("__q.getContents().ops.filter(op => op.insert?.counter).length"), 2);
+    const saved = (await page.evaluate("window.__fake.files('example/blog')"))['pages/demo.md'];
+    assert.match(saved, /counters:\n  step: \{ start: 5, style: decimal \}/);
+    assert.equal((saved.match(/<span class="wc-count-step"><\/span>/g) || []).length, 2);
+    assert.deepEqual(await page.evaluate('window.__alerts'), []);
+  } finally {
+    await chrome.close();
+    await new Promise((resolve) => web.close(resolve));
+  }
+});
 const INSTALL = `
   const m = await import('/test/fake-github.js');
   const { data } = await import('/data.js');

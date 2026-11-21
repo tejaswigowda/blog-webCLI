@@ -1,5 +1,6 @@
 import { registerBlocks, wireBlocks } from './blocks.js';
 import { wireCodeWidget } from './code-widget.js';
+import { wireCounterWidget } from './counter-widget.js';
 
 // Quill as a *view over markdown*. Only what markdown can express is offered; the
 // image blot keeps the logical `asset:` reference in the document and shows a
@@ -70,6 +71,21 @@ export async function loadQuill() {
         }
       }
       Quill.register(HardBreak, true);
+      class Counter extends Embed {
+        static blotName = 'counter';
+        static tagName = 'SPAN';
+        static className = 'ql-counter';
+        static create(value) {
+          const node = super.create();
+          node.setAttribute('data-counter', JSON.stringify(value));
+          node.textContent = `[${value.name}]`;
+          return node;
+        }
+        static value(node) {
+          return JSON.parse(node.getAttribute('data-counter'));
+        }
+      }
+      Quill.register(Counter, true);
       const CodeBlock = Quill.import('formats/code-block');
       class LanguageCodeBlock extends CodeBlock {
         static create(value) {
@@ -123,9 +139,9 @@ export async function loadQuill() {
 // how a picture sits: the presets lib/delta.js IMAGE_LAYOUTS names, chosen from a small bar that appears on the picture
 export const IMAGE_PRESETS = [['', 'Default'], ['inline', 'Inline'], ['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['full', 'Full width'], ['left', 'Float left'], ['right', 'Float right']];
 
-export const FORMATS = ['header', 'para', 'layout', 'bold', 'italic', 'strike', 'code', 'math', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'hardbreak', 'video', 'mdtable', 'htmlblock'];
+export const FORMATS = ['header', 'para', 'layout', 'bold', 'italic', 'strike', 'code', 'math', 'link', 'blockquote', 'code-block', 'list', 'indent', 'image', 'hardbreak', 'counter', 'video', 'mdtable', 'htmlblock'];
 
-export async function createEditor(el, { onImage, onVideo, chooseImage }) {
+export async function createEditor(el, { onImage, onVideo, chooseImage, counters }) {
   const Quill = await loadQuill();
   // the table and HTML block buttons need the editor to exist, so their handlers close over it
   const blocks = {};
@@ -140,13 +156,14 @@ export async function createEditor(el, { onImage, onVideo, chooseImage }) {
         this.quill.setSelection(range.index + 1, 0, 'silent');
       } } } },
       toolbar: {
-        container: [[{ header: [1, 2, 3, 4, false] }, { para: [false, 'lead', 'small'] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block', 'codewidget'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'slideshow', 'mdtable', 'htmlblock', 'cssclasses', 'widget'], ['clean']],
-        handlers: { image: onImage, video: onVideo, codewidget: () => blocks.codewidget(), slideshow: () => blocks.slideshow(), mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock(), cssclasses: () => blocks.cssclasses(), widget: () => blocks.widget() },
+        container: [[{ header: [1, 2, 3, 4, false] }, { para: [false, 'lead', 'small'] }], ['bold', 'italic', 'strike', 'code'], ['link'], ['blockquote', 'code-block', 'codewidget'], [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }], ['image', 'video', 'slideshow', 'mdtable', 'htmlblock', 'cssclasses', 'widget', 'counter'], ['clean']],
+        handlers: { image: onImage, video: onVideo, codewidget: () => blocks.codewidget(), slideshow: () => blocks.slideshow(), mdtable: () => blocks.mdtable(), htmlblock: () => blocks.htmlblock(), cssclasses: () => blocks.cssclasses(), widget: () => blocks.widget(), counter: () => blocks.counter() },
       },
     },
   });
   Object.assign(blocks, wireBlocks(quill, Quill, { chooseImage }));
   blocks.codewidget = wireCodeWidget(quill, Quill);
+  blocks.counter = wireCounterWidget(quill, counters);
   // a paragraph style and another block format (heading, list, quote, code) cannot share a line: the one applied last wins
   const OTHER = ['header', 'list', 'blockquote', 'code-block', 'indent'];
   quill.getModule('toolbar').addHandler('para', (v) => {
@@ -166,11 +183,16 @@ export async function createEditor(el, { onImage, onVideo, chooseImage }) {
     }
   });
   const bar = quill.getModule('toolbar').container;
-  for (const [name, title] of [['codewidget', 'Insert or edit a code block'], ['mdtable', 'Insert a table'], ['htmlblock', 'Insert an HTML block'], ['slideshow', 'Insert a slideshow'], ['cssclasses', 'Group with CSS classes'], ['widget', 'Insert a widget']]) {
+  for (const [name, title] of [['codewidget', 'Insert or edit a code block'], ['mdtable', 'Insert a table'], ['htmlblock', 'Insert an HTML block'], ['slideshow', 'Insert a slideshow'], ['cssclasses', 'Group with CSS classes'], ['widget', 'Insert a widget'], ['counter', 'Insert a declared counter']]) {
     const b = bar.querySelector(`.ql-${name}`);
     if (b) {
       b.title = title;
       b.setAttribute('aria-label', title);
+    }
+    const counterButton = bar.querySelector('.ql-counter');
+    if (counterButton) {
+      counterButton.textContent = '#';
+      counterButton.disabled = !counters || !Object.keys(counters).length;
     }
   }
   return quill;

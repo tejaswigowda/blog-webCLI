@@ -165,7 +165,7 @@ function linkReport(blog, files, suspect = false) {
 
 async function links(args) {
   const dirs = args.filter((arg) => !arg.startsWith('--'));
-  if (dirs.length > 1 || args.some((arg) => arg.startsWith('--') && arg !== '--suspect')) throw new Refusal('usage', 'blog-webcli links [dir] [--suspect]');
+  if (dirs.length > 1 || args.some((arg) => arg.startsWith('--') && !['--suspect', '--counters'].includes(arg))) throw new Refusal('bad-blog-json', 'blog-webcli links [dir] [--suspect] [--counters]');
   const dir = dirs[0] || '.';
   const suspect = args.includes('--suspect');
   const { blog, posts } = await load(dir);
@@ -177,6 +177,30 @@ async function links(args) {
   for (const { from, path: source, status, to } of aliases) console.log(`alias\t${from}\t${source}\t${status}${to ? `\t${to}/` : ''}`);
   const published = aliases.filter((alias) => alias.status === 'published').length;
   console.log(`${aliases.length} aliases (${published} published, ${aliases.length - published} inactive)`);
+  if (args.includes('--counters')) {
+    let total = 0;
+    for (const file of posts) {
+      if (!/^(posts|pages)\/[^/]+\.md$/.test(file.path)) continue;
+      const { body } = splitFile(file.text, file.path);
+      const source = body.replace(/^```[\s\S]*?^```\s*$/gm, '');
+      const steps = [...source.matchAll(/<span\b(?=[^>]*\bclass=["'][^"']*\bstep\b[^"']*["'])[^>]*>\s*(\d+)\s*<\/span>/gi)].map((match) => Number(match[1]));
+      let sequence = [];
+      const reportSequence = () => {
+        if (sequence.length < 2) return;
+        console.log(`counter-candidate\t${file.path}\t${sequence[0]}-${sequence.at(-1)}\t${sequence.length} steps`);
+        total++;
+      };
+      for (const step of steps) {
+        if (sequence.length && step !== sequence.at(-1) + 1) {
+          reportSequence();
+          sequence = [];
+        }
+        sequence.push(step);
+      }
+      reportSequence();
+    }
+    console.log(`${total} candidate sequences (report only; no files changed)`);
+  }
   return 0;
 }
 

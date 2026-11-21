@@ -45,6 +45,7 @@
     "lib/comments.js",
     "lib/content.js",
     "lib/contracts.js",
+    "lib/counters.js",
     "lib/cover.js",
     "lib/css.js",
     "lib/customize.js",
@@ -110,7 +111,7 @@
   "items": [
     {
       "name": "blog-webCLI runtime",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "licence": "MIT",
       "upstream": "https://github.com/tejaswigowda/blog-webCLI",
       "kind": "first-party",
@@ -123,7 +124,7 @@
     },
     {
       "name": "blog-webCLI tool",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "licence": "GPL-3.0-only",
       "upstream": "https://github.com/tejaswigowda/blog-webCLI",
       "kind": "first-party",

@@ -83,10 +83,10 @@ export async function loadPost(gh, where, slug, ref, { blog, lock }, { allowDraf
   const path = `${kind === 'page' ? 'pages' : 'posts'}/${slug}.md`;
   const text = await gh.readText(repo, at(folder, path), ref);
   if (text === null) throw new NotFound(kind === 'page' ? 'No such page.' : 'No such post.');
-  const post = parsePost({ path, text });
+  const post = parsePost({ path, text }, { counterMode: blog.schemaVersion === 2 });
   if (post.lossy) throw post.lossy.at(post.path);
   if (post.status !== 'published' && !allowDraft) throw new NotFound(kind === 'page' ? 'No such page.' : 'No such post.');
   const resolve = (r) => resolveAsset(r, blog, lock);
   const contract = blog.theme && typeof blog.theme === 'object' ? blog.theme.contract : undefined;
-  return { post, text, html: deltaToHtml(post.delta, { resolve, base: blog.domain, affiliates: blog.affiliates, resolveVideo: (r) => videoEmbedUrl(r, blog), strict: false, contract }) };
+  return { post, text, html: deltaToHtml(post.delta, { resolve, counters: post.meta.counters, counterMode: blog.schemaVersion === 2, base: blog.domain, affiliates: blog.affiliates, resolveVideo: (r) => videoEmbedUrl(r, blog), strict: false, contract }) };
 }

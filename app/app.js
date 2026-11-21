@@ -14,7 +14,8 @@ import { assessBuilds, describeBuilds, noteBuild, recentBuilds } from '../lib/bu
 import { liveEnabled, ownsNotFoundPage } from '../lib/content.js';
 import { READER_SORTS, readerSort, saveSort, savedSort } from '../lib/sort.js';
 import { mdToDelta, deltaToMarkdownChecked } from '../lib/markdown.js';
-import { SLUG_RE, joinFile, newFront, parseMeta, setMeta, splitFile } from '../lib/frontmatter.js';
+import { SLUG_RE, joinFile, newFront, parseMeta, setCounters, setMeta, splitFile } from '../lib/frontmatter.js';
+import { counterFrontmatterLines, parseCounterInput } from '../lib/counters.js';
 import { parsePost } from '../lib/blog.js';
 import { filterMedia } from '../lib/media.js';
 import { SCHEDULE_WARN_DAYS, daysUntil } from '../lib/schedule.js';
@@ -1494,10 +1495,12 @@ async function editorView(repo, r) {
   });
 
   const m = existing ? existing.post.meta : { status: 'draft', date: isPageKind ? '' : today(), cover: isPageKind ? '' : 'auto' }; // a new post's cover is its first image, else its first video's poster, else the blog's
+  let counterDeclarations = m.counters || null;
   const f = {
     title: h('input', { value: m.title || '', placeholder: 'Title', disabled: correcting }),
     slug: h('input', { value: m.slug || '', placeholder: isPageKind ? 'set once, never changes' : 'set once, freezes on publication', disabled: !slugEditable, 'aria-label': 'Slug' }),
     aliases: h('textarea', { value: parseAliases(m).join('\n'), rows: 2, disabled: correcting, 'aria-label': 'Old addresses (aliases)', placeholder: '2020/05/old-post\nprevious-slug', style: 'width:100%' }),
+    counters: h('textarea', { value: counterFrontmatterLines(counterDeclarations).map((line) => line.trim()).join('\n'), rows: 3, disabled: correcting || blog.schemaVersion !== 2, 'aria-label': 'Counters', placeholder: 'step: { start: 1, style: decimal }', style: 'width:100%' }),
     date: h('input', { type: 'date', value: (m.date || '').slice(0, 10), disabled: correcting }),
     // the time orders the posts of one day (newest first); a new post gets the time it was started, an old post keeps what it had
     time: h('input', { type: 'time', value: (m.date || '').length > 10 ? m.date.slice(11) : isNew && !isPageKind ? nowTime() : '', disabled: correcting, title: 'Orders the posts of one day; not shown on the page', 'aria-label': 'Time of day' }),
@@ -1567,6 +1570,7 @@ async function editorView(repo, r) {
     h('div', { class: 'row' }, field('Search title', f.seo_title, 'The title search engines and shared links show. Defaults to the title.'), field('Share image', h('div', { style: 'display:flex;gap:.4rem' }, f.image, imageUpload), 'Defaults to the cover.')),
     h('div', { class: 'row' }, field('Canonical address', f.canonical, 'Only for a post first published elsewhere: search engines will treat that address as the original.'), field('Keep out of search', h('label', { class: 'check' }, f.noindex, ' noindex this page'), 'The page still exists and is in the feed; it asks search engines to skip it and stays out of the sitemap.')),
     field('Old addresses (aliases)', f.aliases, 'One old path per line, below this blog. The generator writes a canonical redirect stub for each published alias; never write stubs by hand.'),
+    field('Counters', f.counters, blog.schemaVersion === 2 ? 'One declaration per line: name: { start: 1, style: decimal }. Styles: decimal, lower-alpha, upper-alpha, lower-roman, upper-roman.' : 'Counters require blog.json schemaVersion 2 and a supported generator version.'),
   );
   const node = h(
     'div',
@@ -1594,11 +1598,51 @@ async function editorView(repo, r) {
   );
   // The Quill container must be in the document before Quill measures it.
   view.replaceChildren(node);
-  const quill = await createEditor(editorEl, { onImage: () => pickImage(), onVideo: () => pickVideo(), chooseImage });
+  const quill = await createEditor(editorEl, { onImage: () => pickImage(), onVideo: () => pickVideo(), chooseImage, counters: () => counterDeclarations });
+  const counterButton = editorEl.parentNode.querySelector('.ql-counter');
+  const refreshCounters = () => {
+    let valid = true;
+    try {
+      counterDeclarations = parseCounterInput(f.counters.value, existing?.post.path);
+      f.counters.removeAttribute('aria-invalid');
+    } catch (error) {
+      valid = false;
+      f.counters.setAttribute('aria-invalid', 'true');
+      f.counters.title = error.detail || error.message;
+    }
+    if (valid) f.counters.removeAttribute('title');
+    if (counterButton) counterButton.disabled = !valid || blog.schemaVersion !== 2 || !counterDeclarations;
+    refreshCounterPreview?.();
+  };
+  let refreshCounterPreview;
+  f.counters.addEventListener('input', refreshCounters);
+  refreshCounters();
   quill.setContents(existing ? existing.post.delta.ops : mdToDelta('').ops, 'silent');
+  if (blog.schemaVersion === 2) {
+    const previewBody = h('div', {});
+    const previewError = h('p', { class: 'err', role: 'alert' });
+    const preview = h('details', { class: 'more' }, h('summary', {}, 'Counter preview'), previewError, previewBody);
+    editorEl.parentNode.insertBefore(preview, editorEl.nextSibling);
+    const refreshPreview = () => {
+      try {
+        previewBody.innerHTML = deltaToHtml(quill.getContents(), {
+          counters: counterDeclarations, counterMode: blog.schemaVersion === 2, strict: false, base: blog.domain, affiliates: blog.affiliates,
+          resolve: (ref) => staged.get(ref.replace(/^asset:/, ''))?.url || picked.get(ref) || resolveAsset(ref, blog, cache.lock),
+          resolveVideo: (ref) => videoEmbedUrl(ref, blog),
+        });
+        previewError.textContent = '';
+      } catch (error) {
+        previewBody.replaceChildren();
+        previewError.textContent = error.detail || error.message;
+      }
+    };
+    refreshCounterPreview = refreshPreview;
+    quill.on('text-change', refreshPreview);
+    refreshPreview();
+  }
   let knownWords = null;
   const currentSlugWarnings = () => slugEditable && knownWords ? slugWarnings({
-    slug: f.slug.value.trim(), title: f.title.value, body: plainLines(quill.getContents()).map((line) => line.text).join('\n'),
+    slug: f.slug.value.trim(), title: f.title.value, body: plainLines(quill.getContents(), { counters: counterDeclarations, counterMode: blog.schemaVersion === 2 }).map((line) => line.text).join('\n'),
   }, knownWords) : [];
   const refreshSlugGuard = () => {
     if (!knownWords && slugEditable) return;
@@ -1628,7 +1672,7 @@ async function editorView(repo, r) {
   const readFields = () => ({
     title: f.title.value, slug: f.slug.value.trim(), date: f.date.value ? (f.time.value ? `${f.date.value}T${f.time.value}` : f.date.value) : '', status: f.status.value,
     tags: f.tags.value.split(',').map((t) => t.trim()).filter(Boolean), description: f.description.value, seo_title: f.seo_title.value, image: f.image.value,
-    canonical: f.canonical.value, noindex: f.noindex.checked, cover: f.cover.value, parent: isPageKind ? f.parent.value.trim() : undefined, aliases: f.aliases.value.split('\n').map((path) => path.trim()).filter(Boolean),
+    canonical: f.canonical.value, noindex: f.noindex.checked, cover: f.cover.value, parent: isPageKind ? f.parent.value.trim() : undefined, aliases: f.aliases.value.split('\n').map((path) => path.trim()).filter(Boolean), counters: counterDeclarations,
   });
   const stats = createStatsPanel({
     h, gh, where: repo, repo: plainRepo, folder, branch, blog, lock: cache.lock, kind, hasPages: !!info.has_pages, link,
@@ -1727,7 +1771,8 @@ async function editorView(repo, r) {
   }
 
   function buildText() {
-    const { md } = deltaToMarkdownChecked({ ops: quill.getContents().ops });
+    counterDeclarations = parseCounterInput(f.counters.value, existing?.post.path);
+    const { md } = deltaToMarkdownChecked({ ops: quill.getContents().ops }, { counters: blog.schemaVersion === 2 });
     const aliases = f.aliases.value.split('\n').map((path) => path.trim()).filter(Boolean);
     const common = {
       title: f.title.value.trim(),
@@ -1755,7 +1800,8 @@ async function editorView(repo, r) {
         const was = existing.post.meta[k];
         if (JSON.stringify(empty(was) ? null : was) !== JSON.stringify(empty(vals[k]) ? null : vals[k])) front = setMeta(front, k, empty(vals[k]) ? null : vals[k]);
       }
-    } else front = newFront({ slug, ...vals });
+      if (JSON.stringify(existing.post.meta.counters || null) !== JSON.stringify(counterDeclarations)) front = setCounters(front, counterDeclarations);
+    } else front = setCounters(newFront({ slug, ...vals }), counterDeclarations);
     return { slug, text: joinFile(front, md), md };
   }
 
@@ -1794,7 +1840,7 @@ async function editorView(repo, r) {
         staged.clear();
       }
       // What you see is what is stored.
-      quill.setContents(mdToDelta(md).ops, 'silent');
+      quill.setContents(mdToDelta(md, { counters: blog.schemaVersion === 2 }).ops, 'silent');
       if (!correcting) history.replaceState(null, '', link(repo, `&${isPageKind ? 'editpage' : 'edit'}=${slug}`));
     } catch (e) {
       fail(e);
