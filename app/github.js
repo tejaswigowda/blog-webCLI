@@ -101,6 +101,11 @@ export class GitHub {
       try {
         return await this.request(method, path, body);
       } catch (e) {
+        // No answer at all (a sleeping laptop, a dropped connection): fetch rejects with a TypeError and no status.
+        if (e instanceof TypeError && !e.status && attempt < 3) {
+          await this.wait(2000 * (attempt + 1));
+          continue;
+        }
         const rateLimited = (e.status === 403 || e.status === 429) && /rate limit/i.test(e.message);
         if (this.patient) {
           const seconds = Math.min(Math.max(e.retrySeconds || 70, 5), 3700);

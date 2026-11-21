@@ -170,6 +170,25 @@ test('media: a blog that moved after the plan still takes the replace (the page 
   assert.equal(server.files('example/blog')['notes.md'], 'moved', 'the other push is kept');
 });
 
+test('media: a dropped connection while sending is retried, and the replace still lands', async () => {
+  const { server, gh } = await uploadWorld();
+  const waits = [];
+  let dropped = 0;
+  const flaky = async (url, init) => {
+    if (init.method === 'POST' && /\/git\/trees$/.test(String(url)) && dropped === 0) {
+      dropped++;
+      throw new TypeError('Failed to fetch');
+    }
+    return server.fetch(url, init);
+  };
+  const retry = new GitHub(createNet(flaky), { token: 'github_pat_test', wait: async (ms) => waits.push(ms) });
+  const plan = await planMedia(retry, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'default-cover.png', replace: true, bytes: bytes('new default cover') }] });
+  const receipt = await executeMedia(retry, plan);
+  assert.equal(dropped, 1);
+  assert.deepEqual(waits, [2000], 'waited once before sending the tree again');
+  assert.equal(JSON.parse(server.files('example/blog')['assets.lock.json'])['images/default-cover.png'], receipt.commits[0].sha);
+});
+
 test('media: an image a blog.json setting uses is on every page, so that one case regenerates the blog', async () => {
   const { server, gh } = await uploadWorld();
   const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'default-cover.png', replace: true, bytes: bytes('new default cover') }] });
