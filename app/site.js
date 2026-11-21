@@ -656,6 +656,8 @@ export async function executeMedia(gh, plan) {
     if (shared) parent = { sha: c.sha, treeSha: c.treeSha };
   }
   if (!Object.keys(patch).length) return receipt;
+  // The blog may have moved since the plan was made (a push, or another tab): the page writes start from its current head.
+  parent = await gh.headCommit(plan.repo, plan.branch);
   const prefix = plan.folder ? `${plan.folder}/` : '';
   const names = Object.keys(patch).map((k) => k.slice(k.indexOf('/') + 1)).join(', ');
   const { affected, full } = plan.media;

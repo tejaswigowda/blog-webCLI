@@ -160,6 +160,16 @@ test('media: the buttons are in the view, and a write goes through the pre-fligh
   assert.match(app, /async function commitPlan[\s\S]*confirmPlan\(plan\)[\s\S]*executeMedia/);
 });
 
+test('media: a blog that moved after the plan still takes the replace (the page writes start from its current head)', async () => {
+  const { server, gh } = await uploadWorld();
+  const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'default-cover.png', replace: true, bytes: bytes('new default cover') }] });
+  const head = await gh.headCommit('example/blog', 'main');
+  await gh.commit('example/blog', { branch: 'main', parent: head.sha, baseTree: head.treeSha, files: [{ path: 'notes.md', content: 'moved' }], message: 'someone else pushed' });
+  const receipt = await executeMedia(gh, plan);
+  assert.equal(JSON.parse(server.files('example/blog')['assets.lock.json'])['images/default-cover.png'], receipt.commits[0].sha);
+  assert.equal(server.files('example/blog')['notes.md'], 'moved', 'the other push is kept');
+});
+
 test('media: an image a blog.json setting uses is on every page, so that one case regenerates the blog', async () => {
   const { server, gh } = await uploadWorld();
   const plan = await planMedia(gh, { repo: 'example/blog', branch: 'main', uploads: [{ key: 'images', path: 'default-cover.png', replace: true, bytes: bytes('new default cover') }] });
