@@ -139,12 +139,11 @@ test('media: a replaced image nothing embeds is just uploaded', async () => {
   assert.equal(server.files('example/images')['spare.png'], 'replaced spare');
 });
 
-test('media: refusals say what to do (a name already there, nothing to replace, the same file, not an image, twice, too big, no repository)', async () => {
+test('media: refusals say what to do (a name already there, nothing to replace, not an image, twice, too big, no repository)', async () => {
   const { gh } = await uploadWorld();
   const plan = (uploads) => planMedia(gh, { repo: 'example/blog', branch: 'main', uploads });
   await assert.rejects(plan([{ key: 'images', name: 'Diagram.png', bytes: bytes(1) }]), /already exists.*Replace/);
   await assert.rejects(plan([{ key: 'images', path: 'ghost.png', replace: true, bytes: bytes(1) }]), /nothing to replace/);
-  await assert.rejects(plan([{ key: 'images', path: 'spare.png', replace: true, bytes: new TextEncoder().encode('spare') }]), /already there/);
   await assert.rejects(plan([{ key: 'images', name: 'notes.txt', bytes: bytes(1) }]), /only png, jpg, gif and webp/);
   await assert.rejects(plan([{ key: 'images', name: 'a.png', bytes: bytes(1) }, { key: 'images', name: 'A.png', bytes: bytes(2) }]), /twice/);
   await assert.rejects(plan([{ key: 'images', name: 'big.png', bytes: new Uint8Array(20 * 1024 * 1024 + 1) }]), /20 MB/);

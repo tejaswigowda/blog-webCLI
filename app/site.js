@@ -615,7 +615,6 @@ export async function planMedia(gh, { repo: where, branch, uploads }) {
     const existing = trees.get(a.repo).get(full);
     if (u.replace) {
       if (!existing) throw new Error(`${path} is not in the images repository, so there is nothing to replace.`);
-      if (existing === (await gitBlobSha(u.bytes))) throw new Error(`${path}: that is the file already there.`);
     } else if (existing) throw new Error(`${path} already exists. To change it, use Replace on that image; to keep both, rename the new file.`);
     g.files.push({ path: full, key: u.key, logical: path, content: u.bytes, size: u.bytes.length, action: u.replace ? 'update' : 'add' });
     if (u.replace) replaced.push({ key: u.key, path, pinned: !!lock[`${u.key}/${path}`] });
