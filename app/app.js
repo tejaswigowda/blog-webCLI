@@ -45,6 +45,7 @@ import { attachTagSuggest } from './tag-suggest.js';
 import { kvClear, kvGet, kvSet } from './idb.js';
 import { authorizeUrl, canRefresh, exchangeCode, installUrl, needsRefresh, newState, oauthConfigured, readCallback, redirectUri, refreshRecord, revokeToken } from './oauth.js';
 import { createImportView } from './import-view.js';
+import { parseRunParams, fetchInput, makeHtmlArtifact } from './webcli.js';
 
 const net = createNet();
 const KEY = 'blog.webcli.token';
@@ -2174,3 +2175,59 @@ async function confirmPlan(plan) {
 addEventListener('hashchange', route);
 // the dates need moment; if it cannot load they are shown as written
 loadMoment().catch(() => {}).then(() => finishOAuth()).then(() => refreshIfNeeded()).then(route);
+
+window.__webcli_result = null;
+
+async function runFromUrl() {
+  let params;
+  try {
+    params = parseRunParams(location.search, location.hash);
+    if (!params) return;
+    document.body.dataset.webcliStatus = 'loading';
+    let input;
+    let source;
+    if (params.markdown !== null) {
+      source = params.markdown;
+      const bytes = new TextEncoder().encode(source);
+      input = { name: 'inline.md', bytes };
+    } else {
+      input = await fetchInput(params.src, location.href);
+      source = new TextDecoder().decode(input.bytes);
+    }
+    document.body.dataset.webcliStatus = 'running';
+    const normalized = source.replace(/\r\n/g, '\n');
+    const body = normalized.startsWith('---\n')
+      ? splitFile(normalized, input.name).body
+      : normalized;
+    const html = deltaToHtml(mdToDelta(body), { strict: false });
+    const artifact = makeHtmlArtifact(html, input.name.replace(/\.[^.]+$/, '') + '.html');
+    window.__webcli_result = {
+      ok: true,
+      op: 'render',
+      artifact,
+      error: null,
+      meta: { tool: 'blog', source: input.name, bytes: input.bytes.byteLength, htmlBytes: artifact.size },
+    };
+    document.body.dataset.webcliStatus = 'done';
+    if (params.download) {
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = artifact.name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  } catch (err) {
+    const message = err.message || String(err);
+    window.__webcli_result = {
+      ok: false,
+      op: params?.run || null,
+      artifact: null,
+      error: message,
+      meta: { tool: 'blog' },
+    };
+    document.body.dataset.webcliStatus = 'error';
+  }
+}
+
+runFromUrl();

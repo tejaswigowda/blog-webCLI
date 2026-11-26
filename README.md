@@ -28,6 +28,17 @@ The 1.x promise is stable configuration meaning, source-derived public addresses
 
 ## Development
 
+## URL render
+
+Blog also exposes a read-only Markdown render interface:
+
+```text
+https://blog.webcli.app/#run=render&markdown=%23%20Hello%0A%0AA%20%2A%2Abold%2A%2A%20paragraph.&download=1
+https://blog.webcli.app/#run=render&src=https%3A%2F%2Fexample.com%2Fpost.md&download=1
+```
+
+`run=render` accepts inline `markdown=` text or a credential-free HTTP(S), data, or blob `src=` URL. It produces an HTML artifact in `window.__webcli_result`; `format=HTML` is the only format. Publishing, repository access and GitHub commits remain separate, user-initiated actions.
+
 Edit About content in `docs/about.md`; edit tutorials in `docs/`. Run `npm run build:about` to regenerate the static pages and `npm run check:about` to verify them. Run `npm test` for the unit suite and see the [reference guide](docs/README.md) for the rest of the documentation map.
 
 The repository is split-license: [MIT runtime](lib/LICENSE) and [GPL-3.0-only tool](LICENSE-GPL-3.0). Third-party licenses are listed in [licences-inventory.json](licences-inventory.json); see [LICENSE](LICENSE).
