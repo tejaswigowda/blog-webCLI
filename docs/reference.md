@@ -1160,6 +1160,13 @@ node cli/blog.js comments lift [dir]` moves their "## Comments (N)" section into
 comments widget inserts itself (a GitHub-Discussions widget fits; the generator names no provider). `analytics`
 places `<script src=… defer …></script>` at the end of every page. Both are off unless you set them.
 
+For Google Analytics 4, set the analytics script address to
+`https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX` using your measurement ID. For Google Tag Manager,
+use `https://www.googletagmanager.com/gtm.js?id=GTM-XXXXXXX` and configure and publish the desired tags in
+that container. For these addresses the generator also writes the fixed initialization script Google needs;
+Tag Manager uses the default `dataLayer` only. A `nonce` attribute is also applied to the initialization
+script. Changes to analytics settings regenerate all generated pages.
+
 **These and the opt-in [CDN script links](#custom-js-cdn-links-only) are the declared third-party-code exceptions.** The script has the page's full powers on your
 readers' browsers, and the reader's browser contacts that service. Name only a service you trust, and give an
 `integrity` value to pin the exact bytes. Nothing in the editor, the generator or the `/blog/` reader loads them:

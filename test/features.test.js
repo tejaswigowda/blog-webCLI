@@ -3,6 +3,7 @@
 // frontmatter; none changes what a blog without it generates, except the pages every blog now gets (archive, tags).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { runInNewContext } from 'node:vm';
 import { buildSite, validateBlog } from '../lib/blog.js';
 import { SEARCH_SOURCE } from '../lib/search-source.js';
 import { rank, snippet, tokenize } from '../lib/search-client.js';
@@ -405,6 +406,42 @@ test('embeds: comments under a post, analytics on every page, a subscribe form; 
   assert.ok(!files['archive/index.html'].includes('class="subscribe"'));
   // the analytics script is placed once, and a page never gets a handler or inline code from this
   for (const html of Object.values(files)) if (typeof html === 'string') assert.ok(!/\son[a-z]+=|javascript:/.test(html.replace(/<style>[\s\S]*?<\/style>/g, '')));
+});
+
+test('Google analytics and Tag Manager initialize before their external scripts on generated pages', () => {
+  for (const [src, kind] of [
+    ['https://www.googletagmanager.com/gtm.js?id=GTM-KRSJB2WL', 'gtm'],
+    ['https://www.googletagmanager.com/gtag/js?id=G-72P2D59CJ9', 'ga4'],
+  ]) {
+    const { files } = ok({ analytics: { src, attrs: { nonce: 'abc' } } }, POSTS);
+    for (const name of ['index.html', 'alpha/index.html', 'archive/index.html', 'tags/video/index.html']) {
+      const html = files[name];
+      const match = /<script nonce="abc">([^<]+)<\/script>\n<script src="([^"]+)" defer nonce="abc"><\/script>/.exec(html);
+      assert.ok(match, name);
+      assert.equal(match[2], src);
+      const context = {};
+      context.window = context;
+      runInNewContext(match[1], context);
+      if (kind === 'gtm') {
+        assert.equal(context.dataLayer.length, 1);
+        assert.equal(context.dataLayer[0].event, 'gtm.js');
+        assert.equal(typeof context.dataLayer[0]['gtm.start'], 'number');
+      } else {
+        assert.equal(context.dataLayer.length, 2);
+        assert.equal(context.dataLayer[0][0], 'js');
+        assert.equal(context.dataLayer[1][0], 'config');
+        assert.equal(context.dataLayer[1][1], 'G-72P2D59CJ9');
+      }
+    }
+  }
+  for (const src of [
+    'https://other.test/gtm.js?id=GTM-KRSJB2WL',
+    'https://www.googletagmanager.com/gtm.js?id=GTM-KRSJB2WL&l=other',
+    'https://www.googletagmanager.com/gtag/js?id=G-72P2D59CJ9&id=G-OTHER',
+  ]) {
+    const html = ok({ analytics: { src } }, POSTS).files['index.html'];
+    assert.doesNotMatch(html, /window\.dataLayer=/);
+  }
 });
 
 // ---------- CDN scripts ----------
